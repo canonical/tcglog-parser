@@ -90,6 +90,7 @@ type stream_1_2 struct {
 	r io.ReadSeeker
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.1.1, "TCG_PCClientPCREventStruct Structure")
 func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 	var pcrIndex PCRIndex
 	if err := binary.Read(s.r, nativeEndian, &pcrIndex); err != nil {
@@ -142,6 +143,7 @@ type stream_2 struct {
 	readFirstEvent bool
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.2.2, "TCG_PCR_EVENT2 Structure")
 func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	if !s.readFirstEvent {
 		s.readFirstEvent = true
@@ -304,8 +306,8 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 			if known {
 				if knownSize != algSize.digestSize {
 					err := &InvalidLogError{
-						fmt.Sprintf("Digest size in log header for algorithm '%04x' doesn't match "+
-							"expected size (size: %d, expected %d)",
+						fmt.Sprintf("Digest size in log header for algorithm '%04x' " +
+							"doesn't match expected size (size: %d, expected %d)",
 							algSize.algorithmId, algSize.digestSize, knownSize)}
 					return nil, err
 				}

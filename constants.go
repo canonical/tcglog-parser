@@ -1,5 +1,8 @@
 package tcglog
 
+// Known event types
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1)
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.1)
 const (
 	EventTypePrebootCert EventType = 0x00000000
 	EventTypePostCode              = 0x00000001
@@ -35,6 +38,8 @@ const (
 	EventTypeEFIVariableAuthority       = 0x800000e0
 )
 
+// The supported digest algorithms
+// https://trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf (Table 9)
 const (
 	AlgorithmSha1   AlgorithmId = 0x0004
 	AlgorithmSha256             = 0x000b
