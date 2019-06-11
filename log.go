@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"unsafe"
 )
 
@@ -26,7 +25,7 @@ type Event struct {
 	PCRIndex  PCRIndex
 	EventType EventType
 	Digests   DigestMap
-	Data      []byte
+	Data	  EventData
 }
 
 type stream interface {
@@ -44,6 +43,15 @@ var knownAlgorithms = map[AlgorithmId]uint16{
 	AlgorithmSha256: 32,
 	AlgorithmSha384: 48,
 	AlgorithmSha512: 64,
+}
+
+func isZeroDigest(d []byte) bool {
+	for _, b := range d {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 type nativeEndian_ struct{}
@@ -128,18 +136,13 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
-		Data:      event,
+		Data:      makeEventData(pcrIndex, eventType, event),
 	}, false, nil
-}
-
-type algorithmSize struct {
-	algorithmId AlgorithmId
-	digestSize  uint16
 }
 
 type stream_2 struct {
 	r              io.ReadSeeker
-	algorithmSizes []algorithmSize
+	efiSpec	       *EFISpecIdEventData
 	readFirstEvent bool
 }
 
@@ -181,14 +184,14 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 
 		var digestSize uint16
 		var j int
-		for j = 0; j < len(s.algorithmSizes); j++ {
-			if s.algorithmSizes[j].algorithmId == algorithmId {
-				digestSize = s.algorithmSizes[j].digestSize
+		for j = 0; j < len(s.efiSpec.DigestSizes); j++ {
+			if s.efiSpec.DigestSizes[j].AlgorithmId == algorithmId {
+				digestSize = s.efiSpec.DigestSizes[j].DigestSize
 				break
 			}
 		}
 
-		if j == len(s.algorithmSizes) {
+		if j == len(s.efiSpec.DigestSizes) {
 			err := &InvalidLogError{
 				fmt.Sprintf("Entry for algorithm '%04x' not found in log header", algorithmId)}
 			return nil, true, err
@@ -218,62 +221,27 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
-		Data:      event,
+		Data:      makeEventData(pcrIndex, eventType, event),
 	}, false, nil
 }
 
-func parseTCG2LogHeader(event *Event) []algorithmSize {
-	if event.PCRIndex != 0 {
-		return nil
+func checkEvent(e *Event) (*Event, error) {
+	switch e.EventType {
+	case EventTypeNoAction:
+	    if e.PCRIndex != 0 && e.PCRIndex != 6 {
+		    err := &InvalidLogError{fmt.Sprintf("%s event measured to index %d", e.EventType, e.PCRIndex)}
+		    return nil, err
+	    }
+	    for _, digest := range e.Digests {
+		    if !isZeroDigest(digest) {
+			    err := &InvalidLogError{
+				    fmt.Sprintf("%s event contains non-zero digest", e.EventType)}
+			    return nil, err
+		    }
+	    }
+	default:
 	}
-
-	if event.EventType != EventTypeNoAction {
-		return nil
-	}
-
-	for _, b := range event.Digests[AlgorithmSha1] {
-		if b != 0 {
-			return nil
-		}
-	}
-
-	if len(event.Data) < 29 {
-		return nil
-	}
-
-	var signature strings.Builder
-	if _, err := signature.Write(event.Data[0:16]); err != nil {
-		return nil
-	}
-
-	if signature.String() != "Spec ID Event03\x00" {
-		return nil
-	}
-
-	algSizesStream := bytes.NewReader(event.Data[24:])
-
-	var numAlgorithms uint32
-	if err := binary.Read(algSizesStream, nativeEndian, &numAlgorithms); err != nil {
-		return nil
-	}
-
-	algorithmSizes := make([]algorithmSize, numAlgorithms)
-
-	for i := uint32(0); i < numAlgorithms; i++ {
-		var algorithmId AlgorithmId
-		if err := binary.Read(algSizesStream, nativeEndian, &algorithmId); err != nil {
-			return nil
-		}
-
-		var digestSize uint16
-		if err := binary.Read(algSizesStream, nativeEndian, &digestSize); err != nil {
-			return nil
-		}
-
-		algorithmSizes[i] = algorithmSize{algorithmId, digestSize}
-	}
-
-	return algorithmSizes
+	return e, nil
 }
 
 func newLogFromReader(r io.ReadSeeker) (*Log, error) {
@@ -298,33 +266,31 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 
 	var format Format
 	var algorithms []AlgorithmId
-	if algSizes := parseTCG2LogHeader(event); algSizes != nil {
+	if efiSpec, isEfiSpec := event.Data.(*EFISpecIdEventData); isEfiSpec {
 		format = Format2
-		algorithms = make([]AlgorithmId, 0, len(algSizes))
-		for _, algSize := range algSizes {
-			knownSize, known := knownAlgorithms[algSize.algorithmId]
+		algorithms = make([]AlgorithmId, 0, len(efiSpec.DigestSizes))
+		for _, specAlgSize := range efiSpec.DigestSizes {
+			knownSize, known := knownAlgorithms[specAlgSize.AlgorithmId]
 			if known {
-				if knownSize != algSize.digestSize {
+				if knownSize != specAlgSize.DigestSize {
 					err := &InvalidLogError{
 						fmt.Sprintf("Digest size in log header for algorithm '%04x' " +
 							"doesn't match expected size (size: %d, expected %d)",
-							algSize.algorithmId, algSize.digestSize, knownSize)}
+							specAlgSize.AlgorithmId, specAlgSize.DigestSize,
+							knownSize)}
 					return nil, err
 				}
-				algorithms = append(algorithms, algSize.algorithmId)
+				algorithms = append(algorithms, specAlgSize.AlgorithmId)
+
 			}
 		}
-		stream = &stream_2{r, algSizes, false}
+		stream = &stream_2{r, efiSpec, false}
 	} else {
 		format = Format1_2
 		algorithms = []AlgorithmId{AlgorithmSha1}
 	}
 
 	return &Log{format, algorithms, stream}, nil
-}
-
-func (e *InvalidLogError) Error() string {
-	return fmt.Sprintf("Error whilst parsing event log: %s", e.s)
 }
 
 func (e EventType) Label() string {
@@ -388,9 +354,7 @@ func (e EventType) Label() string {
 	case EventTypeEFIVariableAuthority:
 		return "EV_EFI_VARIABLE_AUTHORITY"
 	default:
-		var label strings.Builder
-		fmt.Fprintf(&label, "%08x", uint32(e))
-		return label.String()
+		return fmt.Sprintf("%08x", uint32(e))
 	}
 }
 
@@ -416,6 +380,10 @@ func (d Digest) Format(s fmt.State, f rune) {
 	}
 }
 
+func (e *InvalidLogError) Error() string {
+	return fmt.Sprintf("Error whilst parsing event log: %s", e.s)
+}
+
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
 	for _, a := range l.Algorithms {
 		if a == alg {
@@ -431,7 +399,10 @@ func (l *Log) NextEvent() (*Event, error) {
 	if partial && err == io.EOF {
 		err = io.ErrUnexpectedEOF
 	}
-	return event, err
+	if err != nil {
+		return nil, err
+	}
+	return checkEvent(event)
 }
 
 func NewLogFromByteReader(reader *bytes.Reader) (*Log, error) {

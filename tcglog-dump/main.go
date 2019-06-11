@@ -74,6 +74,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Printf("%2d %s %s\n", event.PCRIndex, event.Digests[algorithmId], event.EventType)
+		fmt.Printf("%2d %s %s [%s]\n", event.PCRIndex, event.Digests[algorithmId], event.EventType,
+			event.Data)
 	}
 }
