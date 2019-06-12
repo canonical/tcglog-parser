@@ -72,7 +72,7 @@ func isZeroDigest(d []byte, a AlgorithmId) bool {
 func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 	switch t {
 	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion, EventTypeNonhostCode,
-		EventTypeNonhostInfo:
+		EventTypeNonhostInfo, EventTypeEFIHCRTMEvent:
 		return i == 0
 	case EventTypeNoAction:
 		return i == 0 || i == 6
@@ -83,7 +83,7 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 	case EventTypeEventTag:
 		return (i <= 4 && spec < SpecPCClient) || i >= 8
 	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices, EventTypeNonhostConfig,
-		EventTypeEFIVariableBoot:
+		EventTypeEFIVariableBoot, EventTypeEFIHandoffTables:
 		return i == 1
 	case EventTypeCompactHash:
 		return i == 4 || i == 5 || i == 7
@@ -101,6 +101,8 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i == 0 || i == 2
 	case EventTypeEFIGPTEvent:
 		return i == 5
+	case EventTypeEFIPlatformFirmwareBlob:
+		return i == 0 || i == 2 || i == 4
 	default:
 		return true
 	}
@@ -119,6 +121,10 @@ func isValidEventData(data EventData, t EventType) bool {
 		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot:
 		_, ok = data.(*EFIVariableEventData)
+	case EventTypeEFIHCRTMEvent:
+		var builder strings.Builder
+		builder.Write(data.Bytes())
+		ok = builder.String() == "HCRTM"
 	default:
 		ok = true
 	}
