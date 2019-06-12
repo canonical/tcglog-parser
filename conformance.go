@@ -77,6 +77,8 @@ func isExpectedEventType(t EventType, i PCRIndex, f Format) bool {
 		return i == 1
 	case EventTypeTableOfDevices:
 		return i == 1
+	case EventTypeCompactHash:
+		return i == 4 || i == 5 || i == 7
 	default:
 		return true
 	}
@@ -87,6 +89,8 @@ func isValidEventDataType(d EventData, t EventType) bool {
 	switch t {
 	case EventTypeSeparator:
 		_, ok = d.(*SeparatorEventData)
+	case EventTypeCompactHash:
+		ok = len(d.Bytes()) == 4
 	default:
 		ok = true
 	}
