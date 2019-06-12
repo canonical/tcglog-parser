@@ -95,6 +95,10 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i == 4
 	case EventTypeEFIVariableDriverConfig:
 		return i == 1 || i == 3 || i == 5 || i == 7
+	case EventTypeEFIBootServicesApplication:
+		return i == 2 || i == 4
+	case EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
+		return i == 0 || i == 2
 	default:
 		return true
 	}
