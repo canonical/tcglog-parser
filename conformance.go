@@ -92,6 +92,8 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i == 5 && spec < SpecPCClient
 	case EventTypeOmitBootDeviceEvents:
 		return i == 4
+	case EventTypeEFIVariableDriverConfig:
+		return i == 1 || i == 3 || i == 5 || i == 7
 	default:
 		return true
 	}
@@ -150,6 +152,7 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 	case EventTypeIPLPartitionData:
 	case EventTypeNonhostInfo:
 	case EventTypeOmitBootDeviceEvents:
+	case EventTypeEFIVariableDriverConfig:
 	default:
 		return nil
 	}

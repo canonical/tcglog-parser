@@ -35,7 +35,7 @@ type SpecIdEventData struct {
 
 func (e *SpecIdEventData) String() string {
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "SpecIdEvent{spec=%d, platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, "+
+	fmt.Fprintf(&builder, "SpecIdEvent{ spec=%d, platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, "+
 		"specErrata=%d", e.Spec, e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
 	if e.Spec == SpecEFI_2 {
 		fmt.Fprintf(&builder, ", digestSizes=[")
@@ -43,12 +43,12 @@ func (e *SpecIdEventData) String() string {
 			if i > 0 {
 				fmt.Fprintf(&builder, ", ")
 			}
-			fmt.Fprintf(&builder, "{algorithmId=%04x, digestSize=%d}",
+			fmt.Fprintf(&builder, "{ algorithmId=%04x, digestSize=%d }",
 				algSize.AlgorithmId, algSize.DigestSize)
 		}
 		fmt.Fprintf(&builder, "]")
 	}
-	fmt.Fprintf(&builder, "}")
+	fmt.Fprintf(&builder, " }")
 	return builder.String()
 }
 
@@ -313,7 +313,7 @@ type KernelCmdlineEventData struct {
 }
 
 func (e *KernelCmdlineEventData) String() string {
-	return fmt.Sprintf("kernel_cmdline{%s}", e.Cmdline)
+	return fmt.Sprintf("kernel_cmdline{ %s }", e.Cmdline)
 }
 
 func (e *KernelCmdlineEventData) Bytes() []byte {
@@ -333,7 +333,7 @@ type GrubCmdEventData struct {
 }
 
 func (e *GrubCmdEventData) String() string {
-	return fmt.Sprintf("grub_cmd{%s}", e.Cmd)
+	return fmt.Sprintf("grub_cmd{ %s }", e.Cmd)
 }
 
 func (e *GrubCmdEventData) Bytes() []byte {
@@ -376,6 +376,83 @@ func makeEventDataAction(data []byte) EventData {
 	return &AsciiStringEventData{data}
 }
 
+type EFIGUID struct {
+	Data1 uint32
+	Data2 uint16
+	Data3 uint16
+	Data4 [8]uint8
+}
+
+func (g *EFIGUID) String() string {
+	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, g.Data4[0:2], g.Data4[2:8])
+}
+
+func readEFIGUID(stream io.Reader, guid *EFIGUID, order binary.ByteOrder) error {
+	if err := binary.Read(stream, order, &guid.Data1); err != nil {
+		return err
+	}
+	if err := binary.Read(stream, order, &guid.Data2); err != nil {
+		return err
+	}
+	if err := binary.Read(stream, order, &guid.Data3); err != nil {
+		return err
+	}
+	if _, err := io.ReadFull(stream, guid.Data4[:]); err != nil {
+		return err
+	}
+	return nil
+}
+
+type EFIVariableEventData struct {
+	data         []byte
+	VariableName EFIGUID
+	UnicodeName  string
+	VariableData []byte
+}
+
+func (e *EFIVariableEventData) String() string {
+	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\" }",
+		e.VariableName.String(), e.UnicodeName)
+}
+
+func (e *EFIVariableEventData) Bytes() []byte {
+	return e.data
+}
+
+func makeEventDataEFIVariableDriverConfig(data []byte, order binary.ByteOrder) EventData {
+	stream := bytes.NewReader(data)
+
+	var guid EFIGUID
+	if err := readEFIGUID(stream, &guid, order); err != nil {
+		return nil
+	}
+
+	var unicodeNameLength uint64
+	if err := binary.Read(stream, order, &unicodeNameLength); err != nil {
+		return nil
+	}
+
+	var variableDataLength uint64
+	if err := binary.Read(stream, order, &variableDataLength); err != nil {
+		return nil
+	}
+
+	unicodeName, err := decodeUTF16ToString(stream, unicodeNameLength, order)
+	if err != nil {
+		return nil
+	}
+
+	variableData := make([]byte, variableDataLength)
+	if _, err := io.ReadFull(stream, variableData); err != nil {
+		return nil
+	}
+
+	return &EFIVariableEventData{data: data,
+		VariableName: guid,
+		UnicodeName:  unicodeName,
+		VariableData: variableData}
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
@@ -386,6 +463,8 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 		return makeEventDataAction(data)
 	case EventTypeIPL:
 		return makeEventDataIPL(pcrIndex, data)
+	case EventTypeEFIVariableDriverConfig:
+		return makeEventDataEFIVariableDriverConfig(data, order)
 	default:
 		return nil
 	}
