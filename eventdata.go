@@ -44,7 +44,7 @@ func (e *SpecIdEventData) String() string {
 				fmt.Fprintf(&builder, ", ")
 			}
 			fmt.Fprintf(&builder, "{ algorithmId=%04x, digestSize=%d }",
-				algSize.AlgorithmId, algSize.DigestSize)
+				uint16(algSize.AlgorithmId), algSize.DigestSize)
 		}
 		fmt.Fprintf(&builder, "]")
 	}
