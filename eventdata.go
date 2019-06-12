@@ -44,7 +44,7 @@ func (e *SpecIdEventData) String() string {
 			if i > 0 {
 				fmt.Fprintf(&builder, ", ")
 			}
-			fmt.Fprintf(&builder, "{ algorithmId=%04x, digestSize=%d }",
+			fmt.Fprintf(&builder, "{ algorithmId=0x%04x, digestSize=%d }",
 				uint16(algSize.AlgorithmId), algSize.DigestSize)
 		}
 		fmt.Fprintf(&builder, "]")
@@ -483,6 +483,214 @@ func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) EventData {
 		VariableData: variableData}
 }
 
+type EFIDevicePathNodeType uint8
+
+func (t EFIDevicePathNodeType) String() string {
+	switch t {
+	case EFIDevicePathNodeHardware:
+		return "HardwarePath"
+	case EFIDevicePathNodeACPI:
+		return "AcpiPath"
+	case EFIDevicePathNodeMsg:
+		return "Msg"
+	case EFIDevicePathNodeMedia:
+		return "MediaPath"
+	case EFIDevicePathNodeBBS:
+		return "BbsPath"
+	default:
+		return fmt.Sprintf("Path[%02x]", uint8(t))
+	}
+}
+
+func (t EFIDevicePathNodeType) Format(s fmt.State, f rune) {
+	switch f {
+	case 's':
+		fmt.Fprintf(s, "%s", t.String())
+	default:
+		fmt.Fprintf(s, "%%!%c(tcglog.EFIDevicePathNodeType=%02x)", f, uint8(t))
+	}
+}
+
+type EFIDevicePathNode interface {
+	String() string
+	Type() EFIDevicePathNodeType
+	SubType() uint8
+	Next() EFIDevicePathNode
+}
+
+type efiDevicePathNodeNextSetter interface {
+	setNext(EFIDevicePathNode)
+}
+
+type efiGenericDevicePathNode struct {
+	t       EFIDevicePathNodeType
+	subType uint8
+	data    []byte
+	next    EFIDevicePathNode
+}
+
+func (p *efiGenericDevicePathNode) String() string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "%s(%d", p.t, p.subType)
+	if len(p.data) > 0 {
+		fmt.Fprintf(&builder, ", 0x")
+		for _, b := range p.data {
+			fmt.Fprintf(&builder, "%02x", b)
+		}
+	}
+	fmt.Fprintf(&builder, ")")
+	return builder.String()
+}
+
+func (p *efiGenericDevicePathNode) Type() EFIDevicePathNodeType {
+	return p.t
+}
+
+func (p *efiGenericDevicePathNode) SubType() uint8 {
+	return p.subType
+}
+
+func (p *efiGenericDevicePathNode) Next() EFIDevicePathNode {
+	return p.next
+}
+
+func (p *efiGenericDevicePathNode) setNext(n EFIDevicePathNode) {
+	p.next = n
+}
+
+func readDevicePathNode(stream io.Reader, order binary.ByteOrder) EFIDevicePathNode {
+	var t EFIDevicePathNodeType
+	if err := binary.Read(stream, order, &t); err != nil {
+		return nil
+	}
+
+	var subType uint8
+	if err := binary.Read(stream, order, &subType); err != nil {
+		return nil
+	}
+
+	var length uint16
+	if err := binary.Read(stream, order, &length); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	var pathData []byte
+	length -= 4
+	if length > 0 {
+		pathData = make([]byte, length)
+		if _, err := io.ReadFull(stream, pathData); err != nil {
+			return nil
+		}
+	}
+
+	return &efiGenericDevicePathNode{t: t, subType: subType, data: pathData}
+}
+
+type EFIDevicePath struct {
+	Root EFIDevicePathNode
+}
+
+func (p *EFIDevicePath) String() string {
+	var builder strings.Builder
+	for node := p.Root; node != nil; node = node.Next() {
+		if node != p.Root {
+			builder.WriteString("/")
+		}
+		fmt.Fprintf(&builder, "%s", node)
+	}
+	return builder.String()
+}
+
+func readDevicePath(data []byte, order binary.ByteOrder) *EFIDevicePath {
+	stream := bytes.NewReader(data)
+
+	var rootNode, lastNode EFIDevicePathNode
+	for {
+		node := readDevicePathNode(stream, order)
+		if node == nil {
+			return nil
+		}
+
+		if node.Type() == efiDevicePathNodeEoH {
+			break
+		}
+
+		if lastNode != nil {
+			s := lastNode.(efiDevicePathNodeNextSetter)
+			s.setNext(node)
+		} else {
+			rootNode = node
+		}
+		lastNode = node
+	}
+
+	return &EFIDevicePath{Root: rootNode}
+}
+
+type EFIImageLoadEventData struct {
+	data             []byte
+	LocationInMemory uint64
+	LengthInMemory   uint64
+	LinkTimeAddress  uint64
+	Path             *EFIDevicePath
+}
+
+func (e *EFIImageLoadEventData) String() string {
+	return fmt.Sprintf("UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x%016x, ImageLengthInMemory: %d, "+
+		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.LocationInMemory, e.LengthInMemory,
+		e.LinkTimeAddress, e.Path)
+}
+
+func (e *EFIImageLoadEventData) RawBytes() []byte {
+	return e.data
+}
+
+func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
+	return nil
+}
+
+func makeEventDataImageLoad(data []byte, order binary.ByteOrder) EventData {
+	stream := bytes.NewReader(data)
+
+	var locationInMemory uint64
+	if err := binary.Read(stream, order, &locationInMemory); err != nil {
+		return nil
+	}
+
+	var lengthInMemory uint64
+	if err := binary.Read(stream, order, &lengthInMemory); err != nil {
+		return nil
+	}
+
+	var linkTimeAddress uint64
+	if err := binary.Read(stream, order, &linkTimeAddress); err != nil {
+		return nil
+	}
+
+	var devicePathLength uint64
+	if err := binary.Read(stream, order, &devicePathLength); err != nil {
+		return nil
+	}
+
+	devicePathBuf := make([]byte, devicePathLength)
+
+	if _, err := io.ReadFull(stream, devicePathBuf); err != nil {
+		return nil
+	}
+
+	path := readDevicePath(devicePathBuf, order)
+	if path == nil {
+		return nil
+	}
+
+	return &EFIImageLoadEventData{data: data,
+		LocationInMemory: locationInMemory,
+		LengthInMemory:   lengthInMemory,
+		LinkTimeAddress:  linkTimeAddress,
+		Path:             path}
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
@@ -495,6 +703,9 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 		return makeEventDataIPL(pcrIndex, data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		return makeEventDataEFIVariable(data, order)
+	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
+		EventTypeEFIRuntimeServicesDriver:
+		return makeEventDataImageLoad(data, order)
 	default:
 		return nil
 	}

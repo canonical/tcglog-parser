@@ -58,3 +58,13 @@ const (
 	SpecEFI_1_2       = 2
 	SpecEFI_2         = 3
 )
+
+const (
+	EFIDevicePathNodeHardware EFIDevicePathNodeType = 0x01
+	EFIDevicePathNodeACPI     EFIDevicePathNodeType = 0x02
+	EFIDevicePathNodeMsg      EFIDevicePathNodeType = 0x03
+	EFIDevicePathNodeMedia    EFIDevicePathNodeType = 0x04
+	EFIDevicePathNodeBBS      EFIDevicePathNodeType = 0x05
+
+	efiDevicePathNodeEoH EFIDevicePathNodeType = 0x7f
+)
