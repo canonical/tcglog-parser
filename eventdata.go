@@ -475,6 +475,8 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 		return makeEventDataEFIVariableDriverConfig(data, order)
 	case EventTypeEFIVariableBoot:
 		return makeEventDataEFIVariableBoot(data, order)
+	case EventTypeEFIAction:
+		return makeEventDataAction(data)
 	default:
 		return nil
 	}

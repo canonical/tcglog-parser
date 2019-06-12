@@ -78,7 +78,7 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i == 0 || i == 6
 	case EventTypeSeparator:
 		return i <= 7
-	case EventTypeAction:
+	case EventTypeAction, EventTypeEFIAction:
 		return i >= 1 && i <= 6
 	case EventTypeEventTag:
 		return (i <= 4 && spec < SpecPCClient) || i >= 8
@@ -164,6 +164,7 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 	case EventTypeEFIVariableDriverConfig:
 	case EventTypeEFIVariableBoot:
 	case EventTypeEFIGPTEvent:
+	case EventTypeEFIAction:
 	default:
 		return nil
 	}
