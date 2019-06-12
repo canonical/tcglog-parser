@@ -58,18 +58,18 @@ func (e *SpecIdEventData) Bytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
-func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) EventData {
+func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order binary.ByteOrder) EventData {
 	eventData.Spec = SpecPCClient
 
 	// TCG_PCClientSpecIdEventStruct.reserved
 	var reserved uint8
-	if err := binary.Read(stream, nativeEndian, &reserved); err != nil {
+	if err := binary.Read(stream, order, &reserved); err != nil {
 		return nil
 	}
 
 	// TCG_PCClientSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, nativeEndian, &vendorInfoSize); err != nil {
+	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
 		return nil
 	}
 
@@ -84,17 +84,17 @@ func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) Even
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) EventData {
+func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order binary.ByteOrder) EventData {
 	eventData.Spec = SpecEFI_1_2
 
 	// TCG_EfiSpecIdEventStruct.uintnSize
-	if err := binary.Read(stream, nativeEndian, &eventData.uintnSize); err != nil {
+	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
 		return nil
 	}
 
 	// TCG_EfiSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, nativeEndian, &vendorInfoSize); err != nil {
+	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
 		return nil
 	}
 
@@ -109,17 +109,17 @@ func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) Even
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) EventData {
+func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order binary.ByteOrder) EventData {
 	eventData.Spec = SpecEFI_2
 
 	// TCG_EfiSpecIdEvent.uintnSize
-	if err := binary.Read(stream, nativeEndian, &eventData.uintnSize); err != nil {
+	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
 		return nil
 	}
 
 	// TCG_EfiSpecIdEvent.numberOfAlgorithms
 	var numberOfAlgorithms uint32
-	if err := binary.Read(stream, nativeEndian, &numberOfAlgorithms); err != nil {
+	if err := binary.Read(stream, order, &numberOfAlgorithms); err != nil {
 		return nil
 	}
 
@@ -127,19 +127,19 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) EventD
 	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
 	for i := uint32(0); i < numberOfAlgorithms; i++ {
 		// TCG_EfiSpecIdEvent.digestSizes[i].algorithmId
-		if err := binary.Read(stream, nativeEndian, &eventData.DigestSizes[i].AlgorithmId); err != nil {
+		if err := binary.Read(stream, order, &eventData.DigestSizes[i].AlgorithmId); err != nil {
 			return nil
 		}
 
 		// TCG_EfiSpecIdEvent.digestSizes[i].digestSize
-		if err := binary.Read(stream, nativeEndian, &eventData.DigestSizes[i].DigestSize); err != nil {
+		if err := binary.Read(stream, order, &eventData.DigestSizes[i].DigestSize); err != nil {
 			return nil
 		}
 	}
 
 	// TCG_EfiSpecIdEvent.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, nativeEndian, &vendorInfoSize); err != nil {
+	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
 		return nil
 	}
 
@@ -158,7 +158,7 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) EventD
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseSpecIdEvent(data []byte) EventData {
+func parseSpecIdEvent(data []byte, order binary.ByteOrder) EventData {
 	stream := bytes.NewReader(data)
 
 	// Signature field
@@ -174,25 +174,25 @@ func parseSpecIdEvent(data []byte) EventData {
 
 	// platformClass field
 	var platformClass uint32
-	if err := binary.Read(stream, nativeEndian, &platformClass); err != nil {
+	if err := binary.Read(stream, order, &platformClass); err != nil {
 		return nil
 	}
 
 	// specVersionMinor field
 	var specVersionMinor uint8
-	if err := binary.Read(stream, nativeEndian, &specVersionMinor); err != nil {
+	if err := binary.Read(stream, order, &specVersionMinor); err != nil {
 		return nil
 	}
 
 	// specVersionMajor field
 	var specVersionMajor uint8
-	if err := binary.Read(stream, nativeEndian, &specVersionMajor); err != nil {
+	if err := binary.Read(stream, order, &specVersionMajor); err != nil {
 		return nil
 	}
 
 	// specErrata field
 	var specErrata uint8
-	if err := binary.Read(stream, nativeEndian, &specErrata); err != nil {
+	if err := binary.Read(stream, order, &specErrata); err != nil {
 		return nil
 	}
 
@@ -205,11 +205,11 @@ func parseSpecIdEvent(data []byte) EventData {
 
 	switch signature.String() {
 	case "Spec ID Event00\x00":
-		return parsePCClientSpecIdEvent(stream, eventData)
+		return parsePCClientSpecIdEvent(stream, eventData, order)
 	case "Spec ID Event02\x00":
-		return parseEFI_1_2_SpecIdEvent(stream, eventData)
+		return parseEFI_1_2_SpecIdEvent(stream, eventData, order)
 	case "Spec ID Event03\x00":
-		return parseEFI_2_SpecIdEvent(stream, eventData)
+		return parseEFI_2_SpecIdEvent(stream, eventData, order)
 	default:
 		return nil
 	}
@@ -289,10 +289,10 @@ func (e *opaqueEventData) Bytes() []byte {
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5 "EV_NO_ACTION Event Types")
-func makeEventDataNoAction(pcrIndex PCRIndex, data []byte) EventData {
+func makeEventDataNoAction(pcrIndex PCRIndex, data []byte, order binary.ByteOrder) EventData {
 	switch pcrIndex {
 	case 0:
-		return parseSpecIdEvent(data)
+		return parseSpecIdEvent(data, order)
 	default:
 		return nil
 	}
@@ -379,7 +379,7 @@ func makeEventDataAction(data []byte) EventData {
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
-		return makeEventDataNoAction(pcrIndex, data)
+		return makeEventDataNoAction(pcrIndex, data, order)
 	case EventTypeSeparator:
 		return makeEventDataSeparator(data, order)
 	case EventTypeAction:

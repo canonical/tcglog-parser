@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"unsafe"
 )
 
 type Spec uint
@@ -17,44 +16,6 @@ var knownAlgorithms = map[AlgorithmId]uint16{
 	AlgorithmSha384: 48,
 	AlgorithmSha512: 64,
 }
-
-type nativeEndian_ struct{}
-
-func (nativeEndian_) Uint16(b []byte) uint16 {
-	_ = b[1]
-	return *(*uint16)(unsafe.Pointer(&b[0]))
-}
-
-func (nativeEndian_) Uint32(b []byte) uint32 {
-	_ = b[3]
-	return *(*uint32)(unsafe.Pointer(&b[0]))
-}
-
-func (nativeEndian_) Uint64(b []byte) uint64 {
-	_ = b[7]
-	return *(*uint64)(unsafe.Pointer(&b[0]))
-}
-
-func (nativeEndian_) PutUint16(b []byte, v uint16) {
-	_ = b[1]
-	*(*uint16)(unsafe.Pointer(&b[0])) = v
-}
-
-func (nativeEndian_) PutUint32(b []byte, v uint32) {
-	_ = b[3]
-	*(*uint32)(unsafe.Pointer(&b[0])) = v
-}
-
-func (nativeEndian_) PutUint64(b []byte, v uint64) {
-	_ = b[7]
-	*(*uint64)(unsafe.Pointer(&b[0])) = v
-}
-
-func (nativeEndian_) String() string {
-	return "nativeEndian"
-}
-
-var nativeEndian nativeEndian_
 
 type InvalidLogError struct {
 	s string
@@ -219,7 +180,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	}
 
 	// XXX: Support changing this
-	var byteOrder binary.ByteOrder = nativeEndian
+	var byteOrder binary.ByteOrder = binary.LittleEndian
 
 	var stream stream = &stream_1_2{r: r, byteOrder: byteOrder}
 	event, _, err := stream.ReadNextEvent()
