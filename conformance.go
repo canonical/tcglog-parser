@@ -73,6 +73,10 @@ func isExpectedEventType(t EventType, i PCRIndex, f Format) bool {
 		return i == 0
 	case EventTypeCPUMicrocode:
 		return i == 1
+	case EventTypePlatformConfigFlags:
+		return i == 1
+	case EventTypeTableOfDevices:
+		return i == 1
 	default:
 		return true
 	}
@@ -111,6 +115,8 @@ func checkForUnexpectedDigestValues(e *Event) error {
 	case EventTypeAction:
 	case EventTypeEventTag:
 	case EventTypeSCRTMVersion:
+	case EventTypePlatformConfigFlags:
+	case EventTypeTableOfDevices:
 	default:
 		return nil
 	}
