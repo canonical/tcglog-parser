@@ -99,6 +99,8 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i == 2 || i == 4
 	case EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
 		return i == 0 || i == 2
+	case EventTypeEFIGPTEvent:
+		return i == 5
 	default:
 		return true
 	}
@@ -161,6 +163,7 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 	case EventTypeOmitBootDeviceEvents:
 	case EventTypeEFIVariableDriverConfig:
 	case EventTypeEFIVariableBoot:
+	case EventTypeEFIGPTEvent:
 	default:
 		return nil
 	}
