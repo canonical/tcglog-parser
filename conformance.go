@@ -116,16 +116,16 @@ func isValidEventData(data EventData, t EventType) bool {
 	case EventTypeSeparator:
 		_, ok = data.(*SeparatorEventData)
 	case EventTypeCompactHash:
-		ok = len(data.Bytes()) == 4
+		ok = len(data.RawBytes()) == 4
 	case EventTypeOmitBootDeviceEvents:
 		var builder strings.Builder
-		builder.Write(data.Bytes())
+		builder.Write(data.RawBytes())
 		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		_, ok = data.(*EFIVariableEventData)
 	case EventTypeEFIHCRTMEvent:
 		var builder strings.Builder
-		builder.Write(data.Bytes())
+		builder.Write(data.RawBytes())
 		ok = builder.String() == "HCRTM"
 	default:
 		ok = true
@@ -135,7 +135,9 @@ func isValidEventData(data EventData, t EventType) bool {
 
 func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmId,
 	order binary.ByteOrder) (bool, []byte) {
-	buf := data.Bytes()
+	buf := data.MeasuredBytes()
+	var expected []byte
+
 	switch t {
 	case EventTypeSeparator:
 		se := data.(*SeparatorEventData)
@@ -143,41 +145,21 @@ func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmI
 			buf = make([]byte, 4)
 			order.PutUint32(buf, uint32(1))
 		}
-	case EventTypeIPL:
-		switch v := data.(type) {
-		case GrubEventData:
-			buf = v.HashedData()
-		default:
-			return true, nil
-		}
-	default:
+	case EventTypeNoAction:
+		expected = zeroDigests[alg]
 	}
 
-	expected := hash(buf, alg)
+	switch {
+	case buf == nil && expected == nil:
+		return true, nil
+	case expected == nil:
+		expected = hash(buf, alg)
+	}
+
 	return bytes.Compare(digest, expected) == 0, expected
 }
 
 func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error {
-	switch event.EventType {
-	case EventTypeSeparator:
-	case EventTypeAction:
-	case EventTypeEventTag:
-	case EventTypeSCRTMVersion:
-	case EventTypePlatformConfigFlags:
-	case EventTypeTableOfDevices:
-	case EventTypeIPL:
-	case EventTypeIPLPartitionData:
-	case EventTypeNonhostInfo:
-	case EventTypeOmitBootDeviceEvents:
-	case EventTypeEFIVariableDriverConfig:
-	case EventTypeEFIVariableBoot:
-	case EventTypeEFIGPTEvent:
-	case EventTypeEFIAction:
-	case EventTypeEFIVariableAuthority:
-	default:
-		return nil
-	}
-
 	for alg, digest := range event.Digests {
 		if ok, expected := isExpectedDigest(digest, event.EventType, event.Data, alg, order); !ok {
 			return &UnexpectedDigestValueError{event.EventType, alg, digest, expected}
@@ -188,22 +170,11 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 }
 
 func checkEvent(event *Event, spec Spec, order binary.ByteOrder) error {
-	if !isExpectedEventType(event.EventType, event.PCRIndex, spec) {
+	switch {
+	case !isExpectedEventType(event.EventType, event.PCRIndex, spec):
 		return &UnexpectedEventTypeError{event.EventType, event.PCRIndex}
-	}
-
-	if !isValidEventData(event.Data, event.EventType) {
+	case !isValidEventData(event.Data, event.EventType):
 		return &InvalidEventDataError{event.EventType, event.Data}
-	}
-
-	switch event.EventType {
-	case EventTypeNoAction:
-		for alg, digest := range event.Digests {
-			if !isZeroDigest(digest, alg) {
-				return &UnexpectedDigestValueError{event.EventType, alg, digest, zeroDigests[alg]}
-			}
-		}
-	default:
 	}
 
 	return checkForUnexpectedDigestValues(event, order)

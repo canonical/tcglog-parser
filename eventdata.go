@@ -13,7 +13,8 @@ type SeparatorEventType uint32
 
 type EventData interface {
 	String() string
-	Bytes() []byte
+	RawBytes() []byte
+	MeasuredBytes() []byte
 }
 
 type EFISpecIdEventAlgorithmSize struct {
@@ -52,8 +53,12 @@ func (e *SpecIdEventData) String() string {
 	return builder.String()
 }
 
-func (e *SpecIdEventData) Bytes() []byte {
+func (e *SpecIdEventData) RawBytes() []byte {
 	return e.data
+}
+
+func (e *SpecIdEventData) MeasuredBytes() []byte {
+	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -227,13 +232,19 @@ type SeparatorEventData struct {
 func (e *SeparatorEventData) String() string {
 	if e.Type == SeparatorEventTypeError {
 		return "Error"
-	} else {
-		return ""
 	}
+	return ""
 }
 
-func (e *SeparatorEventData) Bytes() []byte {
+func (e *SeparatorEventData) RawBytes() []byte {
 	return e.data
+}
+
+func (e *SeparatorEventData) MeasuredBytes() []byte {
+	if e.Type == SeparatorEventTypeNormal {
+		return e.data
+	}
+	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -260,7 +271,8 @@ func makeEventDataSeparator(data []byte, order binary.ByteOrder) EventData {
 }
 
 type AsciiStringEventData struct {
-	data []byte
+	data          []byte
+	informational bool
 }
 
 func (e *AsciiStringEventData) String() string {
@@ -269,20 +281,35 @@ func (e *AsciiStringEventData) String() string {
 	return builder.String()
 }
 
-func (e *AsciiStringEventData) Bytes() []byte {
+func (e *AsciiStringEventData) RawBytes() []byte {
 	return e.data
 }
 
+func (e *AsciiStringEventData) MeasuredBytes() []byte {
+	if !e.informational {
+		return e.data
+	}
+	return nil
+}
+
 type opaqueEventData struct {
-	data []byte
+	data          []byte
+	informational bool
 }
 
 func (e *opaqueEventData) String() string {
 	return ""
 }
 
-func (e *opaqueEventData) Bytes() []byte {
+func (e *opaqueEventData) RawBytes() []byte {
 	return e.data
+}
+
+func (e *opaqueEventData) MeasuredBytes() []byte {
+	if !e.informational {
+		return e.data
+	}
+	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -303,10 +330,6 @@ var (
 	grubCmdPrefix       = "grub_cmd: "
 )
 
-type GrubEventData interface {
-	HashedData() []byte
-}
-
 type KernelCmdlineEventData struct {
 	data    []byte
 	Cmdline string
@@ -316,11 +339,11 @@ func (e *KernelCmdlineEventData) String() string {
 	return fmt.Sprintf("kernel_cmdline{ %s }", e.Cmdline)
 }
 
-func (e *KernelCmdlineEventData) Bytes() []byte {
+func (e *KernelCmdlineEventData) RawBytes() []byte {
 	return e.data
 }
 
-func (e *KernelCmdlineEventData) HashedData() []byte {
+func (e *KernelCmdlineEventData) MeasuredBytes() []byte {
 	r := strings.NewReader(e.Cmdline)
 	b := make([]byte, r.Len())
 	r.Read(b)
@@ -336,11 +359,11 @@ func (e *GrubCmdEventData) String() string {
 	return fmt.Sprintf("grub_cmd{ %s }", e.Cmd)
 }
 
-func (e *GrubCmdEventData) Bytes() []byte {
+func (e *GrubCmdEventData) RawBytes() []byte {
 	return e.data
 }
 
-func (e *GrubCmdEventData) HashedData() []byte {
+func (e *GrubCmdEventData) MeasuredBytes() []byte {
 	r := strings.NewReader(e.Cmd)
 	b := make([]byte, r.Len())
 	r.Read(b)
@@ -367,7 +390,7 @@ func makeEventDataIPL(pcrIndex PCRIndex, data []byte) EventData {
 			return nil
 		}
 	case 9:
-		return &AsciiStringEventData{data}
+		return &AsciiStringEventData{data: data, informational: true}
 	default:
 		return nil
 	}
@@ -376,7 +399,7 @@ func makeEventDataIPL(pcrIndex PCRIndex, data []byte) EventData {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func makeEventDataAction(data []byte) EventData {
-	return &AsciiStringEventData{data}
+	return &AsciiStringEventData{data: data, informational: false}
 }
 
 type EFIGUID struct {
@@ -418,7 +441,11 @@ func (e *EFIVariableEventData) String() string {
 		e.VariableName.String(), e.UnicodeName)
 }
 
-func (e *EFIVariableEventData) Bytes() []byte {
+func (e *EFIVariableEventData) RawBytes() []byte {
+	return e.data
+}
+
+func (e *EFIVariableEventData) MeasuredBytes() []byte {
 	return e.data
 }
 
@@ -491,10 +518,19 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 	}
 }
 
-func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
-	var e EventData
-	if e = makeEventDataImpl(pcrIndex, eventType, data, order); e == nil {
-		e = &opaqueEventData{data}
+func makeOpaqueEventData(eventType EventType, data []byte) EventData {
+	switch eventType {
+	case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags, EventTypeTableOfDevices,
+		EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents, EventTypeEFIGPTEvent:
+		return &opaqueEventData{data: data, informational: false}
+	default:
+		return &opaqueEventData{data: data, informational: true}
 	}
-	return e
+}
+
+func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
+	if event := makeEventDataImpl(pcrIndex, eventType, data, order); event != nil {
+		return event
+	}
+	return makeOpaqueEventData(eventType, data)
 }
