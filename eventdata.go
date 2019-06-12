@@ -10,6 +10,8 @@ import (
 	"unsafe"
 )
 
+type SeparatorEventType uint32
+
 type EventData interface {
 	String() string
 	Bytes() []byte
@@ -218,15 +220,9 @@ var (
 	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
 )
 
-type SeparatorEventType uint32
-
 type SeparatorEventData struct {
 	data []byte
 	Type SeparatorEventType
-}
-
-type AsciiStringEventData struct {
-	data []byte
 }
 
 func (e *SeparatorEventData) String() string {
@@ -239,6 +235,33 @@ func (e *SeparatorEventData) String() string {
 
 func (e *SeparatorEventData) Bytes() []byte {
 	return e.data
+}
+
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
+//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//   "Procedure for Pre-OS to OS-Present Transition")
+func makeEventDataSeparator(data []byte) EventData {
+	if len(data) != 4 {
+		return nil
+	}
+
+	v := *(*uint32)(unsafe.Pointer(&data[0]))
+
+	t := SeparatorEventTypeError
+	for _, w := range validNormalSeparatorValues {
+		if v == w {
+			t = SeparatorEventTypeNormal
+			break
+		}
+	}
+
+	return &SeparatorEventData{data, t}
+}
+
+type AsciiStringEventData struct {
+	data []byte
 }
 
 func (e *AsciiStringEventData) String() string {
@@ -263,6 +286,10 @@ func (e *opaqueEventData) Bytes() []byte {
 	return e.data
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 11.3.4 "EV_NO_ACTION Event Types")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
+//  (section 9.4.5 "EV_NO_ACTION Event Types")
 func makeEventDataNoAction(pcrIndex PCRIndex, data []byte) EventData {
 	switch pcrIndex {
 	case 0:
@@ -270,29 +297,6 @@ func makeEventDataNoAction(pcrIndex PCRIndex, data []byte) EventData {
 	default:
 		return nil
 	}
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
-//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
-//   "Procedure for Pre-OS to OS-Present Transition")
-func makeEventDataSeparator(data []byte) EventData {
-	if len(data) != 4 {
-		return nil
-	}
-
-	v := *(*uint32)(unsafe.Pointer(&data[0]))
-
-	t := SeparatorEventTypeError
-	for _, w := range validNormalSeparatorValues {
-		if v == w {
-			t = SeparatorEventTypeNormal
-			break
-		}
-	}
-
-	return &SeparatorEventData{data, t}
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")

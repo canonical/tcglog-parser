@@ -11,20 +11,6 @@ import (
 
 type Spec uint
 
-type InvalidLogError struct {
-	s string
-}
-
-type stream interface {
-	ReadNextEvent() (*Event, bool, error)
-}
-
-type Log struct {
-	Spec       Spec
-	Algorithms []AlgorithmId
-	stream     stream
-}
-
 var knownAlgorithms = map[AlgorithmId]uint16{
 	AlgorithmSha1:   20,
 	AlgorithmSha256: 32,
@@ -69,6 +55,18 @@ func (nativeEndian_) String() string {
 }
 
 var nativeEndian nativeEndian_
+
+type InvalidLogError struct {
+	s string
+}
+
+func (e *InvalidLogError) Error() string {
+	return fmt.Sprintf("Error whilst parsing event log: %s", e.s)
+}
+
+type stream interface {
+	ReadNextEvent() (*Event, bool, error)
+}
 
 const maxPCRIndex PCRIndex = 31
 
@@ -205,6 +203,12 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	}, false, nil
 }
 
+type Log struct {
+	Spec       Spec
+	Algorithms []AlgorithmId
+	stream     stream
+}
+
 func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	start, err := r.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -254,10 +258,6 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	}
 
 	return &Log{spec, algorithms, stream}, nil
-}
-
-func (e *InvalidLogError) Error() string {
-	return fmt.Sprintf("Error whilst parsing event log: %s", e.s)
 }
 
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {

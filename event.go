@@ -11,13 +11,6 @@ type AlgorithmId uint16
 type Digest []byte
 type DigestMap map[AlgorithmId]Digest
 
-type Event struct {
-	PCRIndex  PCRIndex
-	EventType EventType
-	Digests   DigestMap
-	Data      EventData
-}
-
 func (e EventType) Label() string {
 	switch e {
 	case EventTypePrebootCert:
@@ -127,4 +120,10 @@ func (d Digest) Format(s fmt.State, f rune) {
 	default:
 		fmt.Fprintf(s, "%%!%c(tcglog.Digest=%s)", f, hex.EncodeToString([]byte(d)))
 	}
+}
+type Event struct {
+	PCRIndex  PCRIndex
+	EventType EventType
+	Digests   DigestMap
+	Data      EventData
 }
