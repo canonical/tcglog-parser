@@ -51,6 +51,10 @@ type SeparatorEventData struct {
 	Type SeparatorEventType
 }
 
+type AsciiStringEventData struct {
+	data []byte
+}
+
 func (e *EFISpecIdEventData) String() string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "TCG_EfiSpecIdEvent{platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, "+
@@ -90,6 +94,16 @@ func (e *SeparatorEventData) String() string {
 }
 
 func (e *SeparatorEventData) Bytes() []byte {
+	return e.data
+}
+
+func (e *AsciiStringEventData) String() string {
+	var builder strings.Builder
+	builder.Write(e.data)
+	return builder.String()
+}
+
+func (e *AsciiStringEventData) Bytes() []byte {
 	return e.data
 }
 
@@ -311,12 +325,20 @@ func makeEventDataSeparator(data []byte) EventData {
 	return &SeparatorEventData{data, t}
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
+func makeEventDataAction(data []byte) EventData {
+	return &AsciiStringEventData{data}
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(pcrIndex, data)
 	case EventTypeSeparator:
 		return makeEventDataSeparator(data)
+	case EventTypeAction:
+		return makeEventDataAction(data)
 	default:
 		return nil
 	}

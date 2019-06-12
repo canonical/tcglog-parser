@@ -55,47 +55,93 @@ func isZeroDigest(d []byte, a AlgorithmId) bool {
 	return bytes.Compare(d, zeroDigests[a]) == 0
 }
 
-func checkEvent(e *Event, f Format) error {
-	switch e.EventType {
+func isExpectedEventType(t EventType, i PCRIndex, f Format) bool {
+	switch t {
 	case EventTypePostCode:
-		if e.PCRIndex != 0 {
-			return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
-		}
+		return i == 0
 	case EventTypeNoAction:
-		if e.PCRIndex != 0 && e.PCRIndex != 6 {
-			return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
+		return i == 0 || i == 6
+	case EventTypeSeparator:
+		return i <= 7
+	case EventTypeAction:
+		return i >= 1 && i <= 6
+	case EventTypeEventTag:
+		return i <= 4 && f == Format1_2
+	case EventTypeSCRTMContents:
+		return i == 0
+	case EventTypeSCRTMVersion:
+		return i == 0
+	default:
+		return true
+	}
+}
+
+func isValidEventDataType(d EventData, t EventType) bool {
+	var ok bool
+	switch t {
+	case EventTypeSeparator:
+		_, ok = d.(*SeparatorEventData)
+	default:
+		ok = true
+	}
+	return ok
+}
+
+func isExpectedDigest(digest Digest, t EventType, d EventData, a AlgorithmId) (bool, []byte) {
+	buf := d.Bytes()
+	switch t {
+	case EventTypeSeparator:
+		se := d.(*SeparatorEventData)
+		if se.Type == SeparatorEventTypeError {
+			buf = make([]byte, 4)
+			*(*uint32)(unsafe.Pointer(&buf[0])) = uint32(1)
 		}
+	default:
+	}
+
+	expected := hash(buf, a)
+	return bytes.Compare(digest, expected) == 0, expected
+}
+
+func checkForUnexpectedDigestValues(e *Event) error {
+	switch e.EventType {
+	case EventTypeSeparator:
+	case EventTypeAction:
+	case EventTypeEventTag:
+	case EventTypeSCRTMVersion:
+	default:
+		return nil
+	}
+
+	for alg, digest := range e.Digests {
+		if ok, expected := isExpectedDigest(digest, e.EventType, e.Data, alg); !ok {
+			return &UnexpectedDigestValueError{e.EventType, alg, digest, expected}
+		}
+	}
+
+	return nil
+}
+
+func checkEvent(e *Event, f Format) error {
+	if !isExpectedEventType(e.EventType, e.PCRIndex, f) {
+		return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
+	}
+
+	if !isValidEventDataType(e.Data, e.EventType) {
+		return &InvalidEventDataError{e.EventType, e.Data}
+	}
+
+	switch e.EventType {
+	case EventTypeNoAction:
 		for alg, digest := range e.Digests {
 			if !isZeroDigest(digest, alg) {
 				return &UnexpectedDigestValueError{e.EventType, alg, digest, zeroDigests[alg]}
 			}
 		}
-	case EventTypeSeparator:
-		if e.PCRIndex > 7 {
-			return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
-		}
-		se, ok := e.Data.(*SeparatorEventData)
-		if !ok {
-			return &InvalidEventDataError{e.EventType, e.Data}
-		}
-		d := e.Data.Bytes()
-		if se.Type == SeparatorEventTypeError {
-			d = make([]byte, 4)
-			*(*uint32)(unsafe.Pointer(&d[0])) = uint32(1)
-		}
-		for alg, digest := range e.Digests {
-			if expected := hash(d, alg); bytes.Compare(digest, expected) != 0 {
-				return &UnexpectedDigestValueError{e.EventType, alg, digest, expected}
-			}
-		}
-	case EventTypeEventTag:
-		if e.PCRIndex > 4 || (e.PCRIndex < 4 && f == Format2) {
-			return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
-		}
 	default:
 	}
 
-	return nil
+	return checkForUnexpectedDigestValues(e)
 }
 
 func (e *UnexpectedEventTypeError) Error() string {
