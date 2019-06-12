@@ -103,6 +103,8 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i == 5
 	case EventTypeEFIPlatformFirmwareBlob:
 		return i == 0 || i == 2 || i == 4
+	case EventTypeEFIVariableAuthority:
+		return i == 7
 	default:
 		return true
 	}
@@ -119,7 +121,7 @@ func isValidEventData(data EventData, t EventType) bool {
 		var builder strings.Builder
 		builder.Write(data.Bytes())
 		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
-	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot:
+	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		_, ok = data.(*EFIVariableEventData)
 	case EventTypeEFIHCRTMEvent:
 		var builder strings.Builder
@@ -171,6 +173,7 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 	case EventTypeEFIVariableBoot:
 	case EventTypeEFIGPTEvent:
 	case EventTypeEFIAction:
+	case EventTypeEFIVariableAuthority:
 	default:
 		return nil
 	}

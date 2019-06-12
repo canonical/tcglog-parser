@@ -461,6 +461,10 @@ func makeEventDataEFIVariableBoot(data []byte, order binary.ByteOrder) EventData
 	return makeEFIVariableEventData(data, order)
 }
 
+func makeEventDataEFIVariableAuthority(data []byte, order binary.ByteOrder) EventData {
+	return makeEFIVariableEventData(data, order)
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
@@ -477,6 +481,8 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 		return makeEventDataEFIVariableBoot(data, order)
 	case EventTypeEFIAction:
 		return makeEventDataAction(data)
+	case EventTypeEFIVariableAuthority:
+		return makeEventDataEFIVariableAuthority(data, order)
 	default:
 		return nil
 	}
