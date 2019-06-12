@@ -71,6 +71,8 @@ func isExpectedEventType(t EventType, i PCRIndex, f Format) bool {
 		return i == 0
 	case EventTypeSCRTMVersion:
 		return i == 0
+	case EventTypeCPUMicrocode:
+		return i == 1
 	default:
 		return true
 	}
