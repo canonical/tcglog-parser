@@ -107,15 +107,15 @@ func (e *AsciiStringEventData) Bytes() []byte {
 	return e.data
 }
 
-type eventDataUnclassified struct {
+type opaqueEventData struct {
 	data []byte
 }
 
-func (e *eventDataUnclassified) String() string {
+func (e *opaqueEventData) String() string {
 	return ""
 }
 
-func (e *eventDataUnclassified) Bytes() []byte {
+func (e *opaqueEventData) Bytes() []byte {
 	return e.data
 }
 
@@ -347,7 +347,7 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte) Even
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
 	var e EventData
 	if e = makeEventDataImpl(pcrIndex, eventType, data); e == nil {
-		e = &eventDataUnclassified{data}
+		e = &opaqueEventData{data}
 	}
 	return e
 }
