@@ -348,23 +348,26 @@ func (e *GrubCmdEventData) HashedData() []byte {
 }
 
 func makeEventDataIPL(pcrIndex PCRIndex, data []byte) EventData {
-	if pcrIndex < 8 {
-		return nil
-	}
+	switch pcrIndex {
+	case 8:
+		var builder strings.Builder
+		builder.Write(data)
+		str := builder.String()
 
-	var builder strings.Builder
-	builder.Write(data)
-	str := builder.String()
-
-	switch {
-	case strings.Index(str, kernelCmdlinePrefix) == 0:
-		str = strings.TrimPrefix(str, kernelCmdlinePrefix)
-		str = strings.TrimSuffix(str, "\x00")
-		return &KernelCmdlineEventData{data, str}
-	case strings.Index(str, grubCmdPrefix) == 0:
-		str = strings.TrimPrefix(str, grubCmdPrefix)
-		str = strings.TrimSuffix(str, "\x00")
-		return &GrubCmdEventData{data, str}
+		switch {
+		case strings.Index(str, kernelCmdlinePrefix) == 0:
+			str = strings.TrimPrefix(str, kernelCmdlinePrefix)
+			str = strings.TrimSuffix(str, "\x00")
+			return &KernelCmdlineEventData{data, str}
+		case strings.Index(str, grubCmdPrefix) == 0:
+			str = strings.TrimPrefix(str, grubCmdPrefix)
+			str = strings.TrimSuffix(str, "\x00")
+			return &GrubCmdEventData{data, str}
+		default:
+			return nil
+		}
+	case 9:
+		return &AsciiStringEventData{data}
 	default:
 		return nil
 	}
