@@ -5,9 +5,9 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/binary"
 	"fmt"
 	"strings"
-	"unsafe"
 )
 
 type UnexpectedEventTypeError struct {
@@ -69,7 +69,7 @@ func isZeroDigest(d []byte, a AlgorithmId) bool {
 	return bytes.Compare(d, zeroDigests[a]) == 0
 }
 
-func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
+func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 	switch t {
 	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion, EventTypeNonhostCode,
 		EventTypeNonhostInfo:
@@ -81,15 +81,15 @@ func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 	case EventTypeAction:
 		return i >= 1 && i <= 6
 	case EventTypeEventTag:
-		return (i <= 4 && s < SpecPCClient) || i >= 8
+		return (i <= 4 && spec < SpecPCClient) || i >= 8
 	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices, EventTypeNonhostConfig:
 		return i == 1
 	case EventTypeCompactHash:
 		return i == 4 || i == 5 || i == 7
 	case EventTypeIPL:
-		return (i == 4 && s < SpecPCClient) || i >= 8
+		return (i == 4 && spec < SpecPCClient) || i >= 8
 	case EventTypeIPLPartitionData:
-		return i == 5 && s < SpecPCClient
+		return i == 5 && spec < SpecPCClient
 	case EventTypeOmitBootDeviceEvents:
 		return i == 4
 	default:
@@ -97,16 +97,16 @@ func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 	}
 }
 
-func isValidEventData(d EventData, t EventType) bool {
+func isValidEventData(data EventData, t EventType) bool {
 	var ok bool
 	switch t {
 	case EventTypeSeparator:
-		_, ok = d.(*SeparatorEventData)
+		_, ok = data.(*SeparatorEventData)
 	case EventTypeCompactHash:
-		ok = len(d.Bytes()) == 4
+		ok = len(data.Bytes()) == 4
 	case EventTypeOmitBootDeviceEvents:
 		var builder strings.Builder
-		builder.Write(d.Bytes())
+		builder.Write(data.Bytes())
 		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
 	default:
 		ok = true
@@ -114,14 +114,15 @@ func isValidEventData(d EventData, t EventType) bool {
 	return ok
 }
 
-func isExpectedDigest(digest Digest, t EventType, data EventData, a AlgorithmId) (bool, []byte) {
+func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmId,
+	order binary.ByteOrder) (bool, []byte) {
 	buf := data.Bytes()
 	switch t {
 	case EventTypeSeparator:
 		se := data.(*SeparatorEventData)
 		if se.Type == SeparatorEventTypeError {
 			buf = make([]byte, 4)
-			*(*uint32)(unsafe.Pointer(&buf[0])) = uint32(1)
+			order.PutUint32(buf, uint32(1))
 		}
 	case EventTypeIPL:
 		switch v := data.(type) {
@@ -133,12 +134,12 @@ func isExpectedDigest(digest Digest, t EventType, data EventData, a AlgorithmId)
 	default:
 	}
 
-	expected := hash(buf, a)
+	expected := hash(buf, alg)
 	return bytes.Compare(digest, expected) == 0, expected
 }
 
-func checkForUnexpectedDigestValues(e *Event) error {
-	switch e.EventType {
+func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error {
+	switch event.EventType {
 	case EventTypeSeparator:
 	case EventTypeAction:
 	case EventTypeEventTag:
@@ -153,33 +154,33 @@ func checkForUnexpectedDigestValues(e *Event) error {
 		return nil
 	}
 
-	for alg, digest := range e.Digests {
-		if ok, expected := isExpectedDigest(digest, e.EventType, e.Data, alg); !ok {
-			return &UnexpectedDigestValueError{e.EventType, alg, digest, expected}
+	for alg, digest := range event.Digests {
+		if ok, expected := isExpectedDigest(digest, event.EventType, event.Data, alg, order); !ok {
+			return &UnexpectedDigestValueError{event.EventType, alg, digest, expected}
 		}
 	}
 
 	return nil
 }
 
-func checkEvent(e *Event, s Spec) error {
-	if !isExpectedEventType(e.EventType, e.PCRIndex, s) {
-		return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
+func checkEvent(event *Event, spec Spec, order binary.ByteOrder) error {
+	if !isExpectedEventType(event.EventType, event.PCRIndex, spec) {
+		return &UnexpectedEventTypeError{event.EventType, event.PCRIndex}
 	}
 
-	if !isValidEventData(e.Data, e.EventType) {
-		return &InvalidEventDataError{e.EventType, e.Data}
+	if !isValidEventData(event.Data, event.EventType) {
+		return &InvalidEventDataError{event.EventType, event.Data}
 	}
 
-	switch e.EventType {
+	switch event.EventType {
 	case EventTypeNoAction:
-		for alg, digest := range e.Digests {
+		for alg, digest := range event.Digests {
 			if !isZeroDigest(digest, alg) {
-				return &UnexpectedDigestValueError{e.EventType, alg, digest, zeroDigests[alg]}
+				return &UnexpectedDigestValueError{event.EventType, alg, digest, zeroDigests[alg]}
 			}
 		}
 	default:
 	}
 
-	return checkForUnexpectedDigestValues(e)
+	return checkForUnexpectedDigestValues(event, order)
 }

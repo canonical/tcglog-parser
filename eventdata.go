@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"strings"
-	"unsafe"
 )
 
 type SeparatorEventType uint32
@@ -242,12 +241,12 @@ func (e *SeparatorEventData) Bytes() []byte {
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
-func makeEventDataSeparator(data []byte) EventData {
+func makeEventDataSeparator(data []byte, order binary.ByteOrder) EventData {
 	if len(data) != 4 {
 		return nil
 	}
 
-	v := *(*uint32)(unsafe.Pointer(&data[0]))
+	v := order.Uint32(data)
 
 	t := SeparatorEventTypeError
 	for _, w := range validNormalSeparatorValues {
@@ -377,12 +376,12 @@ func makeEventDataAction(data []byte) EventData {
 	return &AsciiStringEventData{data}
 }
 
-func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
+func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(pcrIndex, data)
 	case EventTypeSeparator:
-		return makeEventDataSeparator(data)
+		return makeEventDataSeparator(data, order)
 	case EventTypeAction:
 		return makeEventDataAction(data)
 	case EventTypeIPL:
@@ -392,9 +391,9 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte) Even
 	}
 }
 
-func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
+func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	var e EventData
-	if e = makeEventDataImpl(pcrIndex, eventType, data); e == nil {
+	if e = makeEventDataImpl(pcrIndex, eventType, data, order); e == nil {
 		e = &opaqueEventData{data}
 	}
 	return e

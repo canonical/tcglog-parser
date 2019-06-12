@@ -71,14 +71,15 @@ type stream interface {
 const maxPCRIndex PCRIndex = 31
 
 type stream_1_2 struct {
-	r io.ReadSeeker
+	r         io.ReadSeeker
+	byteOrder binary.ByteOrder
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
 func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 	var pcrIndex PCRIndex
-	if err := binary.Read(s.r, nativeEndian, &pcrIndex); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &pcrIndex); err != nil {
 		return nil, false, err
 	}
 
@@ -88,7 +89,7 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 	}
 
 	var eventType EventType
-	if err := binary.Read(s.r, nativeEndian, &eventType); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &eventType); err != nil {
 		return nil, true, err
 	}
 
@@ -100,7 +101,7 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 	digests[AlgorithmSha1] = digest
 
 	var eventSize uint32
-	if err := binary.Read(s.r, nativeEndian, &eventSize); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &eventSize); err != nil {
 		return nil, true, err
 	}
 
@@ -113,12 +114,13 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
-		Data:      makeEventData(pcrIndex, eventType, event),
+		Data:      makeEventData(pcrIndex, eventType, event, s.byteOrder),
 	}, false, nil
 }
 
 type stream_2 struct {
 	r              io.ReadSeeker
+	byteOrder      binary.ByteOrder
 	algSizes       []EFISpecIdEventAlgorithmSize
 	readFirstEvent bool
 }
@@ -128,12 +130,12 @@ type stream_2 struct {
 func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	if !s.readFirstEvent {
 		s.readFirstEvent = true
-		stream := stream_1_2{s.r}
+		stream := stream_1_2{r: s.r, byteOrder: s.byteOrder}
 		return stream.ReadNextEvent()
 	}
 
 	var pcrIndex PCRIndex
-	if err := binary.Read(s.r, nativeEndian, &pcrIndex); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &pcrIndex); err != nil {
 		return nil, false, err
 	}
 
@@ -143,12 +145,12 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	}
 
 	var eventType EventType
-	if err := binary.Read(s.r, nativeEndian, &eventType); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &eventType); err != nil {
 		return nil, true, err
 	}
 
 	var count uint32
-	if err := binary.Read(s.r, nativeEndian, &count); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &count); err != nil {
 		return nil, true, err
 	}
 
@@ -156,7 +158,7 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 
 	for i := uint32(0); i < count; i++ {
 		var algorithmId AlgorithmId
-		if err := binary.Read(s.r, nativeEndian, &algorithmId); err != nil {
+		if err := binary.Read(s.r, s.byteOrder, &algorithmId); err != nil {
 			return nil, true, err
 		}
 
@@ -186,7 +188,7 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	}
 
 	var eventSize uint32
-	if err := binary.Read(s.r, nativeEndian, &eventSize); err != nil {
+	if err := binary.Read(s.r, s.byteOrder, &eventSize); err != nil {
 		return nil, true, err
 	}
 
@@ -199,13 +201,14 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
-		Data:      makeEventData(pcrIndex, eventType, event),
+		Data:      makeEventData(pcrIndex, eventType, event, s.byteOrder),
 	}, false, nil
 }
 
 type Log struct {
 	Spec       Spec
 	Algorithms []AlgorithmId
+	byteOrder  binary.ByteOrder
 	stream     stream
 }
 
@@ -215,7 +218,10 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 		return nil, err
 	}
 
-	var stream stream = &stream_1_2{r}
+	// XXX: Support changing this
+	var byteOrder binary.ByteOrder = nativeEndian
+
+	var stream stream = &stream_1_2{r: r, byteOrder: byteOrder}
 	event, _, err := stream.ReadNextEvent()
 	if err != nil {
 		if err == io.EOF {
@@ -252,12 +258,15 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 
 			}
 		}
-		stream = &stream_2{r, specData.DigestSizes, false}
+		stream = &stream_2{r: r,
+			byteOrder:      byteOrder,
+			algSizes:       specData.DigestSizes,
+			readFirstEvent: false}
 	} else {
 		algorithms = []AlgorithmId{AlgorithmSha1}
 	}
 
-	return &Log{spec, algorithms, stream}, nil
+	return &Log{Spec: spec, Algorithms: algorithms, byteOrder: byteOrder, stream: stream}, nil
 }
 
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
@@ -278,7 +287,7 @@ func (l *Log) NextEvent() (*Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = checkEvent(event, l.Spec)
+	err = checkEvent(event, l.Spec, l.byteOrder)
 	return event, err
 }
 
