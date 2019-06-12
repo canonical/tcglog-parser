@@ -3,9 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/chrisccoulson/tcglog-parser"
 	"io"
 	"os"
+	"strings"
+
+	"github.com/chrisccoulson/tcglog-parser"
 )
 
 var (
@@ -84,10 +86,16 @@ func main() {
 			}
 		}
 
-		fmt.Printf("%2d %s %s [%s]\n", event.PCRIndex, event.Digests[algorithmId], event.EventType,
-			event.Data)
-		if err != nil {
-			fmt.Printf("*** %s ***\n", err)
+		var builder strings.Builder
+		fmt.Fprintf(&builder, "%2d %s %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
+		data := event.Data.String()
+		if data != "" {
+			fmt.Fprintf(&builder, " [%s]", data)
+
 		}
+		if err != nil {
+			fmt.Fprintf(&builder, " *** %s ***", err)
+		}
+		fmt.Println(builder.String())
 	}
 }
