@@ -449,7 +449,7 @@ func (e *EFIVariableEventData) MeasuredBytes() []byte {
 	return e.data
 }
 
-func makeEFIVariableEventData(data []byte, order binary.ByteOrder) EventData {
+func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) EventData {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
@@ -483,36 +483,18 @@ func makeEFIVariableEventData(data []byte, order binary.ByteOrder) EventData {
 		VariableData: variableData}
 }
 
-func makeEventDataEFIVariableDriverConfig(data []byte, order binary.ByteOrder) EventData {
-	return makeEFIVariableEventData(data, order)
-}
-
-func makeEventDataEFIVariableBoot(data []byte, order binary.ByteOrder) EventData {
-	return makeEFIVariableEventData(data, order)
-}
-
-func makeEventDataEFIVariableAuthority(data []byte, order binary.ByteOrder) EventData {
-	return makeEFIVariableEventData(data, order)
-}
-
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(pcrIndex, data, order)
 	case EventTypeSeparator:
 		return makeEventDataSeparator(data, order)
-	case EventTypeAction:
+	case EventTypeAction, EventTypeEFIAction:
 		return makeEventDataAction(data)
 	case EventTypeIPL:
 		return makeEventDataIPL(pcrIndex, data)
-	case EventTypeEFIVariableDriverConfig:
-		return makeEventDataEFIVariableDriverConfig(data, order)
-	case EventTypeEFIVariableBoot:
-		return makeEventDataEFIVariableBoot(data, order)
-	case EventTypeEFIAction:
-		return makeEventDataAction(data)
-	case EventTypeEFIVariableAuthority:
-		return makeEventDataEFIVariableAuthority(data, order)
+	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
+		return makeEventDataEFIVariable(data, order)
 	default:
 		return nil
 	}
