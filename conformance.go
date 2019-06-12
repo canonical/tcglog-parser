@@ -15,9 +15,10 @@ type UnexpectedEventTypeError struct {
 }
 
 type UnexpectedDigestValueError struct {
-	EventType EventType
-	Alg       AlgorithmId
-	Digest    Digest
+	EventType      EventType
+	Alg            AlgorithmId
+	Digest         Digest
+	ExpectedDigest Digest
 }
 
 type InvalidEventDataError struct {
@@ -44,13 +45,14 @@ func hash(data []byte, alg AlgorithmId) []byte {
 	}
 }
 
-func isZeroDigest(d []byte) bool {
-	for _, b := range d {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
+var zeroDigests = map[AlgorithmId][]byte{
+	AlgorithmSha1:   make([]byte, knownAlgorithms[AlgorithmSha1]),
+	AlgorithmSha256: make([]byte, knownAlgorithms[AlgorithmSha256]),
+	AlgorithmSha384: make([]byte, knownAlgorithms[AlgorithmSha384]),
+	AlgorithmSha512: make([]byte, knownAlgorithms[AlgorithmSha512])}
+
+func isZeroDigest(d []byte, a AlgorithmId) bool {
+	return bytes.Compare(d, zeroDigests[a]) == 0
 }
 
 func checkEvent(e *Event, f Format) error {
@@ -64,8 +66,8 @@ func checkEvent(e *Event, f Format) error {
 			return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
 		}
 		for alg, digest := range e.Digests {
-			if !isZeroDigest(digest) {
-				return &UnexpectedDigestValueError{e.EventType, alg, digest}
+			if !isZeroDigest(digest, alg) {
+				return &UnexpectedDigestValueError{e.EventType, alg, digest, zeroDigests[alg]}
 			}
 		}
 	case EventTypeSeparator:
@@ -82,8 +84,8 @@ func checkEvent(e *Event, f Format) error {
 			*(*uint32)(unsafe.Pointer(&d[0])) = uint32(1)
 		}
 		for alg, digest := range e.Digests {
-			if bytes.Compare(digest, hash(d, alg)) != 0 {
-				return &UnexpectedDigestValueError{e.EventType, alg, digest}
+			if expected := hash(d, alg); bytes.Compare(digest, expected) != 0 {
+				return &UnexpectedDigestValueError{e.EventType, alg, digest, expected}
 			}
 		}
 	case EventTypeEventTag:
@@ -101,7 +103,8 @@ func (e *UnexpectedEventTypeError) Error() string {
 }
 
 func (e *UnexpectedDigestValueError) Error() string {
-	return fmt.Sprintf("Unexpected digest value for event type %s", e.EventType)
+	return fmt.Sprintf("Unexpected digest value for event type %s (got %s, expected %s)",
+		e.EventType, e.Digest, e.ExpectedDigest)
 }
 
 func (e *InvalidEventDataError) Error() string {

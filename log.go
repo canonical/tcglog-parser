@@ -236,7 +236,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 				if knownSize != specAlgSize.DigestSize {
 					err := &InvalidLogError{
 						fmt.Sprintf("Digest size in log header for algorithm '%04x' "+
-							"doesn't match expected size (size: %d, expected %d)",
+							"doesn't match expected size (got: %d, expected %d)",
 							specAlgSize.AlgorithmId, specAlgSize.DigestSize,
 							knownSize)}
 					return nil, err
