@@ -82,7 +82,8 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 		return i >= 1 && i <= 6
 	case EventTypeEventTag:
 		return (i <= 4 && spec < SpecPCClient) || i >= 8
-	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices, EventTypeNonhostConfig:
+	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices, EventTypeNonhostConfig,
+		EventTypeEFIVariableBoot:
 		return i == 1
 	case EventTypeCompactHash:
 		return i == 4 || i == 5 || i == 7
@@ -110,6 +111,8 @@ func isValidEventData(data EventData, t EventType) bool {
 		var builder strings.Builder
 		builder.Write(data.Bytes())
 		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
+	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot:
+		_, ok = data.(*EFIVariableEventData)
 	default:
 		ok = true
 	}
@@ -153,6 +156,7 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 	case EventTypeNonhostInfo:
 	case EventTypeOmitBootDeviceEvents:
 	case EventTypeEFIVariableDriverConfig:
+	case EventTypeEFIVariableBoot:
 	default:
 		return nil
 	}

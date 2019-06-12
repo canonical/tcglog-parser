@@ -419,7 +419,7 @@ func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
 }
 
-func makeEventDataEFIVariableDriverConfig(data []byte, order binary.ByteOrder) EventData {
+func makeEFIVariableEventData(data []byte, order binary.ByteOrder) EventData {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
@@ -453,6 +453,14 @@ func makeEventDataEFIVariableDriverConfig(data []byte, order binary.ByteOrder) E
 		VariableData: variableData}
 }
 
+func makeEventDataEFIVariableDriverConfig(data []byte, order binary.ByteOrder) EventData {
+	return makeEFIVariableEventData(data, order)
+}
+
+func makeEventDataEFIVariableBoot(data []byte, order binary.ByteOrder) EventData {
+	return makeEFIVariableEventData(data, order)
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
 	switch eventType {
 	case EventTypeNoAction:
@@ -465,6 +473,8 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 		return makeEventDataIPL(pcrIndex, data)
 	case EventTypeEFIVariableDriverConfig:
 		return makeEventDataEFIVariableDriverConfig(data, order)
+	case EventTypeEFIVariableBoot:
+		return makeEventDataEFIVariableBoot(data, order)
 	default:
 		return nil
 	}
