@@ -60,7 +60,8 @@ func main() {
 	}
 
 	if !log.HasAlgorithm(algorithmId) {
-		fmt.Fprintf(os.Stderr, "The log doesn't contain entries for the specified digest algorithm\n")
+		fmt.Fprintf(os.Stderr,
+			"The log doesn't contain entries for the %s digest algorithm\n", algorithmId)
 		os.Exit(1)
 	}
 
@@ -70,11 +71,23 @@ func main() {
 			if err == io.EOF {
 				break
 			}
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
+			switch e := err.(type) {
+			case *tcglog.UnexpectedEventTypeError:
+				_ = e
+			case *tcglog.UnexpectedDigestValueError:
+				_ = e
+			case *tcglog.InvalidEventDataError:
+				_ = e
+			default:
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				os.Exit(1)
+			}
 		}
 
 		fmt.Printf("%2d %s %s [%s]\n", event.PCRIndex, event.Digests[algorithmId], event.EventType,
 			event.Data)
+		if err != nil {
+			fmt.Printf("*** %s ***\n", err)
+		}
 	}
 }

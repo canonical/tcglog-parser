@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"strings"
+	"unsafe"
 )
 
 type EventData interface {
@@ -19,36 +21,47 @@ type EFISpecIdEventAlgorithmSize struct {
 }
 
 type EFISpecIdEventData struct {
-	data []byte
-	PlatformClass uint32
+	data             []byte
+	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
-	SpecErrata uint8
-	uintnSize uint8
-	DigestSizes []EFISpecIdEventAlgorithmSize
-	VendorInfo []byte
+	SpecErrata       uint8
+	uintnSize        uint8
+	DigestSizes      []EFISpecIdEventAlgorithmSize
+	VendorInfo       []byte
 }
 
 type PCClientSpecIdEventData struct {
-	data []byte
-	PlatformClass uint32
+	data             []byte
+	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
-	SpecErrata uint8
-	VendorInfo []byte
+	SpecErrata       uint8
+	VendorInfo       []byte
+}
+
+var (
+	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
+)
+
+type SeparatorEventType uint32
+
+type SeparatorEventData struct {
+	data []byte
+	Type SeparatorEventType
 }
 
 func (e *EFISpecIdEventData) String() string {
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "TCG_EfiSpecIdEvent{platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, " +
-		    "specErrata=%d, digestSizes=[", e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor,
-		    e.SpecErrata)
+	fmt.Fprintf(&builder, "TCG_EfiSpecIdEvent{platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, "+
+		"specErrata=%d, digestSizes=[", e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor,
+		e.SpecErrata)
 	for i, algSize := range e.DigestSizes {
 		if i > 0 {
 			fmt.Fprintf(&builder, ", ")
 		}
 		fmt.Fprintf(&builder, "{algorithmId=%04x, digestSize=%d}",
-			    algSize.AlgorithmId, algSize.DigestSize)
+			algSize.AlgorithmId, algSize.DigestSize)
 	}
 	fmt.Fprintf(&builder, "]}")
 	return builder.String()
@@ -59,12 +72,24 @@ func (e *EFISpecIdEventData) Bytes() []byte {
 }
 
 func (e *PCClientSpecIdEventData) String() string {
-	return fmt.Sprintf("TCG_PCClientSpecIdEventStruct{platformClass=%d, specVersionMinor=%d, " +
-			"specVersionMajor=%d, specErrata=%d}", e.PlatformClass, e.SpecVersionMinor,
-			e.SpecVersionMajor, e.SpecErrata)
+	return fmt.Sprintf("TCG_PCClientSpecIdEventStruct{platformClass=%d, specVersionMinor=%d, "+
+		"specVersionMajor=%d, specErrata=%d}", e.PlatformClass, e.SpecVersionMinor,
+		e.SpecVersionMajor, e.SpecErrata)
 }
 
 func (e *PCClientSpecIdEventData) Bytes() []byte {
+	return e.data
+}
+
+func (e *SeparatorEventData) String() string {
+	if e.Type == SeparatorEventTypeError {
+		return "Error"
+	} else {
+		return ""
+	}
+}
+
+func (e *SeparatorEventData) Bytes() []byte {
 	return e.data
 }
 
@@ -80,7 +105,8 @@ func (e *eventDataUnclassified) Bytes() []byte {
 	return e.data
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (secion 9.4.5.1, "Specification ID Version Event")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf
+//  (secion 9.4.5.1 "Specification ID Version Event")
 func parseEFISpecIdEvent(data []byte) EventData {
 	stream := bytes.NewReader(data)
 
@@ -166,17 +192,18 @@ func parseEFISpecIdEvent(data []byte) EventData {
 	}
 
 	return &EFISpecIdEventData{
-		data: data,
-		PlatformClass: platformClass,
+		data:             data,
+		PlatformClass:    platformClass,
 		SpecVersionMinor: specVersionMinor,
 		SpecVersionMajor: specVersionMajor,
-		SpecErrata: specErrata,
-		uintnSize: uintnSize,
-		DigestSizes: digestSizes,
-		VendorInfo: vendorInfo}
+		SpecErrata:       specErrata,
+		uintnSize:        uintnSize,
+		DigestSizes:      digestSizes,
+		VendorInfo:       vendorInfo}
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.4.1, "Specification Event")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 11.3.4.1 "Specification Event")
 func parsePCClientSpecIdEvent(data []byte) EventData {
 	stream := bytes.NewReader(data)
 
@@ -238,12 +265,12 @@ func parsePCClientSpecIdEvent(data []byte) EventData {
 	}
 
 	return &PCClientSpecIdEventData{
-		data: data,
-		PlatformClass: platformClass,
+		data:             data,
+		PlatformClass:    platformClass,
 		SpecVersionMinor: specVersionMinor,
 		SpecVersionMajor: specVersionMajor,
-		SpecErrata: specErrata,
-		VendorInfo: vendorInfo}
+		SpecErrata:       specErrata,
+		VendorInfo:       vendorInfo}
 }
 
 func makeEventDataNoAction(pcrIndex PCRIndex, data []byte) EventData {
@@ -261,10 +288,35 @@ func makeEventDataNoAction(pcrIndex PCRIndex, data []byte) EventData {
 	}
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
+//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//   "Procedure for Pre-OS to OS-Present Transition")
+func makeEventDataSeparator(data []byte) EventData {
+	if len(data) != 4 {
+		return nil
+	}
+
+	v := *(*uint32)(unsafe.Pointer(&data[0]))
+
+	t := SeparatorEventTypeError
+	for _, w := range validNormalSeparatorValues {
+		if v == w {
+			t = SeparatorEventTypeNormal
+			break
+		}
+	}
+
+	return &SeparatorEventData{data, t}
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(pcrIndex, data)
+	case EventTypeSeparator:
+		return makeEventDataSeparator(data)
 	default:
 		return nil
 	}

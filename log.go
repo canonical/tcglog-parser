@@ -3,7 +3,6 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -11,21 +10,9 @@ import (
 )
 
 type Format uint
-type PCRIndex uint32
-type EventType uint32
-type AlgorithmId uint16
-type Digest []byte
-type DigestMap map[AlgorithmId]Digest
 
 type InvalidLogError struct {
 	s string
-}
-
-type Event struct {
-	PCRIndex  PCRIndex
-	EventType EventType
-	Digests   DigestMap
-	Data	  EventData
 }
 
 type stream interface {
@@ -43,15 +30,6 @@ var knownAlgorithms = map[AlgorithmId]uint16{
 	AlgorithmSha256: 32,
 	AlgorithmSha384: 48,
 	AlgorithmSha512: 64,
-}
-
-func isZeroDigest(d []byte) bool {
-	for _, b := range d {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
 }
 
 type nativeEndian_ struct{}
@@ -98,7 +76,8 @@ type stream_1_2 struct {
 	r io.ReadSeeker
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.1.1, "TCG_PCClientPCREventStruct Structure")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
 func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 	var pcrIndex PCRIndex
 	if err := binary.Read(s.r, nativeEndian, &pcrIndex); err != nil {
@@ -142,11 +121,12 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 
 type stream_2 struct {
 	r              io.ReadSeeker
-	efiSpec	       *EFISpecIdEventData
+	efiSpec        *EFISpecIdEventData
 	readFirstEvent bool
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.2.2, "TCG_PCR_EVENT2 Structure")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf
+//  (section 9.2.2 "TCG_PCR_EVENT2 Structure")
 func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	if !s.readFirstEvent {
 		s.readFirstEvent = true
@@ -225,25 +205,6 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	}, false, nil
 }
 
-func checkEvent(e *Event) (*Event, error) {
-	switch e.EventType {
-	case EventTypeNoAction:
-	    if e.PCRIndex != 0 && e.PCRIndex != 6 {
-		    err := &InvalidLogError{fmt.Sprintf("%s event measured to index %d", e.EventType, e.PCRIndex)}
-		    return nil, err
-	    }
-	    for _, digest := range e.Digests {
-		    if !isZeroDigest(digest) {
-			    err := &InvalidLogError{
-				    fmt.Sprintf("%s event contains non-zero digest", e.EventType)}
-			    return nil, err
-		    }
-	    }
-	default:
-	}
-	return e, nil
-}
-
 func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	start, err := r.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -274,7 +235,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 			if known {
 				if knownSize != specAlgSize.DigestSize {
 					err := &InvalidLogError{
-						fmt.Sprintf("Digest size in log header for algorithm '%04x' " +
+						fmt.Sprintf("Digest size in log header for algorithm '%04x' "+
 							"doesn't match expected size (size: %d, expected %d)",
 							specAlgSize.AlgorithmId, specAlgSize.DigestSize,
 							knownSize)}
@@ -291,93 +252,6 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	}
 
 	return &Log{format, algorithms, stream}, nil
-}
-
-func (e EventType) Label() string {
-	switch e {
-	case EventTypePrebootCert:
-		return "EV_PREBOOT_CERT"
-	case EventTypePostCode:
-		return "EV_POST_CODE"
-	case EventTypeNoAction:
-		return "EV_NO_ACTION"
-	case EventTypeSeparator:
-		return "EV_SEPARATOR"
-	case EventTypeAction:
-		return "EV_ACTION"
-	case EventTypeEventTag:
-		return "EV_EVENT_TAG"
-	case EventTypeSCRTMContents:
-		return "EV_S_CRTM_CONTENTS"
-	case EventTypeSCRTMVersion:
-		return "EV_S_CRTM_VERSION"
-	case EventTypeCPUMicrocode:
-		return "EV_CPU_MICROCODE"
-	case EventTypePlatformConfigFlags:
-		return "EV_PLATFORM_CONFIG_FLAGS"
-	case EventTypeTableOfDevices:
-		return "EV_TABLE_OF_DEVICES"
-	case EventTypeCompactHash:
-		return "EV_COMPACT_HASH"
-	case EventTypeIPL:
-		return "EV_IPL"
-	case EventTypeIPLPartitionData:
-		return "EV_IPL_PARTITION_DATA"
-	case EventTypeNonhostCode:
-		return "EV_NONHOST_CODE"
-	case EventTypeNonhostConfig:
-		return "EV_NONHOST_CONFIG"
-	case EventTypeNonhostInfo:
-		return "EV_NONHOST_INFO"
-	case EventTypeOmitBootDeviceEvents:
-		return "EV_OMIT_BOOT_DEVICE_EVENTS"
-	case EventTypeEFIVariableDriverConfig:
-		return "EV_EFI_VARIABLE_DRIVER_CONFIG"
-	case EventTypeEFIVariableBoot:
-		return "EV_EFI_VARIABLE_BOOT"
-	case EventTypeEFIBootServicesApplication:
-		return "EV_EFI_BOOT_SERVICES_APPLICATION"
-	case EventTypeEFIBootServicesDriver:
-		return "EV_EFI_BOOT_SERVICES_DRIVER"
-	case EventTypeEFIRuntimeServicesDriver:
-		return "EV_EFI_RUNTIME_SERVICES_DRIVER"
-	case EventTypeEFIGPTEvent:
-		return "EF_EFI_GPT_EVENT"
-	case EventTypeEFIAction:
-		return "EV_EFI_ACTION"
-	case EventTypeEFIPlatformFirmwareBlob:
-		return "EV_EFI_PLATFORM_FIRMWARE_BLOB"
-	case EventTypeEFIHandoffTables:
-		return "EV_EFI_HANDOFF_TABLES"
-	case EventTypeEFIHCRTMEvent:
-		return "EV_EFI_HCRTM_EVENT"
-	case EventTypeEFIVariableAuthority:
-		return "EV_EFI_VARIABLE_AUTHORITY"
-	default:
-		return fmt.Sprintf("%08x", uint32(e))
-	}
-}
-
-func (e EventType) Format(s fmt.State, f rune) {
-	switch f {
-	case 's':
-		fmt.Fprintf(s, "%s", e.Label())
-	// case 'x':
-	//     TODO
-	// case 'X':
-	//     TODO
-	default:
-		fmt.Fprintf(s, "%%!%c(tcglog.EventType=%08x)", f, uint32(e))
-	}
-}
-
-func (d Digest) Format(s fmt.State, f rune) {
-	switch f {
-	case 's':
-		fmt.Fprintf(s, "%s", hex.EncodeToString([]byte(d)))
-	default:
-		fmt.Fprintf(s, "%%!%c(tcglog.Digest=%s)", f, hex.EncodeToString([]byte(d)))
-	}
 }
 
 func (e *InvalidLogError) Error() string {
@@ -402,7 +276,8 @@ func (l *Log) NextEvent() (*Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	return checkEvent(event)
+	err = checkEvent(event, l.Format)
+	return event, err
 }
 
 func NewLogFromByteReader(reader *bytes.Reader) (*Log, error) {

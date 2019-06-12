@@ -48,6 +48,11 @@ const (
 )
 
 const (
+	SeparatorEventTypeNormal SeparatorEventType = 0
+	SeparatorEventTypeError  SeparatorEventType = 1
+)
+
+const (
 	Format1_2 Format = 1
 	Format2          = 2
 )
