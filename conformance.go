@@ -14,6 +14,10 @@ type UnexpectedEventTypeError struct {
 	PCRIndex  PCRIndex
 }
 
+func (e *UnexpectedEventTypeError) Error() string {
+	return fmt.Sprintf("Unexpected %s event type measured to PCR index %d", e.EventType, e.PCRIndex)
+}
+
 type UnexpectedDigestValueError struct {
 	EventType      EventType
 	Alg            AlgorithmId
@@ -21,9 +25,18 @@ type UnexpectedDigestValueError struct {
 	ExpectedDigest Digest
 }
 
+func (e *UnexpectedDigestValueError) Error() string {
+	return fmt.Sprintf("Unexpected digest value for event type %s (got %s, expected %s)",
+		e.EventType, e.Digest, e.ExpectedDigest)
+}
+
 type InvalidEventDataError struct {
 	EventType EventType
 	Data      EventData
+}
+
+func (e *InvalidEventDataError) Error() string {
+	return fmt.Sprintf("Invalid data for event type %s", e.EventType)
 }
 
 func hash(data []byte, alg AlgorithmId) []byte {
@@ -57,7 +70,7 @@ func isZeroDigest(d []byte, a AlgorithmId) bool {
 
 func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 	switch t {
-	case EventTypePostCode:
+	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion:
 		return i == 0
 	case EventTypeNoAction:
 		return i == 0 || i == 6
@@ -66,19 +79,15 @@ func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 	case EventTypeAction:
 		return i >= 1 && i <= 6
 	case EventTypeEventTag:
-		return i <= 4 && s < SpecEFI_2
-	case EventTypeSCRTMContents:
-		return i == 0
-	case EventTypeSCRTMVersion:
-		return i == 0
-	case EventTypeCPUMicrocode:
-		return i == 1
-	case EventTypePlatformConfigFlags:
-		return i == 1
-	case EventTypeTableOfDevices:
+		return (i <= 4 && s < SpecPCClient) || i >= 8
+	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices:
 		return i == 1
 	case EventTypeCompactHash:
 		return i == 4 || i == 5 || i == 7
+	case EventTypeIPL:
+		return (i == 4 && s < SpecPCClient) || i >= 8
+	case EventTypeIPLPartitionData:
+		return i == 5 && s < SpecPCClient
 	default:
 		return true
 	}
@@ -97,14 +106,21 @@ func isValidEventDataType(d EventData, t EventType) bool {
 	return ok
 }
 
-func isExpectedDigest(digest Digest, t EventType, d EventData, a AlgorithmId) (bool, []byte) {
-	buf := d.Bytes()
+func isExpectedDigest(digest Digest, t EventType, data EventData, a AlgorithmId) (bool, []byte) {
+	buf := data.Bytes()
 	switch t {
 	case EventTypeSeparator:
-		se := d.(*SeparatorEventData)
+		se := data.(*SeparatorEventData)
 		if se.Type == SeparatorEventTypeError {
 			buf = make([]byte, 4)
 			*(*uint32)(unsafe.Pointer(&buf[0])) = uint32(1)
+		}
+	case EventTypeIPL:
+		switch v := data.(type) {
+		case GrubEventData:
+			buf = v.HashedData()
+		default:
+			return true, nil
 		}
 	default:
 	}
@@ -121,6 +137,8 @@ func checkForUnexpectedDigestValues(e *Event) error {
 	case EventTypeSCRTMVersion:
 	case EventTypePlatformConfigFlags:
 	case EventTypeTableOfDevices:
+	case EventTypeIPL:
+	case EventTypeIPLPartitionData:
 	default:
 		return nil
 	}
@@ -154,17 +172,4 @@ func checkEvent(e *Event, s Spec) error {
 	}
 
 	return checkForUnexpectedDigestValues(e)
-}
-
-func (e *UnexpectedEventTypeError) Error() string {
-	return fmt.Sprintf("Unexpected %s event type measured to PCR index %d", e.EventType, e.PCRIndex)
-}
-
-func (e *UnexpectedDigestValueError) Error() string {
-	return fmt.Sprintf("Unexpected digest value for event type %s (got %s, expected %s)",
-		e.EventType, e.Digest, e.ExpectedDigest)
-}
-
-func (e *InvalidEventDataError) Error() string {
-	return fmt.Sprintf("Invalid data for event type %s", e.EventType)
 }

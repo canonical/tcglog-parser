@@ -121,6 +121,7 @@ func (d Digest) Format(s fmt.State, f rune) {
 		fmt.Fprintf(s, "%%!%c(tcglog.Digest=%s)", f, hex.EncodeToString([]byte(d)))
 	}
 }
+
 type Event struct {
 	PCRIndex  PCRIndex
 	EventType EventType

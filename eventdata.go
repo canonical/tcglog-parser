@@ -299,6 +299,78 @@ func makeEventDataNoAction(pcrIndex PCRIndex, data []byte) EventData {
 	}
 }
 
+var (
+	kernelCmdlinePrefix = "kernel_cmdline: "
+	grubCmdPrefix       = "grub_cmd: "
+)
+
+type GrubEventData interface {
+	HashedData() []byte
+}
+
+type KernelCmdlineEventData struct {
+	data    []byte
+	Cmdline string
+}
+
+func (e *KernelCmdlineEventData) String() string {
+	return fmt.Sprintf("kernel_cmdline{%s}", e.Cmdline)
+}
+
+func (e *KernelCmdlineEventData) Bytes() []byte {
+	return e.data
+}
+
+func (e *KernelCmdlineEventData) HashedData() []byte {
+	r := strings.NewReader(e.Cmdline)
+	b := make([]byte, r.Len())
+	r.Read(b)
+	return b
+}
+
+type GrubCmdEventData struct {
+	data []byte
+	Cmd  string
+}
+
+func (e *GrubCmdEventData) String() string {
+	return fmt.Sprintf("grub_cmd{%s}", e.Cmd)
+}
+
+func (e *GrubCmdEventData) Bytes() []byte {
+	return e.data
+}
+
+func (e *GrubCmdEventData) HashedData() []byte {
+	r := strings.NewReader(e.Cmd)
+	b := make([]byte, r.Len())
+	r.Read(b)
+	return b
+}
+
+func makeEventDataIPL(pcrIndex PCRIndex, data []byte) EventData {
+	if pcrIndex < 8 {
+		return nil
+	}
+
+	var builder strings.Builder
+	builder.Write(data)
+	str := builder.String()
+
+	switch {
+	case strings.Index(str, kernelCmdlinePrefix) == 0:
+		str = strings.TrimPrefix(str, kernelCmdlinePrefix)
+		str = strings.TrimSuffix(str, "\x00")
+		return &KernelCmdlineEventData{data, str}
+	case strings.Index(str, grubCmdPrefix) == 0:
+		str = strings.TrimPrefix(str, grubCmdPrefix)
+		str = strings.TrimSuffix(str, "\x00")
+		return &GrubCmdEventData{data, str}
+	default:
+		return nil
+	}
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func makeEventDataAction(data []byte) EventData {
@@ -313,6 +385,8 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte) Even
 		return makeEventDataSeparator(data)
 	case EventTypeAction:
 		return makeEventDataAction(data)
+	case EventTypeIPL:
+		return makeEventDataIPL(pcrIndex, data)
 	default:
 		return nil
 	}
