@@ -2,7 +2,7 @@ package tcglog
 
 // Known event types
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1)
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.1)
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1)
 const (
 	EventTypePrebootCert EventType = 0x00000000
 	EventTypePostCode              = 0x00000001
@@ -53,6 +53,8 @@ const (
 )
 
 const (
-	Format1_2 Format = 1
-	Format2          = 2
+	SpecUnknown  Spec = 0
+	SpecPCClient      = 1
+	SpecEFI_1_2       = 2
+	SpecEFI_2         = 3
 )

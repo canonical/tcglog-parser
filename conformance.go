@@ -55,7 +55,7 @@ func isZeroDigest(d []byte, a AlgorithmId) bool {
 	return bytes.Compare(d, zeroDigests[a]) == 0
 }
 
-func isExpectedEventType(t EventType, i PCRIndex, f Format) bool {
+func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 	switch t {
 	case EventTypePostCode:
 		return i == 0
@@ -66,7 +66,7 @@ func isExpectedEventType(t EventType, i PCRIndex, f Format) bool {
 	case EventTypeAction:
 		return i >= 1 && i <= 6
 	case EventTypeEventTag:
-		return i <= 4 && f == Format1_2
+		return i <= 4 && s < SpecEFI_2
 	case EventTypeSCRTMContents:
 		return i == 0
 	case EventTypeSCRTMVersion:
@@ -134,8 +134,8 @@ func checkForUnexpectedDigestValues(e *Event) error {
 	return nil
 }
 
-func checkEvent(e *Event, f Format) error {
-	if !isExpectedEventType(e.EventType, e.PCRIndex, f) {
+func checkEvent(e *Event, s Spec) error {
+	if !isExpectedEventType(e.EventType, e.PCRIndex, s) {
 		return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
 	}
 

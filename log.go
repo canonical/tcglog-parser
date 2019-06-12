@@ -9,7 +9,7 @@ import (
 	"unsafe"
 )
 
-type Format uint
+type Spec uint
 
 type InvalidLogError struct {
 	s string
@@ -20,7 +20,7 @@ type stream interface {
 }
 
 type Log struct {
-	Format     Format
+	Spec       Spec
 	Algorithms []AlgorithmId
 	stream     stream
 }
@@ -121,11 +121,11 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 
 type stream_2 struct {
 	r              io.ReadSeeker
-	efiSpec        *EFISpecIdEventData
+	algSizes       []EFISpecIdEventAlgorithmSize
 	readFirstEvent bool
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.2.2 "TCG_PCR_EVENT2 Structure")
 func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 	if !s.readFirstEvent {
@@ -164,14 +164,14 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 
 		var digestSize uint16
 		var j int
-		for j = 0; j < len(s.efiSpec.DigestSizes); j++ {
-			if s.efiSpec.DigestSizes[j].AlgorithmId == algorithmId {
-				digestSize = s.efiSpec.DigestSizes[j].DigestSize
+		for j = 0; j < len(s.algSizes); j++ {
+			if s.algSizes[j].AlgorithmId == algorithmId {
+				digestSize = s.algSizes[j].DigestSize
 				break
 			}
 		}
 
-		if j == len(s.efiSpec.DigestSizes) {
+		if j == len(s.algSizes) {
 			err := &InvalidLogError{
 				fmt.Sprintf("Entry for algorithm '%04x' not found in log header", algorithmId)}
 			return nil, true, err
@@ -225,12 +225,15 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 		return nil, err
 	}
 
-	var format Format
+	var spec Spec = SpecUnknown
 	var algorithms []AlgorithmId
-	if efiSpec, isEfiSpec := event.Data.(*EFISpecIdEventData); isEfiSpec {
-		format = Format2
-		algorithms = make([]AlgorithmId, 0, len(efiSpec.DigestSizes))
-		for _, specAlgSize := range efiSpec.DigestSizes {
+	specData, isSpecData := event.Data.(*SpecIdEventData)
+	if isSpecData {
+		spec = specData.Spec
+	}
+	if spec == SpecEFI_2 {
+		algorithms = make([]AlgorithmId, 0, len(specData.DigestSizes))
+		for _, specAlgSize := range specData.DigestSizes {
 			knownSize, known := knownAlgorithms[specAlgSize.AlgorithmId]
 			if known {
 				if knownSize != specAlgSize.DigestSize {
@@ -245,13 +248,12 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 
 			}
 		}
-		stream = &stream_2{r, efiSpec, false}
+		stream = &stream_2{r, specData.DigestSizes, false}
 	} else {
-		format = Format1_2
 		algorithms = []AlgorithmId{AlgorithmSha1}
 	}
 
-	return &Log{format, algorithms, stream}, nil
+	return &Log{spec, algorithms, stream}, nil
 }
 
 func (e *InvalidLogError) Error() string {
@@ -276,7 +278,7 @@ func (l *Log) NextEvent() (*Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = checkEvent(event, l.Format)
+	err = checkEvent(event, l.Spec)
 	return event, err
 }
 
