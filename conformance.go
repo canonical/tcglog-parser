@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
+	"strings"
 	"unsafe"
 )
 
@@ -89,18 +90,24 @@ func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 		return (i == 4 && s < SpecPCClient) || i >= 8
 	case EventTypeIPLPartitionData:
 		return i == 5 && s < SpecPCClient
+	case EventTypeOmitBootDeviceEvents:
+		return i == 4
 	default:
 		return true
 	}
 }
 
-func isValidEventDataType(d EventData, t EventType) bool {
+func isValidEventData(d EventData, t EventType) bool {
 	var ok bool
 	switch t {
 	case EventTypeSeparator:
 		_, ok = d.(*SeparatorEventData)
 	case EventTypeCompactHash:
 		ok = len(d.Bytes()) == 4
+	case EventTypeOmitBootDeviceEvents:
+		var builder strings.Builder
+		builder.Write(d.Bytes())
+		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
 	default:
 		ok = true
 	}
@@ -141,6 +148,7 @@ func checkForUnexpectedDigestValues(e *Event) error {
 	case EventTypeIPL:
 	case EventTypeIPLPartitionData:
 	case EventTypeNonhostInfo:
+	case EventTypeOmitBootDeviceEvents:
 	default:
 		return nil
 	}
@@ -159,7 +167,7 @@ func checkEvent(e *Event, s Spec) error {
 		return &UnexpectedEventTypeError{e.EventType, e.PCRIndex}
 	}
 
-	if !isValidEventDataType(e.Data, e.EventType) {
+	if !isValidEventData(e.Data, e.EventType) {
 		return &InvalidEventDataError{e.EventType, e.Data}
 	}
 
