@@ -70,7 +70,8 @@ func isZeroDigest(d []byte, a AlgorithmId) bool {
 
 func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 	switch t {
-	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion:
+	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion, EventTypeNonhostCode,
+		EventTypeNonhostInfo:
 		return i == 0
 	case EventTypeNoAction:
 		return i == 0 || i == 6
@@ -80,7 +81,7 @@ func isExpectedEventType(t EventType, i PCRIndex, s Spec) bool {
 		return i >= 1 && i <= 6
 	case EventTypeEventTag:
 		return (i <= 4 && s < SpecPCClient) || i >= 8
-	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices:
+	case EventTypeCPUMicrocode, EventTypePlatformConfigFlags, EventTypeTableOfDevices, EventTypeNonhostConfig:
 		return i == 1
 	case EventTypeCompactHash:
 		return i == 4 || i == 5 || i == 7
@@ -139,6 +140,7 @@ func checkForUnexpectedDigestValues(e *Event) error {
 	case EventTypeTableOfDevices:
 	case EventTypeIPL:
 	case EventTypeIPLPartitionData:
+	case EventTypeNonhostInfo:
 	default:
 		return nil
 	}
