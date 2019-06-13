@@ -783,7 +783,7 @@ func readDevicePath(data []byte, order binary.ByteOrder) *EFIDevicePath {
 	for {
 		node := readDevicePathNode(stream, order)
 		if node == nil {
-			return nil
+			return &EFIDevicePath{}
 		}
 
 		if node.Type() == efiDevicePathNodeEoH {
