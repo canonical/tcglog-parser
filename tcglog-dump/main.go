@@ -87,7 +87,7 @@ func main() {
 		}
 
 		var builder strings.Builder
-		fmt.Fprintf(&builder, "%2d %s %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
+		fmt.Fprintf(&builder, "%2d %x %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
 		data := event.Data.String()
 		if data != "" {
 			fmt.Fprintf(&builder, " [%s]", data)

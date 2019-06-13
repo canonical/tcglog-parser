@@ -507,7 +507,7 @@ func (t EFIDevicePathNodeType) Format(s fmt.State, f rune) {
 	case 's':
 		fmt.Fprintf(s, "%s", t.String())
 	default:
-		fmt.Fprintf(s, "%%!%c(tcglog.EFIDevicePathNodeType=%02x)", f, uint8(t))
+		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint8(t))
 	}
 }
 

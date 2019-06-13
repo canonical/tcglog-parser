@@ -1,7 +1,6 @@
 package tcglog
 
 import (
-	"encoding/hex"
 	"fmt"
 )
 
@@ -11,7 +10,7 @@ type AlgorithmId uint16
 type Digest []byte
 type DigestMap map[AlgorithmId]Digest
 
-func (e EventType) Label() string {
+func (e EventType) String() string {
 	switch e {
 	case EventTypePrebootCert:
 		return "EV_PREBOOT_CERT"
@@ -79,13 +78,9 @@ func (e EventType) Label() string {
 func (e EventType) Format(s fmt.State, f rune) {
 	switch f {
 	case 's':
-		fmt.Fprintf(s, "%s", e.Label())
-	// case 'x':
-	//     TODO
-	// case 'X':
-	//     TODO
+		fmt.Fprintf(s, "%s", e.String())
 	default:
-		fmt.Fprintf(s, "%%!%c(tcglog.EventType=%08x)", f, uint32(e))
+		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint32(e))
 	}
 }
 
@@ -109,16 +104,7 @@ func (a AlgorithmId) Format(s fmt.State, f rune) {
 	case 's':
 		fmt.Fprintf(s, "%s", a.String())
 	default:
-		fmt.Fprintf(s, "%%!%c(tcglog.AlgorithmId=%04x)", f, uint16(a))
-	}
-}
-
-func (d Digest) Format(s fmt.State, f rune) {
-	switch f {
-	case 's':
-		fmt.Fprintf(s, "%s", hex.EncodeToString([]byte(d)))
-	default:
-		fmt.Fprintf(s, "%%!%c(tcglog.Digest=%s)", f, hex.EncodeToString([]byte(d)))
+		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint16(a))
 	}
 }
 
