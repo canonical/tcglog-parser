@@ -123,6 +123,9 @@ func isValidEventData(data EventData, t EventType) bool {
 		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		_, ok = data.(*EFIVariableEventData)
+	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
+	    EventTypeEFIRuntimeServicesDriver:
+		_, ok = data.(*EFIImageLoadEventData)
 	case EventTypeEFIHCRTMEvent:
 		var builder strings.Builder
 		builder.Write(data.RawBytes())

@@ -358,7 +358,8 @@ func filePathDevicePathNodeToString(n *efiDevicePathNode) string {
 
 func (n *efiDevicePathNode) toString() string {
 	switch {
-	case n.t == efiDevicePathNodeMedia && (n.subType == efiMediaDevicePathNodeFvFile || n.subType == efiMediaDevicePathNodeFv):
+	case n.t == efiDevicePathNodeMedia &&
+	    (n.subType == efiMediaDevicePathNodeFvFile || n.subType == efiMediaDevicePathNodeFv):
 		return firmwareDevicePathNodeToString(n)
 	case n.t == efiDevicePathNodeMedia && n.subType == efiMediaDevicePathNodeHardDrive:
 		return hardDriveDevicePathNodeToString(n)
