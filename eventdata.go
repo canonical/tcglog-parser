@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-type SeparatorEventType uint32
+type SeparatorEventType uint
 
 type EventData interface {
 	String() string
@@ -63,7 +63,8 @@ func (e *SpecIdEventData) MeasuredBytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
-func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order binary.ByteOrder) EventData {
+func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData,
+	order binary.ByteOrder) *SpecIdEventData {
 	eventData.Spec = SpecPCClient
 
 	// TCG_PCClientSpecIdEventStruct.reserved
@@ -89,7 +90,8 @@ func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData, orde
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order binary.ByteOrder) EventData {
+func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData,
+	order binary.ByteOrder) *SpecIdEventData {
 	eventData.Spec = SpecEFI_1_2
 
 	// TCG_EfiSpecIdEventStruct.uintnSize
@@ -114,7 +116,8 @@ func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData, orde
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order binary.ByteOrder) EventData {
+func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData,
+	order binary.ByteOrder) *SpecIdEventData {
 	eventData.Spec = SpecEFI_2
 
 	// TCG_EfiSpecIdEvent.uintnSize
@@ -163,7 +166,7 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData, order 
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseSpecIdEvent(data []byte, order binary.ByteOrder) EventData {
+func parseSpecIdEvent(data []byte, order binary.ByteOrder) *SpecIdEventData {
 	stream := bytes.NewReader(data)
 
 	// Signature field
@@ -252,7 +255,7 @@ func (e *SeparatorEventData) MeasuredBytes() []byte {
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
-func makeEventDataSeparator(data []byte, order binary.ByteOrder) EventData {
+func makeEventDataSeparator(data []byte, order binary.ByteOrder) *SeparatorEventData {
 	if len(data) != 4 {
 		return nil
 	}
@@ -398,7 +401,7 @@ func makeEventDataIPL(pcrIndex PCRIndex, data []byte) EventData {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func makeEventDataAction(data []byte) EventData {
+func makeEventDataAction(data []byte) *AsciiStringEventData {
 	return &AsciiStringEventData{data: data, informational: false}
 }
 
@@ -413,17 +416,17 @@ func (g *EFIGUID) String() string {
 	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, g.Data4[0:2], g.Data4[2:8])
 }
 
-func readEFIGUID(stream io.Reader, guid *EFIGUID, order binary.ByteOrder) error {
-	if err := binary.Read(stream, order, &guid.Data1); err != nil {
+func readEFIGUID(stream io.Reader, order binary.ByteOrder, out *EFIGUID) error {
+	if err := binary.Read(stream, order, &out.Data1); err != nil {
 		return err
 	}
-	if err := binary.Read(stream, order, &guid.Data2); err != nil {
+	if err := binary.Read(stream, order, &out.Data2); err != nil {
 		return err
 	}
-	if err := binary.Read(stream, order, &guid.Data3); err != nil {
+	if err := binary.Read(stream, order, &out.Data3); err != nil {
 		return err
 	}
-	if _, err := io.ReadFull(stream, guid.Data4[:]); err != nil {
+	if _, err := io.ReadFull(stream, out.Data4[:]); err != nil {
 		return err
 	}
 	return nil
@@ -449,11 +452,11 @@ func (e *EFIVariableEventData) MeasuredBytes() []byte {
 	return e.data
 }
 
-func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) EventData {
+func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) *EFIVariableEventData {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
-	if err := readEFIGUID(stream, &guid, order); err != nil {
+	if err := readEFIGUID(stream, order, &guid); err != nil {
 		return nil
 	}
 
@@ -485,6 +488,8 @@ func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) EventData {
 
 type EFIDevicePathNodeType uint8
 
+var efiDevicePathNodeEoH EFIDevicePathNodeType = 0x7f
+
 func (t EFIDevicePathNodeType) String() string {
 	switch t {
 	case EFIDevicePathNodeHardware:
@@ -512,13 +517,12 @@ func (t EFIDevicePathNodeType) Format(s fmt.State, f rune) {
 }
 
 type EFIDevicePathNode interface {
-	String() string
 	Type() EFIDevicePathNodeType
-	SubType() uint8
+	String() string
 	Next() EFIDevicePathNode
 }
 
-type efiDevicePathNodeNextSetter interface {
+type efiDevicePathNodeInitializer interface {
 	setNext(EFIDevicePathNode)
 }
 
@@ -527,6 +531,10 @@ type efiGenericDevicePathNode struct {
 	subType uint8
 	data    []byte
 	next    EFIDevicePathNode
+}
+
+func (p *efiGenericDevicePathNode) Type() EFIDevicePathNodeType {
+	return p.t
 }
 
 func (p *efiGenericDevicePathNode) String() string {
@@ -542,20 +550,186 @@ func (p *efiGenericDevicePathNode) String() string {
 	return builder.String()
 }
 
-func (p *efiGenericDevicePathNode) Type() EFIDevicePathNodeType {
-	return p.t
-}
-
-func (p *efiGenericDevicePathNode) SubType() uint8 {
-	return p.subType
-}
-
 func (p *efiGenericDevicePathNode) Next() EFIDevicePathNode {
 	return p.next
 }
 
 func (p *efiGenericDevicePathNode) setNext(n EFIDevicePathNode) {
 	p.next = n
+}
+
+type EFIFirmwareDevicePathNodeType uint
+
+func (t EFIFirmwareDevicePathNodeType) String() string {
+	switch t {
+	case EFIFirmwareDevicePathNodeVolume:
+		return "Fv"
+	case EFIFirmwareDevicePathNodeFile:
+		return "FvFile"
+	default:
+		panic("Unhandled type")
+	}
+}
+
+func (t EFIFirmwareDevicePathNodeType) Format(s fmt.State, f rune) {
+	switch f {
+	case 's':
+		fmt.Fprintf(s, "%s", t.String())
+	default:
+		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint(t))
+	}
+}
+
+type EFIFirmwareDevicePathNode struct {
+	t    EFIFirmwareDevicePathNodeType
+	name EFIGUID
+	next EFIDevicePathNode
+}
+
+func (p *EFIFirmwareDevicePathNode) Type() EFIDevicePathNodeType {
+	return EFIDevicePathNodeMedia
+}
+
+func (p *EFIFirmwareDevicePathNode) String() string {
+	return fmt.Sprintf("%s(%s)", p.t, &p.name)
+}
+
+func (p *EFIFirmwareDevicePathNode) Next() EFIDevicePathNode {
+	return p.next
+}
+
+func (p *EFIFirmwareDevicePathNode) setNext(n EFIDevicePathNode) {
+	p.next = n
+}
+
+func (p *EFIFirmwareDevicePathNode) FvType() EFIFirmwareDevicePathNodeType {
+	return p.t
+}
+
+func (p *EFIFirmwareDevicePathNode) Name() EFIGUID {
+	return p.name
+}
+
+func makeFirmwareDevicePathNode(subType uint8, data []byte, order binary.ByteOrder) *EFIFirmwareDevicePathNode {
+	stream := bytes.NewReader(data)
+
+	var name EFIGUID
+	if err := readEFIGUID(stream, order, &name); err != nil {
+		return nil
+	}
+
+	var t EFIFirmwareDevicePathNodeType
+	switch subType {
+	case 0x06:
+		t = EFIFirmwareDevicePathNodeFile
+	case 0x07:
+		t = EFIFirmwareDevicePathNodeVolume
+	default:
+		panic("Unhandled subType")
+	}
+
+	return &EFIFirmwareDevicePathNode{t: t, name: name}
+}
+
+type ACPIDevicePathNodeType uint
+
+func (t ACPIDevicePathNodeType) String() string {
+	switch t {
+	case ACPIDevicePathNodeGeneric:
+		return "Acpi"
+	case ACPIDevicePathNodeGenericPNP:
+		return "AcpiPNP"
+	case ACPIDevicePathNodePCIRoot:
+		return "PciRoot"
+	case ACPIDevicePathNodePCIeRoot:
+		return "PcieRoot"
+	case ACPIDevicePathNodeFloppy:
+		return "Floppy"
+	default:
+		panic("Unhandled type")
+	}
+}
+
+func (t ACPIDevicePathNodeType) Format(s fmt.State, f rune) {
+	switch f {
+	case 's':
+		fmt.Fprintf(s, "%s", t.String())
+	default:
+		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint(t))
+	}
+}
+
+type ACPIDevicePathNode struct {
+	hid  uint32
+	uid  uint32
+	next EFIDevicePathNode
+}
+
+func (p *ACPIDevicePathNode) Type() EFIDevicePathNodeType {
+	return EFIDevicePathNodeACPI
+}
+
+func (p *ACPIDevicePathNode) String() string {
+	switch p.ACPIType() {
+	case ACPIDevicePathNodeGeneric:
+		return fmt.Sprintf("%s(0x%08x, 0x%x)", p.ACPIType(), p.hid, p.uid)
+	case ACPIDevicePathNodeGenericPNP:
+		return fmt.Sprintf("%s(0x%04x, 0x%x)", p.ACPIType(), p.hid, p.uid)
+	default:
+		return fmt.Sprintf("%s(0x%x)", p.ACPIType(), p.uid)
+	}
+
+}
+
+func (p *ACPIDevicePathNode) Next() EFIDevicePathNode {
+	return p.next
+}
+
+func (p *ACPIDevicePathNode) setNext(n EFIDevicePathNode) {
+	p.next = n
+}
+
+func (p *ACPIDevicePathNode) ACPIType() ACPIDevicePathNodeType {
+	if p.hid&0xffff == 0x41d0 {
+		switch p.hid >> 16 {
+		case 0x0a03:
+			return ACPIDevicePathNodePCIRoot
+		case 0x0a08:
+			return ACPIDevicePathNodePCIeRoot
+		case 0x0604:
+			return ACPIDevicePathNodeFloppy
+		default:
+			return ACPIDevicePathNodeGenericPNP
+		}
+	}
+	return ACPIDevicePathNodeGeneric
+}
+
+func makeACPIDevicePathNode(data []byte, order binary.ByteOrder) *ACPIDevicePathNode {
+	stream := bytes.NewReader(data)
+
+	var hid uint32
+	if err := binary.Read(stream, order, &hid); err != nil {
+		return nil
+	}
+
+	var uid uint32
+	if err := binary.Read(stream, order, &uid); err != nil {
+		return nil
+	}
+
+	return &ACPIDevicePathNode{hid: hid, uid: uid}
+}
+
+func makeDevicePathNode(t EFIDevicePathNodeType, subType uint8, data []byte,
+	order binary.ByteOrder) EFIDevicePathNode {
+	switch {
+	case t == EFIDevicePathNodeMedia && (subType == 0x06 || subType == 0x07):
+		return makeFirmwareDevicePathNode(subType, data, order)
+	case t == EFIDevicePathNodeACPI && subType == 0x01:
+		return makeACPIDevicePathNode(data, order)
+	}
+	return &efiGenericDevicePathNode{t: t, subType: subType, data: data}
 }
 
 func readDevicePathNode(stream io.Reader, order binary.ByteOrder) EFIDevicePathNode {
@@ -575,16 +749,16 @@ func readDevicePathNode(stream io.Reader, order binary.ByteOrder) EFIDevicePathN
 		return nil
 	}
 
-	var pathData []byte
+	var data []byte
 	length -= 4
 	if length > 0 {
-		pathData = make([]byte, length)
-		if _, err := io.ReadFull(stream, pathData); err != nil {
+		data = make([]byte, length)
+		if _, err := io.ReadFull(stream, data); err != nil {
 			return nil
 		}
 	}
 
-	return &efiGenericDevicePathNode{t: t, subType: subType, data: pathData}
+	return makeDevicePathNode(t, subType, data, order)
 }
 
 type EFIDevicePath struct {
@@ -617,8 +791,8 @@ func readDevicePath(data []byte, order binary.ByteOrder) *EFIDevicePath {
 		}
 
 		if lastNode != nil {
-			s := lastNode.(efiDevicePathNodeNextSetter)
-			s.setNext(node)
+			i := lastNode.(efiDevicePathNodeInitializer)
+			i.setNext(node)
 		} else {
 			rootNode = node
 		}
@@ -650,7 +824,7 @@ func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
 	return nil
 }
 
-func makeEventDataImageLoad(data []byte, order binary.ByteOrder) EventData {
+func makeEventDataImageLoad(data []byte, order binary.ByteOrder) *EFIImageLoadEventData {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
@@ -696,22 +870,30 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, orde
 	case EventTypeNoAction:
 		return makeEventDataNoAction(pcrIndex, data, order)
 	case EventTypeSeparator:
-		return makeEventDataSeparator(data, order)
+		if d := makeEventDataSeparator(data, order); d != nil {
+			return d
+		}
 	case EventTypeAction, EventTypeEFIAction:
-		return makeEventDataAction(data)
+		if d := makeEventDataAction(data); d != nil {
+			return d
+		}
 	case EventTypeIPL:
 		return makeEventDataIPL(pcrIndex, data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		return makeEventDataEFIVariable(data, order)
+		if d := makeEventDataEFIVariable(data, order); d != nil {
+			return d
+		}
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
-		return makeEventDataImageLoad(data, order)
+		if d := makeEventDataImageLoad(data, order); d != nil {
+			return d
+		}
 	default:
-		return nil
 	}
+	return nil
 }
 
-func makeOpaqueEventData(eventType EventType, data []byte) EventData {
+func makeOpaqueEventData(eventType EventType, data []byte) *opaqueEventData {
 	switch eventType {
 	case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags, EventTypeTableOfDevices,
 		EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents, EventTypeEFIGPTEvent:

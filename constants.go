@@ -61,10 +61,21 @@ const (
 
 const (
 	EFIDevicePathNodeHardware EFIDevicePathNodeType = 0x01
-	EFIDevicePathNodeACPI     EFIDevicePathNodeType = 0x02
-	EFIDevicePathNodeMsg      EFIDevicePathNodeType = 0x03
-	EFIDevicePathNodeMedia    EFIDevicePathNodeType = 0x04
-	EFIDevicePathNodeBBS      EFIDevicePathNodeType = 0x05
+	EFIDevicePathNodeACPI                           = 0x02
+	EFIDevicePathNodeMsg                            = 0x03
+	EFIDevicePathNodeMedia                          = 0x04
+	EFIDevicePathNodeBBS                            = 0x05
+)
 
-	efiDevicePathNodeEoH EFIDevicePathNodeType = 0x7f
+const (
+	EFIFirmwareDevicePathNodeVolume EFIFirmwareDevicePathNodeType = 0
+	EFIFirmwareDevicePathNodeFile   EFIFirmwareDevicePathNodeType = 1
+)
+
+const (
+	ACPIDevicePathNodeGeneric    ACPIDevicePathNodeType = 0
+	ACPIDevicePathNodeGenericPNP ACPIDevicePathNodeType = 1
+	ACPIDevicePathNodePCIRoot    ACPIDevicePathNodeType = 2
+	ACPIDevicePathNodePCIeRoot   ACPIDevicePathNodeType = 3
+	ACPIDevicePathNodeFloppy     ACPIDevicePathNodeType = 4
 )
