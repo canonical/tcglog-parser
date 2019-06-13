@@ -745,17 +745,16 @@ func readDevicePathNode(stream io.Reader, order binary.ByteOrder) EFIDevicePathN
 
 	var length uint16
 	if err := binary.Read(stream, order, &length); err != nil {
-		fmt.Println(err)
 		return nil
 	}
 
-	var data []byte
-	length -= 4
-	if length > 0 {
-		data = make([]byte, length)
-		if _, err := io.ReadFull(stream, data); err != nil {
-			return nil
-		}
+	if length < 4 {
+		return nil
+	}
+
+	data := make([]byte, length - 4)
+	if _, err := io.ReadFull(stream, data); err != nil {
+		return nil
 	}
 
 	return makeDevicePathNode(t, subType, data, order)
