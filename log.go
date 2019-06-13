@@ -71,11 +71,13 @@ func (s *stream_1_2) ReadNextEvent() (*Event, bool, error) {
 		return nil, true, err
 	}
 
+	data, _ := makeEventData(pcrIndex, eventType, event, s.byteOrder)
+
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
-		Data:      makeEventData(pcrIndex, eventType, event, s.byteOrder),
+		Data:      data,
 	}, false, nil
 }
 
@@ -158,11 +160,13 @@ func (s *stream_2) ReadNextEvent() (*Event, bool, error) {
 		return nil, true, err
 	}
 
+	data, _ := makeEventData(pcrIndex, eventType, event, s.byteOrder)
+
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
-		Data:      makeEventData(pcrIndex, eventType, event, s.byteOrder),
+		Data:      data,
 	}, false, nil
 }
 

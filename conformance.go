@@ -124,7 +124,7 @@ func isValidEventData(data EventData, t EventType) bool {
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		_, ok = data.(*EFIVariableEventData)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
-	    EventTypeEFIRuntimeServicesDriver:
+		EventTypeEFIRuntimeServicesDriver:
 		_, ok = data.(*EFIImageLoadEventData)
 	case EventTypeEFIHCRTMEvent:
 		var builder strings.Builder

@@ -2,6 +2,7 @@ package tcglog
 
 import (
 	"encoding/binary"
+	"io"
 )
 
 type EventData interface {
@@ -30,12 +31,13 @@ func (e *opaqueEventData) MeasuredBytes() []byte {
 	return nil
 }
 
-func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
+func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
+	order binary.ByteOrder) (EventData, error) {
 	switch {
 	case eventType == EventTypeIPL && (pcrIndex == 8 || pcrIndex == 9):
-		return makeEventDataGRUB(pcrIndex, data)
+		return makeEventDataGRUB(pcrIndex, data), nil
 	default:
-		return makeEventDataTCG(pcrIndex, eventType, data, order)
+		return makeEventDataTCG(eventType, data, order)
 	}
 }
 
@@ -49,9 +51,14 @@ func makeOpaqueEventData(eventType EventType, data []byte) *opaqueEventData {
 	}
 }
 
-func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, order binary.ByteOrder) EventData {
-	if event := makeEventDataImpl(pcrIndex, eventType, data, order); event != nil {
-		return event
+func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
+	order binary.ByteOrder) (EventData, error) {
+	event, err := makeEventDataImpl(pcrIndex, eventType, data, order)
+	if err != nil || event == nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return makeOpaqueEventData(eventType, data), err
 	}
-	return makeOpaqueEventData(eventType, data)
+	return event, nil
 }

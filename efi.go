@@ -110,38 +110,38 @@ func (e *EFIVariableEventData) MeasuredBytes() []byte {
 	return e.data
 }
 
-func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) *EFIVariableEventData {
+func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) (*EFIVariableEventData, error) {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
 	if err := readEFIGUID(stream, order, &guid); err != nil {
-		return nil
+		return nil, err
 	}
 
 	var unicodeNameLength uint64
 	if err := binary.Read(stream, order, &unicodeNameLength); err != nil {
-		return nil
+		return nil, err
 	}
 
 	var variableDataLength uint64
 	if err := binary.Read(stream, order, &variableDataLength); err != nil {
-		return nil
+		return nil, err
 	}
 
 	unicodeName, err := decodeUTF16ToString(stream, unicodeNameLength, order)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	variableData := make([]byte, variableDataLength)
 	if _, err := io.ReadFull(stream, variableData); err != nil {
-		return nil
+		return nil, err
 	}
 
 	return &EFIVariableEventData{data: data,
 		VariableName: guid,
 		UnicodeName:  unicodeName,
-		VariableData: variableData}
+		VariableData: variableData}, nil
 }
 
 type efiDevicePathNodeType uint8
@@ -359,7 +359,7 @@ func filePathDevicePathNodeToString(n *efiDevicePathNode) string {
 func (n *efiDevicePathNode) toString() string {
 	switch {
 	case n.t == efiDevicePathNodeMedia &&
-	    (n.subType == efiMediaDevicePathNodeFvFile || n.subType == efiMediaDevicePathNodeFv):
+		(n.subType == efiMediaDevicePathNodeFvFile || n.subType == efiMediaDevicePathNodeFv):
 		return firmwareDevicePathNodeToString(n)
 	case n.t == efiDevicePathNodeMedia && n.subType == efiMediaDevicePathNodeHardDrive:
 		return hardDriveDevicePathNodeToString(n)
@@ -485,43 +485,40 @@ func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
 	return nil
 }
 
-func makeEventDataImageLoad(data []byte, order binary.ByteOrder) *EFIImageLoadEventData {
+func makeEventDataImageLoad(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, error) {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
 	if err := binary.Read(stream, order, &locationInMemory); err != nil {
-		return nil
+		return nil, err
 	}
 
 	var lengthInMemory uint64
 	if err := binary.Read(stream, order, &lengthInMemory); err != nil {
-		return nil
+		return nil, err
 	}
 
 	var linkTimeAddress uint64
 	if err := binary.Read(stream, order, &linkTimeAddress); err != nil {
-		return nil
+		return nil, err
 	}
 
 	var devicePathLength uint64
 	if err := binary.Read(stream, order, &devicePathLength); err != nil {
-		return nil
+		return nil, err
 	}
 
 	devicePathBuf := make([]byte, devicePathLength)
 
 	if _, err := io.ReadFull(stream, devicePathBuf); err != nil {
-		return nil
+		return nil, err
 	}
 
 	path := readDevicePath(devicePathBuf, order)
-	if path == nil {
-		return nil
-	}
 
 	return &EFIImageLoadEventData{data: data,
 		LocationInMemory: locationInMemory,
 		LengthInMemory:   lengthInMemory,
 		LinkTimeAddress:  linkTimeAddress,
-		Path:             path}
+		Path:             path}, nil
 }
