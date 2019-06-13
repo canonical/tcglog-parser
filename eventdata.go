@@ -486,288 +486,14 @@ func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) *EFIVariableE
 		VariableData: variableData}
 }
 
-type EFIDevicePathNodeType uint8
-
-var efiDevicePathNodeEoH EFIDevicePathNodeType = 0x7f
-
-func (t EFIDevicePathNodeType) String() string {
-	switch t {
-	case EFIDevicePathNodeHardware:
-		return "HardwarePath"
-	case EFIDevicePathNodeACPI:
-		return "AcpiPath"
-	case EFIDevicePathNodeMsg:
-		return "Msg"
-	case EFIDevicePathNodeMedia:
-		return "MediaPath"
-	case EFIDevicePathNodeBBS:
-		return "BbsPath"
-	default:
-		return fmt.Sprintf("Path[%02x]", uint8(t))
-	}
-}
-
-func (t EFIDevicePathNodeType) Format(s fmt.State, f rune) {
-	switch f {
-	case 's':
-		fmt.Fprintf(s, "%s", t.String())
-	default:
-		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint8(t))
-	}
-}
-
-type EFIDevicePathNode interface {
-	Type() EFIDevicePathNodeType
-	String() string
-	Next() EFIDevicePathNode
-}
-
-type efiDevicePathNodeInitializer interface {
-	setNext(EFIDevicePathNode)
-}
-
-type efiGenericDevicePathNode struct {
-	t       EFIDevicePathNodeType
-	subType uint8
-	data    []byte
-	next    EFIDevicePathNode
-}
-
-func (p *efiGenericDevicePathNode) Type() EFIDevicePathNodeType {
-	return p.t
-}
-
-func (p *efiGenericDevicePathNode) String() string {
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "%s(%d", p.t, p.subType)
-	if len(p.data) > 0 {
-		fmt.Fprintf(&builder, ", 0x")
-		for _, b := range p.data {
-			fmt.Fprintf(&builder, "%02x", b)
-		}
-	}
-	fmt.Fprintf(&builder, ")")
-	return builder.String()
-}
-
-func (p *efiGenericDevicePathNode) Next() EFIDevicePathNode {
-	return p.next
-}
-
-func (p *efiGenericDevicePathNode) setNext(n EFIDevicePathNode) {
-	p.next = n
-}
-
-type EFIFirmwareDevicePathNodeType uint
-
-func (t EFIFirmwareDevicePathNodeType) String() string {
-	switch t {
-	case EFIFirmwareDevicePathNodeVolume:
-		return "Fv"
-	case EFIFirmwareDevicePathNodeFile:
-		return "FvFile"
-	default:
-		panic("Unhandled type")
-	}
-}
-
-func (t EFIFirmwareDevicePathNodeType) Format(s fmt.State, f rune) {
-	switch f {
-	case 's':
-		fmt.Fprintf(s, "%s", t.String())
-	default:
-		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint(t))
-	}
-}
-
-type EFIFirmwareDevicePathNode struct {
-	t    EFIFirmwareDevicePathNodeType
-	name EFIGUID
-	next EFIDevicePathNode
-}
-
-func (p *EFIFirmwareDevicePathNode) Type() EFIDevicePathNodeType {
-	return EFIDevicePathNodeMedia
-}
-
-func (p *EFIFirmwareDevicePathNode) String() string {
-	return fmt.Sprintf("%s(%s)", p.t, &p.name)
-}
-
-func (p *EFIFirmwareDevicePathNode) Next() EFIDevicePathNode {
-	return p.next
-}
-
-func (p *EFIFirmwareDevicePathNode) setNext(n EFIDevicePathNode) {
-	p.next = n
-}
-
-func (p *EFIFirmwareDevicePathNode) FvType() EFIFirmwareDevicePathNodeType {
-	return p.t
-}
-
-func (p *EFIFirmwareDevicePathNode) Name() EFIGUID {
-	return p.name
-}
-
-func makeFirmwareDevicePathNode(subType uint8, data []byte, order binary.ByteOrder) *EFIFirmwareDevicePathNode {
-	stream := bytes.NewReader(data)
-
-	var name EFIGUID
-	if err := readEFIGUID(stream, order, &name); err != nil {
-		return nil
-	}
-
-	var t EFIFirmwareDevicePathNodeType
-	switch subType {
-	case 0x06:
-		t = EFIFirmwareDevicePathNodeFile
-	case 0x07:
-		t = EFIFirmwareDevicePathNodeVolume
-	default:
-		panic("Unhandled subType")
-	}
-
-	return &EFIFirmwareDevicePathNode{t: t, name: name}
-}
-
-type ACPIDevicePathNodeType uint
-
-func (t ACPIDevicePathNodeType) String() string {
-	switch t {
-	case ACPIDevicePathNodeGeneric:
-		return "Acpi"
-	case ACPIDevicePathNodeGenericPNP:
-		return "AcpiPNP"
-	case ACPIDevicePathNodePCIRoot:
-		return "PciRoot"
-	case ACPIDevicePathNodePCIeRoot:
-		return "PcieRoot"
-	case ACPIDevicePathNodeFloppy:
-		return "Floppy"
-	default:
-		panic("Unhandled type")
-	}
-}
-
-func (t ACPIDevicePathNodeType) Format(s fmt.State, f rune) {
-	switch f {
-	case 's':
-		fmt.Fprintf(s, "%s", t.String())
-	default:
-		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint(t))
-	}
-}
-
-type ACPIDevicePathNode struct {
-	hid  uint32
-	uid  uint32
-	next EFIDevicePathNode
-}
-
-func (p *ACPIDevicePathNode) Type() EFIDevicePathNodeType {
-	return EFIDevicePathNodeACPI
-}
-
-func (p *ACPIDevicePathNode) String() string {
-	switch p.ACPIType() {
-	case ACPIDevicePathNodeGeneric:
-		return fmt.Sprintf("%s(0x%08x, 0x%x)", p.ACPIType(), p.hid, p.uid)
-	case ACPIDevicePathNodeGenericPNP:
-		return fmt.Sprintf("%s(0x%04x, 0x%x)", p.ACPIType(), p.hid, p.uid)
-	default:
-		return fmt.Sprintf("%s(0x%x)", p.ACPIType(), p.uid)
-	}
-
-}
-
-func (p *ACPIDevicePathNode) Next() EFIDevicePathNode {
-	return p.next
-}
-
-func (p *ACPIDevicePathNode) setNext(n EFIDevicePathNode) {
-	p.next = n
-}
-
-func (p *ACPIDevicePathNode) ACPIType() ACPIDevicePathNodeType {
-	if p.hid&0xffff == 0x41d0 {
-		switch p.hid >> 16 {
-		case 0x0a03:
-			return ACPIDevicePathNodePCIRoot
-		case 0x0a08:
-			return ACPIDevicePathNodePCIeRoot
-		case 0x0604:
-			return ACPIDevicePathNodeFloppy
-		default:
-			return ACPIDevicePathNodeGenericPNP
-		}
-	}
-	return ACPIDevicePathNodeGeneric
-}
-
-func makeACPIDevicePathNode(data []byte, order binary.ByteOrder) *ACPIDevicePathNode {
-	stream := bytes.NewReader(data)
-
-	var hid uint32
-	if err := binary.Read(stream, order, &hid); err != nil {
-		return nil
-	}
-
-	var uid uint32
-	if err := binary.Read(stream, order, &uid); err != nil {
-		return nil
-	}
-
-	return &ACPIDevicePathNode{hid: hid, uid: uid}
-}
-
-func makeDevicePathNode(t EFIDevicePathNodeType, subType uint8, data []byte,
-	order binary.ByteOrder) EFIDevicePathNode {
-	switch {
-	case t == EFIDevicePathNodeMedia && (subType == 0x06 || subType == 0x07):
-		return makeFirmwareDevicePathNode(subType, data, order)
-	case t == EFIDevicePathNodeACPI && subType == 0x01:
-		return makeACPIDevicePathNode(data, order)
-	}
-	return &efiGenericDevicePathNode{t: t, subType: subType, data: data}
-}
-
-func readDevicePathNode(stream io.Reader, order binary.ByteOrder) EFIDevicePathNode {
-	var t EFIDevicePathNodeType
-	if err := binary.Read(stream, order, &t); err != nil {
-		return nil
-	}
-
-	var subType uint8
-	if err := binary.Read(stream, order, &subType); err != nil {
-		return nil
-	}
-
-	var length uint16
-	if err := binary.Read(stream, order, &length); err != nil {
-		return nil
-	}
-
-	if length < 4 {
-		return nil
-	}
-
-	data := make([]byte, length - 4)
-	if _, err := io.ReadFull(stream, data); err != nil {
-		return nil
-	}
-
-	return makeDevicePathNode(t, subType, data, order)
-}
-
 type EFIDevicePath struct {
-	Root EFIDevicePathNode
+	root *efiDevicePathNode
 }
 
 func (p *EFIDevicePath) String() string {
 	var builder strings.Builder
-	for node := p.Root; node != nil; node = node.Next() {
-		if node != p.Root {
+	for node := p.root; node != nil; node = node.next {
+		if node != p.root {
 			builder.WriteString("/")
 		}
 		fmt.Fprintf(&builder, "%s", node)
@@ -778,27 +504,26 @@ func (p *EFIDevicePath) String() string {
 func readDevicePath(data []byte, order binary.ByteOrder) *EFIDevicePath {
 	stream := bytes.NewReader(data)
 
-	var rootNode, lastNode EFIDevicePathNode
+	var rootNode, lastNode *efiDevicePathNode
 	for {
 		node := readDevicePathNode(stream, order)
 		if node == nil {
 			return &EFIDevicePath{}
 		}
 
-		if node.Type() == efiDevicePathNodeEoH {
+		if node.t == efiDevicePathNodeEoH {
 			break
 		}
 
 		if lastNode != nil {
-			i := lastNode.(efiDevicePathNodeInitializer)
-			i.setNext(node)
+			lastNode.next = node
 		} else {
 			rootNode = node
 		}
 		lastNode = node
 	}
 
-	return &EFIDevicePath{Root: rootNode}
+	return &EFIDevicePath{root: rootNode}
 }
 
 type EFIImageLoadEventData struct {

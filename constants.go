@@ -58,24 +58,3 @@ const (
 	SpecEFI_1_2       = 2
 	SpecEFI_2         = 3
 )
-
-const (
-	EFIDevicePathNodeHardware EFIDevicePathNodeType = 0x01
-	EFIDevicePathNodeACPI                           = 0x02
-	EFIDevicePathNodeMsg                            = 0x03
-	EFIDevicePathNodeMedia                          = 0x04
-	EFIDevicePathNodeBBS                            = 0x05
-)
-
-const (
-	EFIFirmwareDevicePathNodeVolume EFIFirmwareDevicePathNodeType = 0
-	EFIFirmwareDevicePathNodeFile   EFIFirmwareDevicePathNodeType = 1
-)
-
-const (
-	ACPIDevicePathNodeGeneric    ACPIDevicePathNodeType = 0
-	ACPIDevicePathNodeGenericPNP ACPIDevicePathNodeType = 1
-	ACPIDevicePathNodePCIRoot    ACPIDevicePathNodeType = 2
-	ACPIDevicePathNodePCIeRoot   ACPIDevicePathNodeType = 3
-	ACPIDevicePathNodeFloppy     ACPIDevicePathNodeType = 4
-)
