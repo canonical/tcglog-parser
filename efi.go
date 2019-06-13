@@ -79,8 +79,8 @@ func readEFIGUID(stream io.Reader, order binary.ByteOrder, out *EFIGUID) error {
 	return nil
 }
 
-func makeEFIGUID(data []byte, order binary.ByteOrder) *EFIGUID {
-	stream := bytes.NewReader(data)
+func makeEFIGUID(data [16]byte, order binary.ByteOrder) *EFIGUID {
+	stream := bytes.NewReader(data[:])
 
 	var out EFIGUID
 	if err := readEFIGUID(stream, order, &out); err != nil {
@@ -316,7 +316,7 @@ func hardDriveDevicePathNodeToString(n *efiDevicePathNode) string {
 	case 0x01:
 		fmt.Fprintf(&builder, "HD(%d,MBR,0x%08x,", partNumber, n.order.Uint32(sig[:]))
 	case 0x02:
-		fmt.Fprintf(&builder, "HD(%d,GPT,%s,", partNumber, makeEFIGUID(sig[:], n.order))
+		fmt.Fprintf(&builder, "HD(%d,GPT,%s,", partNumber, makeEFIGUID(sig, n.order))
 	default:
 		fmt.Fprintf(&builder, "HD(%d,%d,0,", partNumber, sigType)
 	}
