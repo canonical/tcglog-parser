@@ -37,6 +37,10 @@ const (
 )
 
 const (
+	efiHardwareDevicePathNodePCI = 0x01
+)
+
+const (
 	efiFirmwareDevicePathNodeFile   = 0x06
 	efiFirmwareDevicePathNodeVolume = 0x07
 )
@@ -72,6 +76,11 @@ func firmwareDevicePathNodeToString(n *efiDevicePathNode) string {
 }
 
 func acpiDevicePathNodeToString(n *efiDevicePathNode) string {
+	if n.subType != 0x01 {
+		// No support for the extended path node
+		return ""
+	}
+
 	stream := bytes.NewReader(n.data)
 
 	var hid uint32
@@ -100,12 +109,30 @@ func acpiDevicePathNodeToString(n *efiDevicePathNode) string {
 	}
 }
 
+func pciDevicePathNodeToString(n *efiDevicePathNode) string {
+	stream := bytes.NewReader(n.data)
+
+	var function uint8
+	if err := binary.Read(stream, n.order, &function); err != nil {
+		return ""
+	}
+
+	var device uint8
+	if err := binary.Read(stream, n.order, &device); err != nil {
+		return ""
+	}
+
+	return fmt.Sprintf("Pci(0x%x, 0x%x)", device, function)
+}
+
 func (n *efiDevicePathNode) toString() string {
 	switch {
 	case n.t == efiDevicePathNodeMedia && (n.subType == efiFirmwareDevicePathNodeFile || n.subType == efiFirmwareDevicePathNodeVolume):
 		return firmwareDevicePathNodeToString(n)
-	case n.t == efiDevicePathNodeACPI && n.subType == 0x01:
+	case n.t == efiDevicePathNodeACPI:
 		return acpiDevicePathNodeToString(n)
+	case n.t == efiDevicePathNodeHardware && n.subType == efiHardwareDevicePathNodePCI:
+		return pciDevicePathNodeToString(n)
 	default:
 		return ""
 	}
