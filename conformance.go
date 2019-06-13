@@ -27,7 +27,7 @@ type UnexpectedDigestValueError struct {
 }
 
 func (e *UnexpectedDigestValueError) Error() string {
-	return fmt.Sprintf("Unexpected digest value for event type %s (got %s, expected %s)",
+	return fmt.Sprintf("Unexpected digest value for event type %s (got %x, expected %x)",
 		e.EventType, e.Digest, e.ExpectedDigest)
 }
 
