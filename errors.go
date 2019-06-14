@@ -26,5 +26,13 @@ type UnrecognizedAlgorithmError struct {
 
 func (e *UnrecognizedAlgorithmError) Error() string {
 	return fmt.Sprintf("crypto-agile log entry contains a digest for an unrecognized algorithm (%s)",
-			e.Algorithm)
+		e.Algorithm)
+}
+
+type InvalidSpecIdEventError struct {
+	s string
+}
+
+func (e *InvalidSpecIdEventError) Error() string {
+	return fmt.Sprintf("invalid SpecIdEvent: %s", e.s)
 }

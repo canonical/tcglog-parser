@@ -68,7 +68,7 @@ func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
 		return makeOpaqueEventData(eventType, data), err
 	}
 	if n < len(data) {
-		err = fmt.Errorf("event data contains %d bytes more than expected", len(data) - n)
+		err = fmt.Errorf("event data contains %d bytes more than expected", len(data)-n)
 	}
 	return event, err
 }

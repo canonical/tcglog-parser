@@ -3,8 +3,6 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 )
@@ -31,7 +29,7 @@ func isPCRIndexInRange(index PCRIndex) bool {
 func wrapLogReadError(origErr error, partial bool) error {
 	if origErr == io.EOF {
 		if !partial {
-		    return origErr
+			return origErr
 		}
 		origErr = io.ErrUnexpectedEOF
 	}
@@ -212,18 +210,8 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	if spec == SpecEFI_2 {
 		algorithms = make([]AlgorithmId, 0, len(specData.DigestSizes))
 		for _, specAlgSize := range specData.DigestSizes {
-			knownSize, known := knownAlgorithms[specAlgSize.AlgorithmId]
-			if known {
-				if knownSize != specAlgSize.DigestSize {
-					err := errors.New(
-						fmt.Sprintf("digest size in log header for algorithm '%04x' "+
-							"doesn't match expected size (got: %d, expected %d)",
-							specAlgSize.AlgorithmId, specAlgSize.DigestSize,
-							knownSize))
-					return nil, err
-				}
+			if _, known := knownAlgorithms[specAlgSize.AlgorithmId]; known {
 				algorithms = append(algorithms, specAlgSize.AlgorithmId)
-
 			}
 		}
 		stream = &stream_2{r: r,

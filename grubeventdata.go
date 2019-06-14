@@ -58,10 +58,10 @@ func makeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (Eve
 		switch {
 		case strings.Index(str, kernelCmdlinePrefix) == 0:
 			return &KernelCmdlineEventData{data,
-						    data[len(kernelCmdlinePrefix):len(str)-1]},
-						    len(data), nil
+					data[len(kernelCmdlinePrefix) : len(str)-1]},
+				len(data), nil
 		case strings.Index(str, grubCmdPrefix) == 0:
-			return &GrubCmdEventData{data, data[len(grubCmdPrefix):len(str)-1]}, len(data), nil
+			return &GrubCmdEventData{data, data[len(grubCmdPrefix) : len(str)-1]}, len(data), nil
 		default:
 			return nil, 0, errors.New("unexpected prefix for GRUB string")
 		}

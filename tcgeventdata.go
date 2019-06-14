@@ -56,100 +56,164 @@ func (e *SpecIdEventData) MeasuredBytes() []byte {
 	return nil
 }
 
+func wrapSpecIdEventReadError(origErr error) error {
+	if origErr == io.EOF {
+		return &InvalidSpecIdEventError{"not enough data"}
+	}
+
+	return &InvalidSpecIdEventError{origErr.Error()}
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
-func parsePCClientSpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) error {
+func parsePCClientSpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) (bool, error) {
 	eventData.Spec = SpecPCClient
 
 	// TCG_PCClientSpecIdEventStruct.reserved
 	var reserved uint8
 	if err := binary.Read(stream, order, &reserved); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_PCClientSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_PCClientSpecIdEventStruct.vendorInfo
 	eventData.VendorInfo = make([]byte, vendorInfoSize)
 	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
-	return nil
+	var nonFatalErr error
+
+	switch {
+	case eventData.SpecVersionMinor != 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMinor value (0x%02x)",
+			eventData.SpecVersionMinor)
+	case eventData.SpecVersionMajor != 0x01:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMajor value (0x%02x)",
+			eventData.SpecVersionMajor)
+	case eventData.SpecErrata != 0x01:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specErrata value (0x%02x)",
+			eventData.SpecErrata)
+	}
+
+	return true, nonFatalErr
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) error {
+func parseEFI_1_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) (bool, error) {
 	eventData.Spec = SpecEFI_1_2
 
 	// TCG_EfiSpecIdEventStruct.uintnSize
 	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_EfiSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_EfiSpecIdEventStruct.vendorInfo
 	eventData.VendorInfo = make([]byte, vendorInfoSize)
 	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
-	return nil
+	var nonFatalErr error
+
+	switch {
+	case eventData.SpecVersionMinor != 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMinor value (0x%02x)",
+			eventData.SpecVersionMinor)
+	case eventData.SpecVersionMajor != 0x01:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMajor value (0x%02x)",
+			eventData.SpecVersionMajor)
+	case eventData.SpecErrata > 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specErrata value (0x%02x)",
+			eventData.SpecErrata)
+	}
+
+	return true, nonFatalErr
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) error {
+func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) (bool, error) {
 	eventData.Spec = SpecEFI_2
 
 	// TCG_EfiSpecIdEvent.uintnSize
 	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_EfiSpecIdEvent.numberOfAlgorithms
 	var numberOfAlgorithms uint32
 	if err := binary.Read(stream, order, &numberOfAlgorithms); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	if numberOfAlgorithms < 1 {
+		return false, &InvalidSpecIdEventError{"numberOfAlgorithms is zero"}
 	}
 
 	// TCG_EfiSpecIdEvent.digestSizes
 	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
 	for i := uint32(0); i < numberOfAlgorithms; i++ {
 		// TCG_EfiSpecIdEvent.digestSizes[i].algorithmId
-		if err := binary.Read(stream, order, &eventData.DigestSizes[i].AlgorithmId); err != nil {
-			return err
+		var algorithmId AlgorithmId
+		if err := binary.Read(stream, order, &algorithmId); err != nil {
+			return false, wrapSpecIdEventReadError(err)
 		}
 
 		// TCG_EfiSpecIdEvent.digestSizes[i].digestSize
-		if err := binary.Read(stream, order, &eventData.DigestSizes[i].DigestSize); err != nil {
-			return err
+		var digestSize uint16
+		if err := binary.Read(stream, order, &digestSize); err != nil {
+			return false, wrapSpecIdEventReadError(err)
 		}
+
+		knownSize, known := knownAlgorithms[algorithmId]
+		if known && knownSize != digestSize {
+			return false, &InvalidSpecIdEventError{
+				fmt.Sprintf("digestSize for algorithmId 0x%04x doesn't match expected size "+
+					"(got: %d, expected: %d)", algorithmId, digestSize, knownSize)}
+		}
+		eventData.DigestSizes[i] = EFISpecIdEventAlgorithmSize{algorithmId, digestSize}
 	}
 
 	// TCG_EfiSpecIdEvent.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_EfiSpecIdEvent.vendorInfo
 	eventData.VendorInfo = make([]byte, vendorInfoSize)
 	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
-		return err
+		return false, wrapSpecIdEventReadError(err)
 	}
 
-	return nil
+	var nonFatalErr error
+
+	switch {
+	case eventData.SpecVersionMinor != 0x00:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMinor value (0x%02x)",
+			eventData.SpecVersionMinor)
+	case eventData.SpecVersionMajor != 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMajor value (0x%02x)",
+			eventData.SpecVersionMajor)
+	case eventData.SpecErrata != 0x00:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specErrata value (0x%02x)",
+			eventData.SpecErrata)
+	}
+
+	return true, nonFatalErr
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -159,11 +223,20 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
 func makeSpecIdEvent(stream io.Reader, order binary.ByteOrder, data []byte,
-	helper func(io.Reader, binary.ByteOrder, *SpecIdEventData) error) (*SpecIdEventData, error) {
+	helper func(io.Reader, binary.ByteOrder, *SpecIdEventData) (bool, error)) (*SpecIdEventData, error) {
 	// platformClass field
 	var platformClass uint32
 	if err := binary.Read(stream, order, &platformClass); err != nil {
 		return nil, err
+	}
+
+	var nonFatalErr error
+
+	switch platformClass {
+	case 0x00000000:
+	case 0x00000001:
+	default:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.platformClass value (0x%08x)", platformClass)
 	}
 
 	// specVersionMinor field
@@ -191,11 +264,13 @@ func makeSpecIdEvent(stream io.Reader, order binary.ByteOrder, data []byte,
 		SpecVersionMajor: specVersionMajor,
 		SpecErrata:       specErrata}
 
-	if err := helper(stream, order, eventData); err != nil {
+	if ok, err := helper(stream, order, eventData); !ok {
 		return nil, err
+	} else if err != nil {
+		nonFatalErr = err
 	}
 
-	return eventData, nil
+	return eventData, nonFatalErr
 }
 
 var (
