@@ -354,7 +354,9 @@ func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder) 
 		return makeEventDataEFIVariable(data, order)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
-		return makeEventDataImageLoad(data, order)
+		return makeEventDataEFIImageLoad(data, order)
+	case EventTypeEFIGPTEvent:
+		return makeEventDataEFIGPT(data, order)
 	default:
 	}
 	return nil, 0, nil

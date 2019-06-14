@@ -497,7 +497,7 @@ func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
-func makeEventDataImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, int, error) {
+func makeEventDataEFIImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
@@ -535,8 +535,133 @@ func makeEventDataImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIImageL
 		Path:             path}, bytesRead(stream), nil
 }
 
-func makeEventDataImageLoad(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
-	d, n, err := makeEventDataImageLoadImpl(data, order)
+func makeEventDataEFIImageLoad(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+	d, n, err := makeEventDataEFIImageLoadImpl(data, order)
+	if d != nil {
+		out = d
+	}
+	return
+}
+
+type EFIGPTPartitionEntry struct {
+	TypeGUID   EFIGUID
+	UniqueGUID EFIGUID
+	Attrs      uint64
+	Name       string
+}
+
+func (p *EFIGPTPartitionEntry) String() string {
+	return fmt.Sprintf("PartitionTypeGUID: %s, UniquePartitionGUID: %s, Name: \"%s\"",
+		&p.TypeGUID, &p.UniqueGUID, p.Name)
+}
+
+type EFIGPTEventData struct {
+	data       []byte
+	DiskGUID   EFIGUID
+	Partitions []EFIGPTPartitionEntry
+}
+
+func (e *EFIGPTEventData) String() string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", &e.DiskGUID)
+	for i, part := range e.Partitions {
+		if i > 0 {
+			fmt.Fprintf(&builder, ", ")
+		}
+		fmt.Fprintf(&builder, "{ %s }", &part)
+	}
+	fmt.Fprintf(&builder, "] }")
+	return builder.String()
+}
+
+func (e *EFIGPTEventData) RawBytes() []byte {
+	return e.data
+}
+
+func (e *EFIGPTEventData) MeasuredBytes() []byte {
+	return e.data
+}
+
+func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventData, int, error) {
+	stream := bytes.NewReader(data)
+
+	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{Header, MyLBA, AlternateLBA, FirstUsableLBA, LastUsableLBA}
+	if _, err := stream.Seek(56, io.SeekCurrent); err != nil {
+		return nil, 0, err
+	}
+
+	// UEFI_GPT_DATA.UEFIPartitionHeader.DiskGUID
+	var diskGUID EFIGUID
+	if err := readEFIGUID(stream, order, &diskGUID); err != nil {
+		return nil, 0, err
+	}
+
+	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{PartitionEntryLBA, NumberOfPartitionEntries}
+	if _, err := stream.Seek(12, io.SeekCurrent); err != nil {
+		return nil, 0, err
+	}
+
+	// UEFI_GPT_DATA.UEFIPartitionHeader.SizeOfPartitionEntry
+	var partEntrySize uint32
+	if err := binary.Read(stream, order, &partEntrySize); err != nil {
+		return nil, 0, err
+	}
+
+	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.PartitionEntryArrayCRC32
+	if _, err := stream.Seek(4, io.SeekCurrent); err != nil {
+		return nil, 0, err
+	}
+
+	// UEFI_GPT_DATA.NumberOfPartitions
+	var numberOfParts uint64
+	if err := binary.Read(stream, order, &numberOfParts); err != nil {
+		return nil, 0, err
+	}
+
+	eventData := &EFIGPTEventData{DiskGUID: diskGUID, Partitions: make([]EFIGPTPartitionEntry, numberOfParts)}
+
+	for i := uint64(0); i < numberOfParts; i++ {
+		entryData := make([]byte, partEntrySize)
+		if _, err := io.ReadFull(stream, entryData); err != nil {
+			return nil, 0, err
+		}
+
+		entryStream := bytes.NewReader(entryData)
+
+		var typeGUID EFIGUID
+		if err := readEFIGUID(entryStream, order, &typeGUID); err != nil {
+			return nil, 0, err
+		}
+
+		var uniqueGUID EFIGUID
+		if err := readEFIGUID(entryStream, order, &uniqueGUID); err != nil {
+			return nil, 0, err
+		}
+
+		// Skip UEFI_GPT_DATA.Partitions[i].{StartingLBA, EndingLBA}
+		if _, err := entryStream.Seek(16, io.SeekCurrent); err != nil {
+			return nil, 0, err
+		}
+
+		var attrs uint64
+		if err := binary.Read(entryStream, order, &attrs); err != nil {
+			return nil, 0, err
+		}
+
+		name, err := decodeUTF16ToString(entryStream, uint64(entryStream.Len()), order)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		eventData.Partitions[i] =
+			EFIGPTPartitionEntry{TypeGUID: typeGUID, UniqueGUID: uniqueGUID, Attrs: attrs, Name: name}
+	}
+
+	return eventData, bytesRead(stream), nil
+}
+
+func makeEventDataEFIGPT(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+	d, n, err := makeEventDataEFIGPTImpl(data, order)
 	if d != nil {
 		out = d
 	}
