@@ -7,37 +7,9 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"math"
+	"unsafe"
 )
-
-type UnexpectedEventTypeError struct {
-	EventType EventType
-	PCRIndex  PCRIndex
-}
-
-func (e *UnexpectedEventTypeError) Error() string {
-	return fmt.Sprintf("Unexpected %s event type measured to PCR index %d", e.EventType, e.PCRIndex)
-}
-
-type UnexpectedDigestValueError struct {
-	EventType      EventType
-	Alg            AlgorithmId
-	Digest         Digest
-	ExpectedDigest Digest
-}
-
-func (e *UnexpectedDigestValueError) Error() string {
-	return fmt.Sprintf("Unexpected digest value for event type %s (got %x, expected %x)",
-		e.EventType, e.Digest, e.ExpectedDigest)
-}
-
-type InvalidEventDataError struct {
-	EventType EventType
-	Data      EventData
-}
-
-func (e *InvalidEventDataError) Error() string {
-	return fmt.Sprintf("Invalid data for event type %s", e.EventType)
-}
 
 func hash(data []byte, alg AlgorithmId) []byte {
 	switch alg {
@@ -64,11 +36,33 @@ var zeroDigests = map[AlgorithmId][]byte{
 	AlgorithmSha384: make([]byte, knownAlgorithms[AlgorithmSha384]),
 	AlgorithmSha512: make([]byte, knownAlgorithms[AlgorithmSha512])}
 
-func isZeroDigest(d []byte, a AlgorithmId) bool {
-	return bytes.Compare(d, zeroDigests[a]) == 0
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
+//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//   "Procedure for Pre-OS to OS-Present Transition")
+var (
+	separatorEventErrorValue   uint32 = 1
+	separatorEventNormalValues        = [...]uint32{0, math.MaxUint32}
+)
+
+func classifySeparatorEvent(event *Event, order binary.ByteOrder) {
+	errorValue := make([]byte, 4)
+	order.PutUint32(errorValue, separatorEventErrorValue)
+
+	var errorEvent = false
+	for alg, digest := range event.Digests {
+		if bytes.Compare(digest, hash(errorValue, alg)) == 0 {
+			errorEvent = true
+		}
+		break
+	}
+	// If this is not an error event, the event data is what was measured. For an error event,
+	// the event data is platform defined (and what is measured is 0x00000001)
+	event.Data.(*opaqueEventData).informational = errorEvent
 }
 
-func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
+func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {
 	switch t {
 	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion, EventTypeNonhostCode,
 		EventTypeNonhostInfo, EventTypeEFIHCRTMEvent:
@@ -110,25 +104,29 @@ func isExpectedEventType(t EventType, i PCRIndex, spec Spec) bool {
 }
 
 func isValidEventData(data EventData, t EventType) bool {
-	var ok bool
 	switch t {
 	case EventTypeSeparator:
-		_, ok = data.(*SeparatorEventData)
+		if data.MeasuredBytes() == nil {
+			return true
+		}
+		if len(data.RawBytes()) != 4 {
+			return false
+		}
+		for _, v := range separatorEventNormalValues {
+			if v == *(*uint32)(unsafe.Pointer(&data.RawBytes()[0])) {
+				return true
+			}
+		}
+		return false
 	case EventTypeCompactHash:
-		ok = len(data.RawBytes()) == 4
+		return len(data.RawBytes()) == 4
 	case EventTypeOmitBootDeviceEvents:
-		ok = string(data.RawBytes()) == "BOOT ATTEMPTS OMITTED"
-	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		_, ok = data.(*EFIVariableEventData)
-	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
-		EventTypeEFIRuntimeServicesDriver:
-		_, ok = data.(*EFIImageLoadEventData)
+		return string(data.RawBytes()) == "BOOT ATTEMPTS OMITTED"
 	case EventTypeEFIHCRTMEvent:
-		ok = string(data.RawBytes()) == "HCRTM"
+		return string(data.RawBytes()) == "HCRTM"
 	default:
-		ok = true
+		return true
 	}
-	return ok
 }
 
 func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmId,
@@ -138,10 +136,9 @@ func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmI
 
 	switch t {
 	case EventTypeSeparator:
-		se := data.(*SeparatorEventData)
-		if se.Type == SeparatorEventTypeError {
+		if buf == nil {
 			buf = make([]byte, 4)
-			order.PutUint32(buf, uint32(1))
+			order.PutUint32(buf, separatorEventErrorValue)
 		}
 	case EventTypeNoAction:
 		expected = zeroDigests[alg]
@@ -168,12 +165,16 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 }
 
 func checkEvent(event *Event, spec Spec, order binary.ByteOrder) error {
+	if event.EventType == EventTypeSeparator {
+		classifySeparatorEvent(event, order)
+	}
+
 	switch {
-	case !isExpectedEventType(event.EventType, event.PCRIndex, spec):
+	case !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec):
 		return &UnexpectedEventTypeError{event.EventType, event.PCRIndex}
 	case !isValidEventData(event.Data, event.EventType):
 		return &InvalidEventDataError{event.EventType, event.Data}
+	default:
+		return checkForUnexpectedDigestValues(event, order)
 	}
-
-	return checkForUnexpectedDigestValues(event, order)
 }

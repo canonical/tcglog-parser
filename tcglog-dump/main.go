@@ -69,21 +69,13 @@ func main() {
 
 	for {
 		event, err := log.NextEvent()
-		if err != nil {
+		if event == nil {
 			if err == io.EOF {
 				break
 			}
-			switch e := err.(type) {
-			case *tcglog.UnexpectedEventTypeError:
-				_ = e
-			case *tcglog.UnexpectedDigestValueError:
-				_ = e
-			case *tcglog.InvalidEventDataError:
-				_ = e
-			default:
-				fmt.Fprintf(os.Stderr, "%v\n", err)
-				os.Exit(1)
-			}
+
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
 		}
 
 		var builder strings.Builder

@@ -10,8 +10,6 @@ import (
 	"unsafe"
 )
 
-type SeparatorEventType uint
-
 type EFISpecIdEventAlgorithmSize struct {
 	AlgorithmId AlgorithmId
 	DigestSize  uint16
@@ -277,60 +275,6 @@ var (
 	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
 )
 
-type SeparatorEventData struct {
-	data []byte
-	Type SeparatorEventType
-}
-
-func (e *SeparatorEventData) String() string {
-	if e.Type == SeparatorEventTypeError {
-		return "Error"
-	}
-	return ""
-}
-
-func (e *SeparatorEventData) RawBytes() []byte {
-	return e.data
-}
-
-func (e *SeparatorEventData) MeasuredBytes() []byte {
-	if e.Type == SeparatorEventTypeNormal {
-		return e.data
-	}
-	return nil
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
-//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
-//   "Procedure for Pre-OS to OS-Present Transition")
-func makeEventDataSeparatorImpl(data []byte, order binary.ByteOrder) (*SeparatorEventData, int, error) {
-	if len(data) < 4 {
-		return nil, 0, io.EOF
-	}
-
-	v := order.Uint32(data)
-
-	t := SeparatorEventTypeError
-	for _, w := range validNormalSeparatorValues {
-		if v == w {
-			t = SeparatorEventTypeNormal
-			break
-		}
-	}
-
-	return &SeparatorEventData{data, t}, 4, nil
-}
-
-func makeEventDataSeparator(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
-	d, n, err := makeEventDataSeparatorImpl(data, order)
-	if d != nil {
-		out = d
-	}
-	return
-}
-
 type AsciiStringEventData struct {
 	data          []byte
 	informational bool
@@ -397,12 +341,13 @@ func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
 	return &AsciiStringEventData{data: data, informational: false}, len(data), nil
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
 func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(data, order)
-	case EventTypeSeparator:
-		return makeEventDataSeparator(data, order)
 	case EventTypeAction, EventTypeEFIAction:
 		return makeEventDataAction(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:

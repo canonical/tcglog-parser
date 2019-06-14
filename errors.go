@@ -36,3 +36,33 @@ type InvalidSpecIdEventError struct {
 func (e *InvalidSpecIdEventError) Error() string {
 	return fmt.Sprintf("invalid SpecIdEvent: %s", e.s)
 }
+
+type UnexpectedEventTypeError struct {
+	EventType EventType
+	PCRIndex  PCRIndex
+}
+
+func (e *UnexpectedEventTypeError) Error() string {
+	return fmt.Sprintf("unexpected %s event type measured to PCR index %d", e.EventType, e.PCRIndex)
+}
+
+type UnexpectedDigestValueError struct {
+	EventType      EventType
+	Alg            AlgorithmId
+	Digest         Digest
+	ExpectedDigest Digest
+}
+
+func (e *UnexpectedDigestValueError) Error() string {
+	return fmt.Sprintf("unexpected digest value for event type %s (got %x, expected %x)",
+		e.EventType, e.Digest, e.ExpectedDigest)
+}
+
+type InvalidEventDataError struct {
+	EventType EventType
+	Data      EventData
+}
+
+func (e *InvalidEventDataError) Error() string {
+	return fmt.Sprintf("invalid data for event type %s", e.EventType)
+}

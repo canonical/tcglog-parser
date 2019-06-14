@@ -110,6 +110,8 @@ func (e *EFIVariableEventData) MeasuredBytes() []byte {
 	return e.data
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
 func makeEventDataEFIVariableImpl(data []byte, order binary.ByteOrder) (*EFIVariableEventData, int, error) {
 	stream := bytes.NewReader(data)
 
@@ -493,6 +495,8 @@ func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
 	return nil
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
 func makeEventDataImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, int, error) {
 	stream := bytes.NewReader(data)
 

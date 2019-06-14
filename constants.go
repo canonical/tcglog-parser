@@ -48,11 +48,6 @@ const (
 )
 
 const (
-	SeparatorEventTypeNormal SeparatorEventType = 0
-	SeparatorEventTypeError  SeparatorEventType = 1
-)
-
-const (
 	SpecUnknown  Spec = 0
 	SpecPCClient      = 1
 	SpecEFI_1_2       = 2
