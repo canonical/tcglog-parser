@@ -51,7 +51,7 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 func makeOpaqueEventData(eventType EventType, data []byte) *opaqueEventData {
 	switch eventType {
 	case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags, EventTypeTableOfDevices,
-		EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents, EventTypeEFIGPTEvent:
+		EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
 		return &opaqueEventData{data: data, informational: false}
 	default:
 		return &opaqueEventData{data: data, informational: true}
