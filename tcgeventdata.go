@@ -225,7 +225,7 @@ func makeSpecIdEvent(stream io.Reader, order binary.ByteOrder, data []byte,
 	// platformClass field
 	var platformClass uint32
 	if err := binary.Read(stream, order, &platformClass); err != nil {
-		return nil, err
+		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	var nonFatalErr error
@@ -240,19 +240,19 @@ func makeSpecIdEvent(stream io.Reader, order binary.ByteOrder, data []byte,
 	// specVersionMinor field
 	var specVersionMinor uint8
 	if err := binary.Read(stream, order, &specVersionMinor); err != nil {
-		return nil, err
+		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	// specVersionMajor field
 	var specVersionMajor uint8
 	if err := binary.Read(stream, order, &specVersionMajor); err != nil {
-		return nil, err
+		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	// specErrata field
 	var specErrata uint8
 	if err := binary.Read(stream, order, &specErrata); err != nil {
-		return nil, err
+		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	eventData := &SpecIdEventData{
