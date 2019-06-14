@@ -2,6 +2,7 @@ package tcglog
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 )
 
@@ -54,11 +55,11 @@ func makeOpaqueEventData(eventType EventType, data []byte) *opaqueEventData {
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
 	order binary.ByteOrder) (EventData, error) {
 	event, err := makeEventDataImpl(pcrIndex, eventType, data, order)
-	if err != nil || event == nil {
+	if event == nil {
 		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
+			err = errors.New("event data smaller than expected")
 		}
 		return makeOpaqueEventData(eventType, data), err
 	}
-	return event, nil
+	return event, err
 }
