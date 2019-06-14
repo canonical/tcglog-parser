@@ -7,7 +7,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"strings"
 )
 
 type UnexpectedEventTypeError struct {
@@ -118,18 +117,14 @@ func isValidEventData(data EventData, t EventType) bool {
 	case EventTypeCompactHash:
 		ok = len(data.RawBytes()) == 4
 	case EventTypeOmitBootDeviceEvents:
-		var builder strings.Builder
-		builder.Write(data.RawBytes())
-		ok = builder.String() == "BOOT ATTEMPTS OMITTED"
+		ok = string(data.RawBytes()) == "BOOT ATTEMPTS OMITTED"
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		_, ok = data.(*EFIVariableEventData)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
 		_, ok = data.(*EFIImageLoadEventData)
 	case EventTypeEFIHCRTMEvent:
-		var builder strings.Builder
-		builder.Write(data.RawBytes())
-		ok = builder.String() == "HCRTM"
+		ok = string(data.RawBytes()) == "HCRTM"
 	default:
 		ok = true
 	}

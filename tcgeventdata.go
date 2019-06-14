@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"unsafe"
 )
 
 type SeparatorEventType uint
@@ -253,9 +254,7 @@ type AsciiStringEventData struct {
 }
 
 func (e *AsciiStringEventData) String() string {
-	var builder strings.Builder
-	builder.Write(e.data)
-	return builder.String()
+	return *(*string)(unsafe.Pointer(&e.data))
 }
 
 func (e *AsciiStringEventData) RawBytes() []byte {
@@ -277,17 +276,12 @@ func makeEventDataNoAction(data []byte, order binary.ByteOrder) (EventData, erro
 	stream := bytes.NewReader(data)
 
 	// Signature field
-	sigRaw := make([]byte, 16)
-	if _, err := io.ReadFull(stream, sigRaw); err != nil {
+	signature := make([]byte, 16)
+	if _, err := io.ReadFull(stream, signature); err != nil {
 		return nil, err
 	}
 
-	var signature strings.Builder
-	if _, err := signature.Write(sigRaw); err != nil {
-		return nil, err
-	}
-
-	switch signature.String() {
+	switch *(*string)(unsafe.Pointer(&signature)) {
 	case "Spec ID Event00\x00":
 		return makeSpecIdEvent(stream, order, data, parsePCClientSpecIdEvent)
 	case "Spec ID Event02\x00":

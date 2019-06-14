@@ -3,6 +3,7 @@ package tcglog
 import (
 	"fmt"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -12,11 +13,11 @@ var (
 
 type KernelCmdlineEventData struct {
 	data    []byte
-	Cmdline string
+	Cmdline []byte
 }
 
 func (e *KernelCmdlineEventData) String() string {
-	return fmt.Sprintf("kernel_cmdline{ %s }", e.Cmdline)
+	return fmt.Sprintf("kernel_cmdline{ %s }", *(*string)(unsafe.Pointer(&e.Cmdline)))
 }
 
 func (e *KernelCmdlineEventData) RawBytes() []byte {
@@ -24,19 +25,16 @@ func (e *KernelCmdlineEventData) RawBytes() []byte {
 }
 
 func (e *KernelCmdlineEventData) MeasuredBytes() []byte {
-	r := strings.NewReader(e.Cmdline)
-	b := make([]byte, r.Len())
-	r.Read(b)
-	return b
+	return e.Cmdline
 }
 
 type GrubCmdEventData struct {
 	data []byte
-	Cmd  string
+	Cmd  []byte
 }
 
 func (e *GrubCmdEventData) String() string {
-	return fmt.Sprintf("grub_cmd{ %s }", e.Cmd)
+	return fmt.Sprintf("grub_cmd{ %s }", *(*string)(unsafe.Pointer(&e.Cmd)))
 }
 
 func (e *GrubCmdEventData) RawBytes() []byte {
@@ -44,28 +42,19 @@ func (e *GrubCmdEventData) RawBytes() []byte {
 }
 
 func (e *GrubCmdEventData) MeasuredBytes() []byte {
-	r := strings.NewReader(e.Cmd)
-	b := make([]byte, r.Len())
-	r.Read(b)
-	return b
+	return e.Cmd
 }
 
 func makeEventDataGRUB(pcrIndex PCRIndex, data []byte) EventData {
 	switch pcrIndex {
 	case 8:
-		var builder strings.Builder
-		builder.Write(data)
-		str := builder.String()
+		str := *(*string)(unsafe.Pointer(&data))
 
 		switch {
 		case strings.Index(str, kernelCmdlinePrefix) == 0:
-			str = strings.TrimPrefix(str, kernelCmdlinePrefix)
-			str = strings.TrimSuffix(str, "\x00")
-			return &KernelCmdlineEventData{data, str}
+			return &KernelCmdlineEventData{data, data[len(kernelCmdlinePrefix):len(str)-1]}
 		case strings.Index(str, grubCmdPrefix) == 0:
-			str = strings.TrimPrefix(str, grubCmdPrefix)
-			str = strings.TrimSuffix(str, "\x00")
-			return &GrubCmdEventData{data, str}
+			return &GrubCmdEventData{data, data[len(grubCmdPrefix):len(str)-1]}
 		default:
 			return nil
 		}
