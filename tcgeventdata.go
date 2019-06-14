@@ -230,9 +230,9 @@ func (e *SeparatorEventData) MeasuredBytes() []byte {
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
-func makeEventDataSeparator(data []byte, order binary.ByteOrder) (*SeparatorEventData, error) {
-	if len(data) != 4 {
-		return nil, io.EOF
+func makeEventDataSeparatorImpl(data []byte, order binary.ByteOrder) (*SeparatorEventData, int, error) {
+	if len(data) < 4 {
+		return nil, 0, io.EOF
 	}
 
 	v := order.Uint32(data)
@@ -245,7 +245,15 @@ func makeEventDataSeparator(data []byte, order binary.ByteOrder) (*SeparatorEven
 		}
 	}
 
-	return &SeparatorEventData{data, t}, nil
+	return &SeparatorEventData{data, t}, 4, nil
+}
+
+func makeEventDataSeparator(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+	d, n, err := makeEventDataSeparatorImpl(data, order)
+	if d != nil {
+		out = d
+	}
+	return
 }
 
 type AsciiStringEventData struct {
@@ -272,59 +280,62 @@ func (e *AsciiStringEventData) MeasuredBytes() []byte {
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5 "EV_NO_ACTION Event Types")
-func makeEventDataNoAction(data []byte, order binary.ByteOrder) (EventData, error) {
+func makeEventDataNoAction(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
 	stream := bytes.NewReader(data)
 
 	// Signature field
 	signature := make([]byte, 16)
 	if _, err := io.ReadFull(stream, signature); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	switch *(*string)(unsafe.Pointer(&signature)) {
 	case "Spec ID Event00\x00":
-		return makeSpecIdEvent(stream, order, data, parsePCClientSpecIdEvent)
+		d, e := makeSpecIdEvent(stream, order, data, parsePCClientSpecIdEvent)
+		if d != nil {
+			out = d
+		}
+		err = e
 	case "Spec ID Event02\x00":
-		return makeSpecIdEvent(stream, order, data, parseEFI_1_2_SpecIdEvent)
+		d, e := makeSpecIdEvent(stream, order, data, parseEFI_1_2_SpecIdEvent)
+		if d != nil {
+			out = d
+		}
+		err = e
 	case "Spec ID Event03\x00":
-		return makeSpecIdEvent(stream, order, data, parseEFI_2_SpecIdEvent)
+		d, e := makeSpecIdEvent(stream, order, data, parseEFI_2_SpecIdEvent)
+		if d != nil {
+			out = d
+		}
+		err = e
 	default:
-		return nil, nil
+		return nil, 0, nil
 	}
+
+	n = bytesRead(stream)
+	return
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func makeEventDataAction(data []byte) *AsciiStringEventData {
-	return &AsciiStringEventData{data: data, informational: false}
+func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
+	return &AsciiStringEventData{data: data, informational: false}, len(data), nil
 }
 
-func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder) (EventData, error) {
+func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(data, order)
 	case EventTypeSeparator:
-		d, err := makeEventDataSeparator(data, order)
-		if err != nil {
-			return nil, err
-		}
-		return d, nil
+		return makeEventDataSeparator(data, order)
 	case EventTypeAction, EventTypeEFIAction:
-		return makeEventDataAction(data), nil
+		return makeEventDataAction(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		d, err := makeEventDataEFIVariable(data, order)
-		if err != nil {
-			return nil, err
-		}
-		return d, nil
+		return makeEventDataEFIVariable(data, order)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
-		d, err := makeEventDataImageLoad(data, order)
-		if err != nil {
-			return nil, err
-		}
-		return d, nil
+		return makeEventDataImageLoad(data, order)
 	default:
 	}
-	return nil, nil
+	return nil, 0, nil
 }

@@ -1,8 +1,10 @@
 package tcglog
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -32,11 +34,15 @@ func (e *opaqueEventData) MeasuredBytes() []byte {
 	return nil
 }
 
+func bytesRead(stream *bytes.Reader) int {
+	return int(stream.Size()) - stream.Len()
+}
+
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder) (EventData, error) {
+	order binary.ByteOrder) (EventData, int, error) {
 	switch {
-	case eventType == EventTypeIPL && (pcrIndex == 8 || pcrIndex == 9):
-		return makeEventDataGRUB(pcrIndex, data), nil
+	case pcrIndex == 8 || pcrIndex == 9:
+		return makeEventDataGRUB(pcrIndex, eventType, data)
 	default:
 		return makeEventDataTCG(eventType, data, order)
 	}
@@ -54,12 +60,15 @@ func makeOpaqueEventData(eventType EventType, data []byte) *opaqueEventData {
 
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
 	order binary.ByteOrder) (EventData, error) {
-	event, err := makeEventDataImpl(pcrIndex, eventType, data, order)
+	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order)
 	if event == nil {
 		if err == io.EOF {
 			err = errors.New("event data smaller than expected")
 		}
 		return makeOpaqueEventData(eventType, data), err
+	}
+	if n < len(data) {
+		err = fmt.Errorf("event data contains %d bytes more than expected", len(data) - n)
 	}
 	return event, err
 }

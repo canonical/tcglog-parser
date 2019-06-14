@@ -110,38 +110,46 @@ func (e *EFIVariableEventData) MeasuredBytes() []byte {
 	return e.data
 }
 
-func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) (*EFIVariableEventData, error) {
+func makeEventDataEFIVariableImpl(data []byte, order binary.ByteOrder) (*EFIVariableEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
 	if err := readEFIGUID(stream, order, &guid); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var unicodeNameLength uint64
 	if err := binary.Read(stream, order, &unicodeNameLength); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var variableDataLength uint64
 	if err := binary.Read(stream, order, &variableDataLength); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	unicodeName, err := decodeUTF16ToString(stream, unicodeNameLength, order)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	variableData := make([]byte, variableDataLength)
 	if _, err := io.ReadFull(stream, variableData); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	return &EFIVariableEventData{data: data,
 		VariableName: guid,
 		UnicodeName:  unicodeName,
-		VariableData: variableData}, nil
+		VariableData: variableData}, bytesRead(stream), nil
+}
+
+func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+	d, n, err := makeEventDataEFIVariableImpl(data, order)
+	if d != nil {
+		out = d
+	}
+	return
 }
 
 type efiDevicePathNodeType uint8
@@ -485,33 +493,33 @@ func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
 	return nil
 }
 
-func makeEventDataImageLoad(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, error) {
+func makeEventDataImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
 	if err := binary.Read(stream, order, &locationInMemory); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var lengthInMemory uint64
 	if err := binary.Read(stream, order, &lengthInMemory); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var linkTimeAddress uint64
 	if err := binary.Read(stream, order, &linkTimeAddress); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var devicePathLength uint64
 	if err := binary.Read(stream, order, &devicePathLength); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	devicePathBuf := make([]byte, devicePathLength)
 
 	if _, err := io.ReadFull(stream, devicePathBuf); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	path := readDevicePath(devicePathBuf, order)
@@ -520,5 +528,13 @@ func makeEventDataImageLoad(data []byte, order binary.ByteOrder) (*EFIImageLoadE
 		LocationInMemory: locationInMemory,
 		LengthInMemory:   lengthInMemory,
 		LinkTimeAddress:  linkTimeAddress,
-		Path:             path}, nil
+		Path:             path}, bytesRead(stream), nil
+}
+
+func makeEventDataImageLoad(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+	d, n, err := makeEventDataImageLoadImpl(data, order)
+	if d != nil {
+		out = d
+	}
+	return
 }
