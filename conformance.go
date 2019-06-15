@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/binary"
-	"math"
 	"unsafe"
 )
 
@@ -34,50 +33,6 @@ var zeroDigests = map[AlgorithmId][]byte{
 	AlgorithmSha256: make([]byte, knownAlgorithms[AlgorithmSha256]),
 	AlgorithmSha384: make([]byte, knownAlgorithms[AlgorithmSha384]),
 	AlgorithmSha512: make([]byte, knownAlgorithms[AlgorithmSha512])}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
-//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
-//   "Procedure for Pre-OS to OS-Present Transition")
-var (
-	separatorEventErrorValue   uint32 = 1
-	separatorEventNormalValues        = [...]uint32{0, math.MaxUint32}
-)
-
-func classifySeparatorEvent(event *Event, order binary.ByteOrder) {
-	errorValue := make([]byte, 4)
-	order.PutUint32(errorValue, separatorEventErrorValue)
-
-	var errorEvent = false
-	for alg, digest := range event.Digests {
-		if bytes.Compare(digest, hash(errorValue, alg)) == 0 {
-			errorEvent = true
-		}
-		break
-	}
-	// If this is not an error event, the event data is what was measured. For an error event,
-	// the event data is platform defined (and what is measured is 0x00000001)
-	event.Data.(*opaqueEventData).informational = errorEvent
-}
-
-func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
-	if event.Data.(*SpecIdEventData).Spec != SpecEFI_2 {
-		return
-	}
-
-	for _, alg := range algorithms {
-		if alg == AlgorithmSha1 {
-			continue
-		}
-
-		if _, ok := event.Digests[alg]; ok {
-			continue
-		}
-
-		event.Digests[alg] = zeroDigests[alg]
-	}
-}
 
 func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {
 	switch t {
@@ -182,19 +137,7 @@ func checkForUnexpectedDigestValues(event *Event, algorithms []AlgorithmId,
 	return nil
 }
 
-func isSpecIdEvent(event *Event) (out bool) {
-	_, out = event.Data.(*SpecIdEventData)
-	return
-}
-
 func checkEvent(event *Event, spec Spec, order binary.ByteOrder, algorithms []AlgorithmId) error {
-	switch {
-	case event.EventType == EventTypeSeparator:
-		classifySeparatorEvent(event, order)
-	case isSpecIdEvent(event):
-		fixupSpecIdEvent(event, algorithms)
-	}
-
 	switch {
 	case !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec):
 		return &UnexpectedEventTypeError{event.EventType, event.PCRIndex}
