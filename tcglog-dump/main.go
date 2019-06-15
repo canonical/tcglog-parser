@@ -11,11 +11,13 @@ import (
 )
 
 var (
-	alg string
+	alg     string
+	verbose bool
 )
 
 func init() {
 	flag.StringVar(&alg, "alg", "sha1", "Name of the hash algorithm to display")
+	flag.BoolVar(&verbose, "verbose", false, "Display details of event data")
 }
 
 func main() {
@@ -80,9 +82,11 @@ func main() {
 
 		var builder strings.Builder
 		fmt.Fprintf(&builder, "%2d %x %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
-		data := event.Data.String()
-		if data != "" {
-			fmt.Fprintf(&builder, " [%s]", data)
+		if verbose {
+			data := event.Data.String()
+			if data != "" {
+				fmt.Fprintf(&builder, " [%s]", data)
+			}
 
 		}
 		if err != nil {
