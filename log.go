@@ -153,9 +153,23 @@ func (s *stream_2) ReadNextEvent() (*Event, error, error) {
 			return nil, wrapLogReadError(err, true), nil
 		}
 
-		if isKnownAlgorithm(algorithmId) {
-			digests[algorithmId] = digest
+		if _, exists := digests[algorithmId]; exists {
+			return nil, &DuplicateDigestValueError{algorithmId}, nil
 		}
+		digests[algorithmId] = digest
+	}
+
+	for _, algSize := range s.algSizes {
+		if _, exists := digests[algSize.AlgorithmId]; !exists {
+			return nil, &MissingDigestValueError{algSize.AlgorithmId}, nil
+		}
+	}
+
+	for alg, _ := range digests {
+		if isKnownAlgorithm(alg) {
+			continue
+		}
+		delete(digests, alg)
 	}
 
 	var eventSize uint32

@@ -63,7 +63,17 @@ type MissingDigestValueError struct {
 }
 
 func (e *MissingDigestValueError) Error() string {
-	return fmt.Sprintf("missing digest value for algorithm %s that was present in the Spec ID Event", e.Algorithm)
+	return fmt.Sprintf("crypto-agile log entry is missing a digest value for algorithm %s that was present " +
+		"in the Spec ID Event", e.Algorithm)
+}
+
+type DuplicateDigestValueError struct {
+	Algorithm AlgorithmId
+}
+
+func (e *DuplicateDigestValueError) Error() string {
+	return fmt.Sprintf("crypto-agile log entry contains more than one digest value for algorithm %s",
+		e.Algorithm)
 }
 
 type InvalidEventDataError struct {
@@ -72,5 +82,5 @@ type InvalidEventDataError struct {
 }
 
 func (e *InvalidEventDataError) Error() string {
-	return fmt.Sprintf("invalid data for event type %s", e.EventType)
+	return fmt.Sprintf("invalid event data for event type %s", e.EventType)
 }
