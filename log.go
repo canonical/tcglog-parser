@@ -190,7 +190,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	var byteOrder binary.ByteOrder = binary.LittleEndian
 
 	var stream stream = &stream_1_2{r: r, byteOrder: byteOrder}
-	event, err, _ := stream.ReadNextEvent()
+	event, err, dataErr := stream.ReadNextEvent()
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
@@ -208,7 +208,10 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	specData, isSpecData := event.Data.(*SpecIdEventData)
 	if isSpecData {
 		spec = specData.Spec
+	} else if _, isSpecErr := dataErr.(*InvalidSpecIdEventError); isSpecErr {
+		return nil, dataErr
 	}
+
 	if spec == SpecEFI_2 {
 		algorithms = make([]AlgorithmId, 0, len(specData.DigestSizes))
 		for _, specAlgSize := range specData.DigestSizes {
