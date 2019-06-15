@@ -17,7 +17,7 @@ type LogReadError struct {
 }
 
 func (e *LogReadError) Error() string {
-	return fmt.Sprintf("encountered error when reading from log (%v)", e.OrigError)
+	return fmt.Sprintf("error when reading from log stream (%v)", e.OrigError)
 }
 
 type UnrecognizedAlgorithmError struct {
@@ -34,7 +34,7 @@ type InvalidSpecIdEventError struct {
 }
 
 func (e *InvalidSpecIdEventError) Error() string {
-	return fmt.Sprintf("invalid SpecIdEvent: %s", e.s)
+	return fmt.Sprintf("invalid SpecIdEvent (%s)", e.s)
 }
 
 type UnexpectedEventTypeError struct {
@@ -48,7 +48,7 @@ func (e *UnexpectedEventTypeError) Error() string {
 
 type UnexpectedDigestValueError struct {
 	EventType      EventType
-	Alg            AlgorithmId
+	Algorithm      AlgorithmId
 	Digest         Digest
 	ExpectedDigest Digest
 }
@@ -56,6 +56,14 @@ type UnexpectedDigestValueError struct {
 func (e *UnexpectedDigestValueError) Error() string {
 	return fmt.Sprintf("unexpected digest value for event type %s (got %x, expected %x)",
 		e.EventType, e.Digest, e.ExpectedDigest)
+}
+
+type MissingDigestValueError struct {
+	Algorithm AlgorithmId
+}
+
+func (e *MissingDigestValueError) Error() string {
+	return fmt.Sprintf("missing digest value for algorithm %s that was present in the Spec ID Event", e.Algorithm)
 }
 
 type InvalidEventDataError struct {

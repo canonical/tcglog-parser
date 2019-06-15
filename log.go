@@ -17,6 +17,11 @@ var knownAlgorithms = map[AlgorithmId]uint16{
 	AlgorithmSha512: 64,
 }
 
+func isKnownAlgorithm(alg AlgorithmId) (out bool) {
+	_, out = knownAlgorithms[alg]
+	return
+}
+
 type stream interface {
 	ReadNextEvent() (*Event, error, error)
 }
@@ -148,7 +153,7 @@ func (s *stream_2) ReadNextEvent() (*Event, error, error) {
 			return nil, wrapLogReadError(err, true), nil
 		}
 
-		if _, known := knownAlgorithms[algorithmId]; known {
+		if isKnownAlgorithm(algorithmId) {
 			digests[algorithmId] = digest
 		}
 	}
@@ -215,7 +220,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 	if spec == SpecEFI_2 {
 		algorithms = make([]AlgorithmId, 0, len(specData.DigestSizes))
 		for _, specAlgSize := range specData.DigestSizes {
-			if _, known := knownAlgorithms[specAlgSize.AlgorithmId]; known {
+			if isKnownAlgorithm(specAlgSize.AlgorithmId) {
 				algorithms = append(algorithms, specAlgSize.AlgorithmId)
 			}
 		}
@@ -240,6 +245,11 @@ func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
 	return false
 }
 
+func isMissingDigestValueError(err error) (out bool) {
+	_, out = err.(*MissingDigestValueError)
+	return
+}
+
 func (l *Log) NextEvent() (*Event, error) {
 	if l.failed {
 		return nil, &LogReadError{errors.New("log status inconsistent due to a previous error")}
@@ -251,7 +261,12 @@ func (l *Log) NextEvent() (*Event, error) {
 		return nil, err
 	}
 
-	err = checkEvent(event, l.Spec, l.byteOrder)
+	err = checkEvent(event, l.Spec, l.byteOrder, l.Algorithms)
+
+	if err != nil && isMissingDigestValueError(err) {
+		l.failed = true
+		return nil, err
+	}
 
 	if err == nil {
 		err = dataErr

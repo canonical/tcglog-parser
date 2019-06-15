@@ -74,7 +74,7 @@ func main() {
 				break
 			}
 
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+			fmt.Fprintf(os.Stderr, "Encountered an error when reading the next log event: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -86,7 +86,7 @@ func main() {
 
 		}
 		if err != nil {
-			fmt.Fprintf(&builder, " *** %s ***", err)
+			fmt.Fprintf(&builder, " (WARNING: %s)", err)
 		}
 		fmt.Println(builder.String())
 	}

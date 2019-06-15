@@ -61,6 +61,20 @@ func classifySeparatorEvent(event *Event, order binary.ByteOrder) {
 	event.Data.(*opaqueEventData).informational = errorEvent
 }
 
+func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
+	for _, alg := range algorithms {
+		if alg == AlgorithmSha1 {
+			continue
+		}
+
+		if _, ok := event.Digests[alg]; ok {
+			continue
+		}
+
+		event.Digests[alg] = zeroDigests[alg]
+	}
+}
+
 func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {
 	switch t {
 	case EventTypePostCode, EventTypeSCRTMContents, EventTypeSCRTMVersion, EventTypeNonhostCode,
@@ -128,7 +142,7 @@ func isValidEventData(data EventData, t EventType) bool {
 	}
 }
 
-func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmId,
+func isExpectedDigestValue(digest Digest, t EventType, data EventData, alg AlgorithmId,
 	order binary.ByteOrder) (bool, []byte) {
 	buf := data.MeasuredBytes()
 	var expected []byte
@@ -153,9 +167,18 @@ func isExpectedDigest(digest Digest, t EventType, data EventData, alg AlgorithmI
 	return bytes.Compare(digest, expected) == 0, expected
 }
 
-func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error {
+func checkForUnexpectedDigestValues(event *Event, spec Spec, algorithms []AlgorithmId,
+	order binary.ByteOrder) error {
+	if spec == SpecEFI_2 {
+		for _, alg := range algorithms {
+			if _, ok := event.Digests[alg]; !ok {
+				return &MissingDigestValueError{alg}
+			}
+		}
+	}
+
 	for alg, digest := range event.Digests {
-		if ok, expected := isExpectedDigest(digest, event.EventType, event.Data, alg, order); !ok {
+		if ok, expected := isExpectedDigestValue(digest, event.EventType, event.Data, alg, order); !ok {
 			return &UnexpectedDigestValueError{event.EventType, alg, digest, expected}
 		}
 	}
@@ -163,9 +186,17 @@ func checkForUnexpectedDigestValues(event *Event, order binary.ByteOrder) error 
 	return nil
 }
 
-func checkEvent(event *Event, spec Spec, order binary.ByteOrder) error {
-	if event.EventType == EventTypeSeparator {
+func isSpecIdEvent(event *Event) (out bool) {
+	_, out = event.Data.(*SpecIdEventData)
+	return
+}
+
+func checkEvent(event *Event, spec Spec, order binary.ByteOrder, algorithms []AlgorithmId) error {
+	switch {
+	case event.EventType == EventTypeSeparator:
 		classifySeparatorEvent(event, order)
+	case spec == SpecEFI_2 && isSpecIdEvent(event):
+		fixupSpecIdEvent(event, algorithms)
 	}
 
 	switch {
@@ -173,7 +204,7 @@ func checkEvent(event *Event, spec Spec, order binary.ByteOrder) error {
 		return &UnexpectedEventTypeError{event.EventType, event.PCRIndex}
 	case !isValidEventData(event.Data, event.EventType):
 		return &InvalidEventDataError{event.EventType, event.Data}
-	default:
-		return checkForUnexpectedDigestValues(event, order)
 	}
+
+	return checkForUnexpectedDigestValues(event, spec, algorithms, order)
 }
