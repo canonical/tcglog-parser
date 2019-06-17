@@ -11,6 +11,10 @@ import (
 
 type Spec uint
 
+type Options struct {
+	Grub bool
+}
+
 var knownAlgorithms = map[AlgorithmId]uint16{
 	AlgorithmSha1:   20,
 	AlgorithmSha256: 32,
@@ -46,6 +50,7 @@ func wrapLogReadError(origErr error, partial bool) error {
 
 type stream_1_2 struct {
 	r         io.ReadSeeker
+	options   Options
 	byteOrder binary.ByteOrder
 }
 
@@ -83,7 +88,7 @@ func (s *stream_1_2) ReadNextEvent() (*Event, error, error) {
 		return nil, wrapLogReadError(err, true), nil
 	}
 
-	data, dataErr := makeEventData(pcrIndex, eventType, event, s.byteOrder)
+	data, dataErr := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
@@ -95,6 +100,7 @@ func (s *stream_1_2) ReadNextEvent() (*Event, error, error) {
 
 type stream_2 struct {
 	r              io.ReadSeeker
+	options        Options
 	byteOrder      binary.ByteOrder
 	algSizes       []EFISpecIdEventAlgorithmSize
 	readFirstEvent bool
@@ -183,7 +189,7 @@ func (s *stream_2) ReadNextEvent() (*Event, error, error) {
 		return nil, wrapLogReadError(err, true), nil
 	}
 
-	data, dataErr := makeEventData(pcrIndex, eventType, event, s.byteOrder)
+	data, dataErr := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
@@ -255,7 +261,7 @@ type Log struct {
 	failed     bool
 }
 
-func newLogFromReader(r io.ReadSeeker) (*Log, error) {
+func newLogFromReader(r io.ReadSeeker, options Options) (*Log, error) {
 	start, err := r.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, err
@@ -263,7 +269,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 
 	var byteOrder binary.ByteOrder = binary.LittleEndian
 
-	var stream stream = &stream_1_2{r: r, byteOrder: byteOrder}
+	var stream stream = &stream_1_2{r: r, options: options, byteOrder: byteOrder}
 	event, err, dataErr := stream.ReadNextEvent()
 	if err != nil {
 		if err == io.EOF {
@@ -294,6 +300,7 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 			}
 		}
 		stream = &stream_2{r: r,
+			options:        options,
 			byteOrder:      byteOrder,
 			algSizes:       specData.DigestSizes,
 			readFirstEvent: false}
@@ -301,7 +308,11 @@ func newLogFromReader(r io.ReadSeeker) (*Log, error) {
 		algorithms = []AlgorithmId{AlgorithmSha1}
 	}
 
-	return &Log{Spec: spec, Algorithms: algorithms, byteOrder: byteOrder, stream: stream, failed: false}, nil
+	return &Log{Spec: spec,
+		Algorithms: algorithms,
+		byteOrder:  byteOrder,
+		stream:     stream,
+		failed:     false}, nil
 }
 
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
@@ -346,10 +357,10 @@ func (l *Log) NextEvent() (*Event, error) {
 	return event, err
 }
 
-func NewLogFromByteReader(reader *bytes.Reader) (*Log, error) {
-	return newLogFromReader(reader)
+func NewLogFromByteReader(reader *bytes.Reader, options Options) (*Log, error) {
+	return newLogFromReader(reader, options)
 }
 
-func NewLogFromFile(file *os.File) (*Log, error) {
-	return newLogFromReader(file)
+func NewLogFromFile(file *os.File, options Options) (*Log, error) {
+	return newLogFromReader(file, options)
 }

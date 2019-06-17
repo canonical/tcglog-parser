@@ -39,10 +39,13 @@ func bytesRead(stream *bytes.Reader) int {
 }
 
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder) (EventData, int, error) {
+	order binary.ByteOrder, options *Options) (EventData, int, error) {
 	switch {
-	case pcrIndex == 8 || pcrIndex == 9:
-		return makeEventDataGRUB(pcrIndex, eventType, data)
+	case options.Grub && (pcrIndex == 8 || pcrIndex == 9):
+		if d, n, e := makeEventDataGRUB(pcrIndex, eventType, data); d != nil {
+			return d, n, e
+		}
+		fallthrough
 	default:
 		return makeEventDataTCG(eventType, data, order)
 	}
@@ -59,8 +62,8 @@ func makeOpaqueEventData(eventType EventType, data []byte) *opaqueEventData {
 }
 
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder) (EventData, error) {
-	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order)
+	order binary.ByteOrder, options *Options) (EventData, error) {
+	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order, options)
 	if event == nil {
 		if err == io.EOF {
 			err = errors.New("event data smaller than expected")

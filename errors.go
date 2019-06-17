@@ -63,7 +63,7 @@ type MissingDigestValueError struct {
 }
 
 func (e *MissingDigestValueError) Error() string {
-	return fmt.Sprintf("crypto-agile log entry is missing a digest value for algorithm %s that was present " +
+	return fmt.Sprintf("crypto-agile log entry is missing a digest value for algorithm %s that was present "+
 		"in the Spec ID Event", e.Algorithm)
 }
 

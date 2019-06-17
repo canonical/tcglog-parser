@@ -11,13 +11,15 @@ import (
 )
 
 var (
-	alg     string
-	verbose bool
+	alg      string
+	verbose  bool
+	withGrub bool
 )
 
 func init() {
 	flag.StringVar(&alg, "alg", "sha1", "Name of the hash algorithm to display")
 	flag.BoolVar(&verbose, "verbose", false, "Display details of event data")
+	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 }
 
 func main() {
@@ -57,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log, err := tcglog.NewLogFromFile(file)
+	log, err := tcglog.NewLogFromFile(file, tcglog.Options{Grub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log file: %v\n", err)
 		os.Exit(1)
