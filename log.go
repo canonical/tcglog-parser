@@ -353,7 +353,3 @@ func NewLogFromByteReader(reader *bytes.Reader) (*Log, error) {
 func NewLogFromFile(file *os.File) (*Log, error) {
 	return newLogFromReader(file)
 }
-
-func DigestLength(alg AlgorithmId) uint16 {
-	return knownAlgorithms[alg]
-}
