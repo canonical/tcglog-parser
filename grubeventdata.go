@@ -14,11 +14,11 @@ var (
 
 type KernelCmdlineEventData struct {
 	data    []byte
-	Cmdline []byte
+	cmdline []byte
 }
 
 func (e *KernelCmdlineEventData) String() string {
-	return fmt.Sprintf("kernel_cmdline{ %s }", *(*string)(unsafe.Pointer(&e.Cmdline)))
+	return fmt.Sprintf("kernel_cmdline{ %s }", e.Cmdline())
 }
 
 func (e *KernelCmdlineEventData) RawBytes() []byte {
@@ -26,16 +26,20 @@ func (e *KernelCmdlineEventData) RawBytes() []byte {
 }
 
 func (e *KernelCmdlineEventData) MeasuredBytes() []byte {
-	return e.Cmdline
+	return e.cmdline
+}
+
+func (e *KernelCmdlineEventData) Cmdline() string {
+	return *(*string)(unsafe.Pointer(&e.cmdline))
 }
 
 type GrubCmdEventData struct {
 	data []byte
-	Cmd  []byte
+	cmd  []byte
 }
 
 func (e *GrubCmdEventData) String() string {
-	return fmt.Sprintf("grub_cmd{ %s }", *(*string)(unsafe.Pointer(&e.Cmd)))
+	return fmt.Sprintf("grub_cmd{ %s }", e.Cmd())
 }
 
 func (e *GrubCmdEventData) RawBytes() []byte {
@@ -43,7 +47,11 @@ func (e *GrubCmdEventData) RawBytes() []byte {
 }
 
 func (e *GrubCmdEventData) MeasuredBytes() []byte {
-	return e.Cmd
+	return e.cmd
+}
+
+func (e *GrubCmdEventData) Cmd() string {
+	return *(*string)(unsafe.Pointer(&e.cmd))
 }
 
 func makeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int, error) {

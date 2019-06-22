@@ -13,6 +13,7 @@ type Spec uint
 
 type Options struct {
 	Grub bool
+	EfiVariableBootQuirk bool
 }
 
 var knownAlgorithms = map[AlgorithmId]uint16{

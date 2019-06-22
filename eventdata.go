@@ -47,7 +47,7 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 		}
 		fallthrough
 	default:
-		return makeEventDataTCG(eventType, data, order)
+		return makeEventDataTCG(eventType, data, order, options)
 	}
 }
 

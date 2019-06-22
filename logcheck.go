@@ -237,16 +237,16 @@ func checkLog(log *Log) (*LogCheckReport, error) {
 	}
 }
 
-func CheckLogFromByteReader(reader *bytes.Reader) (*LogCheckReport, error) {
-	log, err := NewLogFromByteReader(reader, Options{})
+func CheckLogFromByteReader(reader *bytes.Reader, options Options) (*LogCheckReport, error) {
+	log, err := NewLogFromByteReader(reader, options)
 	if err != nil {
 		return nil, err
 	}
 	return checkLog(log)
 }
 
-func CheckLogFromFile(file *os.File) (*LogCheckReport, error) {
-	log, err := NewLogFromFile(file, Options{})
+func CheckLogFromFile(file *os.File, options Options) (*LogCheckReport, error) {
+	log, err := NewLogFromFile(file, options)
 	if err != nil {
 		return nil, err
 	}
