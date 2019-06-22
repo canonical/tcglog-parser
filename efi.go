@@ -103,12 +103,8 @@ func (e *EFIVariableEventData) String() string {
 		e.VariableName.String(), e.UnicodeName)
 }
 
-func (e *EFIVariableEventData) RawBytes() []byte {
+func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
-}
-
-func (e *EFIVariableEventData) MeasuredBytes() []byte {
-	return e.measuredData
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
@@ -496,12 +492,8 @@ func (e *EFIImageLoadEventData) String() string {
 		e.LinkTimeAddress, e.Path)
 }
 
-func (e *EFIImageLoadEventData) RawBytes() []byte {
+func (e *EFIImageLoadEventData) Bytes() []byte {
 	return e.data
-}
-
-func (e *EFIImageLoadEventData) MeasuredBytes() []byte {
-	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
@@ -583,11 +575,7 @@ func (e *EFIGPTEventData) String() string {
 	return builder.String()
 }
 
-func (e *EFIGPTEventData) RawBytes() []byte {
-	return e.data
-}
-
-func (e *EFIGPTEventData) MeasuredBytes() []byte {
+func (e *EFIGPTEventData) Bytes() []byte {
 	return e.data
 }
 

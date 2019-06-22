@@ -10,12 +10,14 @@ import (
 
 var (
 	efiVariableBootQuirk bool
+	withGrub             bool
 )
 
 func init() {
 	flag.BoolVar(&efiVariableBootQuirk, "efi-variable-boot-quirk", false,
-		"Consider that some firmware measures the entire UEFI_VARIABLE_DATA structure rather " +
-		"than just the variable data for EV_EFI_VARIABLE_BOOT events")
+		"Consider that some firmware measures the entire UEFI_VARIABLE_DATA structure rather "+
+			"than just the variable data for EV_EFI_VARIABLE_BOOT events")
+	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 }
 
 func main() {
@@ -40,7 +42,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	report, err := tcglog.CheckLogFromFile(file, tcglog.Options{EfiVariableBootQuirk: efiVariableBootQuirk})
+	report, err := tcglog.CheckLogFromFile(file,
+		tcglog.Options{EfiVariableBootQuirk: efiVariableBootQuirk,
+			EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to check log file: %v\n", err)
 		os.Exit(1)

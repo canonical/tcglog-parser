@@ -21,12 +21,8 @@ func (e *KernelCmdlineEventData) String() string {
 	return fmt.Sprintf("kernel_cmdline{ %s }", e.Cmdline())
 }
 
-func (e *KernelCmdlineEventData) RawBytes() []byte {
+func (e *KernelCmdlineEventData) Bytes() []byte {
 	return e.data
-}
-
-func (e *KernelCmdlineEventData) MeasuredBytes() []byte {
-	return e.cmdline
 }
 
 func (e *KernelCmdlineEventData) Cmdline() string {
@@ -42,12 +38,8 @@ func (e *GrubCmdEventData) String() string {
 	return fmt.Sprintf("grub_cmd{ %s }", e.Cmd())
 }
 
-func (e *GrubCmdEventData) RawBytes() []byte {
+func (e *GrubCmdEventData) Bytes() []byte {
 	return e.data
-}
-
-func (e *GrubCmdEventData) MeasuredBytes() []byte {
-	return e.cmd
 }
 
 func (e *GrubCmdEventData) Cmd() string {
@@ -74,7 +66,7 @@ func makeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (Eve
 			return nil, 0, errors.New("unexpected prefix for GRUB string")
 		}
 	case 9:
-		return &AsciiStringEventData{data: data, informational: true}, len(data), nil
+		return &AsciiStringEventData{data: data}, len(data), nil
 	default:
 		panic("unhandled PCR index")
 	}

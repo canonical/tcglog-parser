@@ -46,12 +46,8 @@ func (e *SpecIdEventData) String() string {
 	return builder.String()
 }
 
-func (e *SpecIdEventData) RawBytes() []byte {
+func (e *SpecIdEventData) Bytes() []byte {
 	return e.data
-}
-
-func (e *SpecIdEventData) MeasuredBytes() []byte {
-	return nil
 }
 
 func wrapSpecIdEventReadError(origErr error) error {
@@ -276,23 +272,15 @@ var (
 )
 
 type AsciiStringEventData struct {
-	data          []byte
-	informational bool
+	data []byte
 }
 
 func (e *AsciiStringEventData) String() string {
 	return *(*string)(unsafe.Pointer(&e.data))
 }
 
-func (e *AsciiStringEventData) RawBytes() []byte {
+func (e *AsciiStringEventData) Bytes() []byte {
 	return e.data
-}
-
-func (e *AsciiStringEventData) MeasuredBytes() []byte {
-	if !e.informational {
-		return e.data
-	}
-	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -338,7 +326,7 @@ func makeEventDataNoAction(data []byte, order binary.ByteOrder) (out EventData, 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
-	return &AsciiStringEventData{data: data, informational: false}, len(data), nil
+	return &AsciiStringEventData{data: data}, len(data), nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")

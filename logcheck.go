@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"unsafe"
@@ -67,6 +68,33 @@ type LogCheckReportEntry interface {
 
 type LogCheckReport struct {
 	Entries []LogCheckReportEntry
+}
+
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
+//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//   "Procedure for Pre-OS to OS-Present Transition")
+var (
+	separatorEventErrorValue   uint32 = 1
+	separatorEventNormalValues        = [...]uint32{0, math.MaxUint32}
+)
+
+func isSeparatorEventError(event *Event, order binary.ByteOrder) bool {
+	if event.EventType != EventTypeSeparator {
+		panic("Invalid event type")
+	}
+
+	errorValue := make([]byte, 4)
+	order.PutUint32(errorValue, separatorEventErrorValue)
+
+	for alg, digest := range event.Digests {
+		if bytes.Compare(digest, hash(errorValue, alg)) == 0 {
+			return true
+		}
+		break
+	}
+	return false
 }
 
 func hash(data []byte, alg AlgorithmId) []byte {
@@ -131,71 +159,107 @@ func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {
 	}
 }
 
-func checkEventData(data EventData, t EventType) error {
-	switch t {
+func checkEventData(event *Event, order binary.ByteOrder) error {
+	switch event.EventType {
 	case EventTypeSeparator:
-		if data.MeasuredBytes() == nil {
+		if isSeparatorEventError(event, order) {
 			return nil
 		}
-		s := len(data.RawBytes())
+		s := len(event.Data.Bytes())
 		if s != 4 {
 			return fmt.Errorf("unexpected event data size of %d", s)
 		}
 		for _, v := range separatorEventNormalValues {
-			if v == *(*uint32)(unsafe.Pointer(&data.RawBytes()[0])) {
+			if v == *(*uint32)(unsafe.Pointer(&event.Data.Bytes()[0])) {
 				return nil
 			}
 		}
 		return errors.New("unexpected event data contents")
 	case EventTypeCompactHash:
-		s := len(data.RawBytes())
+		s := len(event.Data.Bytes())
 		if s == 4 {
 			return nil
 		}
 		return fmt.Errorf("unexpected event data size of %d", s)
 	case EventTypeOmitBootDeviceEvents:
-		if string(data.RawBytes()) == "BOOT ATTEMPTS OMITTED" {
+		if string(event.Data.Bytes()) == "BOOT ATTEMPTS OMITTED" {
 			return nil
 		}
-		return errors.New("unexpected event data contents")
+		return errors.New("unexpected event data contents - expected \"BOOT ATTEMPTS OMITTED\"")
 	case EventTypeEFIHCRTMEvent:
-		if string(data.RawBytes()) == "HCRTM" {
+		if string(event.Data.Bytes()) == "HCRTM" {
 			return nil
 		}
-		return errors.New("unexpected event data contents")
+		return errors.New("unexpected event data contents - expected \"HCRTM\"")
 	default:
 		return nil
 	}
 }
 
-func isExpectedDigestValue(digest Digest, t EventType, data EventData, alg AlgorithmId,
-	order binary.ByteOrder) (bool, []byte) {
-	buf := data.MeasuredBytes()
+func isExpectedDigestValue(digest Digest, t EventType, alg AlgorithmId, measuredBytes []byte) (bool, []byte) {
 	var expected []byte
-
-	switch t {
-	case EventTypeSeparator:
-		if buf == nil {
-			buf = make([]byte, 4)
-			order.PutUint32(buf, separatorEventErrorValue)
-		}
-	case EventTypeNoAction:
+	switch {
+	case t == EventTypeNoAction:
 		expected = zeroDigests[alg]
+	case measuredBytes != nil:
+		expected = hash(measuredBytes, alg)
 	}
 
-	switch {
-	case buf == nil && expected == nil:
+	if expected == nil {
 		return true, nil
-	case expected == nil:
-		expected = hash(buf, alg)
 	}
 
 	return bytes.Compare(digest, expected) == 0, expected
 }
 
-func checkEventDigests(event *Event, order binary.ByteOrder, report *LogCheckReport) {
+func determineMeasuredBytes(event *Event, order binary.ByteOrder, options *Options) (out []byte) {
+	switch d := event.Data.(type) {
+	case *opaqueEventData:
+		switch event.EventType {
+		case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags,
+			EventTypeTableOfDevices, EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
+			out = event.Data.Bytes()
+		case EventTypeSeparator:
+			if !isSeparatorEventError(event, order) {
+				out = event.Data.Bytes()
+			}
+		}
+	case *AsciiStringEventData:
+		switch event.EventType {
+		case EventTypeAction, EventTypeEFIAction:
+			out = event.Data.Bytes()
+		}
+	case *EFIVariableEventData:
+		if event.EventType == EventTypeEFIVariableBoot && !options.EfiVariableBootQuirk {
+			out = d.VariableData
+		} else {
+			out = event.Data.Bytes()
+		}
+	case *EFIGPTEventData:
+		out = event.Data.Bytes()
+	case *KernelCmdlineEventData:
+		out = d.cmdline
+	case *GrubCmdEventData:
+		out = d.cmd
+	}
+
+	if out != nil {
+		return
+	}
+
+	if event.EventType == EventTypeSeparator {
+		out = make([]byte, 4)
+		order.PutUint32(out, separatorEventErrorValue)
+	}
+
+	return
+}
+
+func checkEventDigests(event *Event, order binary.ByteOrder, options *Options, report *LogCheckReport) {
+	measuredBytes := determineMeasuredBytes(event, order, options)
+
 	for alg, digest := range event.Digests {
-		if ok, expected := isExpectedDigestValue(digest, event.EventType, event.Data, alg, order); !ok {
+		if ok, expected := isExpectedDigestValue(digest, event.EventType, alg, measuredBytes); !ok {
 			report.Entries = append(report.Entries,
 				&UnexpectedDigestValueReportEntry{event: event,
 					Algorithm: alg,
@@ -204,7 +268,7 @@ func checkEventDigests(event *Event, order binary.ByteOrder, report *LogCheckRep
 	}
 }
 
-func checkEvent(event *Event, spec Spec, order binary.ByteOrder, report *LogCheckReport) {
+func checkEvent(event *Event, spec Spec, order binary.ByteOrder, options *Options, report *LogCheckReport) {
 	if !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec) {
 		report.Entries = append(report.Entries, &UnexpectedEventTypeReportEntry{event: event})
 	}
@@ -214,14 +278,14 @@ func checkEvent(event *Event, spec Spec, order binary.ByteOrder, report *LogChec
 			&InvalidEventDataReportEntry{event: event, err: event.dataErr})
 	}
 
-	if err := checkEventData(event.Data, event.EventType); err != nil {
+	if err := checkEventData(event, order); err != nil {
 		report.Entries = append(report.Entries, &InvalidEventDataReportEntry{event: event, err: err})
 	}
 
-	checkEventDigests(event, order, report)
+	checkEventDigests(event, order, options, report)
 }
 
-func checkLog(log *Log) (*LogCheckReport, error) {
+func checkLog(log *Log, options Options) (*LogCheckReport, error) {
 	report := &LogCheckReport{}
 
 	for {
@@ -233,7 +297,7 @@ func checkLog(log *Log) (*LogCheckReport, error) {
 			return nil, err
 		}
 
-		checkEvent(event, log.Spec, log.byteOrder, report)
+		checkEvent(event, log.Spec, log.byteOrder, &options, report)
 	}
 }
 
@@ -242,7 +306,7 @@ func CheckLogFromByteReader(reader *bytes.Reader, options Options) (*LogCheckRep
 	if err != nil {
 		return nil, err
 	}
-	return checkLog(log)
+	return checkLog(log, options)
 }
 
 func CheckLogFromFile(file *os.File, options Options) (*LogCheckReport, error) {
@@ -250,5 +314,5 @@ func CheckLogFromFile(file *os.File, options Options) (*LogCheckReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	return checkLog(log)
+	return checkLog(log, options)
 }
