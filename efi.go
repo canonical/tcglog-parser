@@ -195,10 +195,11 @@ const (
 	efiMsgDevicePathNodeLU   = 0x11
 	efiMsgDevicePathNodeSATA = 0x12
 
-	efiMediaDevicePathNodeHardDrive = 0x01
-	efiMediaDevicePathNodeFilePath  = 0x04
-	efiMediaDevicePathNodeFvFile    = 0x06
-	efiMediaDevicePathNodeFv        = 0x07
+	efiMediaDevicePathNodeHardDrive      = 0x01
+	efiMediaDevicePathNodeFilePath       = 0x04
+	efiMediaDevicePathNodeFvFile         = 0x06
+	efiMediaDevicePathNodeFv             = 0x07
+	efiMediaDevicePathNodeRelOffsetRange = 0x08
 )
 
 type efiDevicePathNode struct {
@@ -371,6 +372,26 @@ func filePathDevicePathNodeToString(n *efiDevicePathNode) string {
 	return s
 }
 
+func relOffsetRangePathNodeToString(n *efiDevicePathNode) string {
+	stream := bytes.NewReader(n.data)
+
+	if _, err := stream.Seek(4, io.SeekCurrent); err != nil {
+		return ""
+	}
+
+	var start uint64
+	if err := binary.Read(stream, n.order, &start); err != nil {
+		return ""
+	}
+
+	var end uint64
+	if err := binary.Read(stream, n.order, &end); err != nil {
+		return ""
+	}
+
+	return fmt.Sprintf("Offset(0x%x,0x%x)", start, end)
+}
+
 func (n *efiDevicePathNode) toString() string {
 	switch {
 	case n.t == efiDevicePathNodeMedia &&
@@ -388,6 +409,8 @@ func (n *efiDevicePathNode) toString() string {
 		return luDevicePathNodeToString(n)
 	case n.t == efiDevicePathNodeMsg && n.subType == efiMsgDevicePathNodeSATA:
 		return sataDevicePathNodeToString(n)
+	case n.t == efiDevicePathNodeMedia && n.subType == efiMediaDevicePathNodeRelOffsetRange:
+		return relOffsetRangePathNodeToString(n)
 	default:
 		return ""
 	}
