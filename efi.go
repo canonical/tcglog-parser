@@ -92,7 +92,6 @@ func makeEFIGUID(data [16]byte, order binary.ByteOrder) *EFIGUID {
 
 type EFIVariableEventData struct {
 	data         []byte
-	measuredData []byte
 	VariableName EFIGUID
 	UnicodeName  string
 	VariableData []byte
@@ -138,13 +137,7 @@ func makeEventDataEFIVariableImpl(data []byte, eventType EventType, order binary
 		return nil, 0, err
 	}
 
-	measuredData := data
-	if eventType == EventTypeEFIVariableBoot && !options.EfiVariableBootQuirk {
-		measuredData = variableData
-	}
-
 	return &EFIVariableEventData{data: data,
-		measuredData: measuredData,
 		VariableName: guid,
 		UnicodeName:  unicodeName,
 		VariableData: variableData}, bytesRead(stream), nil
