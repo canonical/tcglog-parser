@@ -12,7 +12,7 @@ func init() {
 }
 
 func main() {
-        flag.Parse()
+	flag.Parse()
 
 	args := flag.Args()
 	if len(args) > 1 {

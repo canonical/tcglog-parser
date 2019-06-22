@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"unsafe"
 )
 
@@ -27,10 +29,16 @@ func (r *UnexpectedEventTypeReportEntry) Event() *Event {
 
 type InvalidEventDataReportEntry struct {
 	event *Event
+	err   error
 }
 
 func (r *InvalidEventDataReportEntry) String() string {
-	return fmt.Sprintf("Invalid event data for event type %s", r.event.EventType)
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "Invalid event data for event type %s", r.event.EventType)
+	if r.err != nil {
+		fmt.Fprintf(&builder, " (%v)", r.err)
+	}
+	return builder.String()
 }
 
 func (r *InvalidEventDataReportEntry) Event() *Event {
@@ -38,14 +46,14 @@ func (r *InvalidEventDataReportEntry) Event() *Event {
 }
 
 type UnexpectedDigestValueReportEntry struct {
-	event *Event
+	event     *Event
 	Algorithm AlgorithmId
-	Expected Digest
+	Expected  Digest
 }
 
 func (r *UnexpectedDigestValueReportEntry) String() string {
-	return fmt.Sprintf("Unexpected digest value for event type %s (got %x, expected %x)",
-		r.event.EventType, r.event.Digests[r.Algorithm], r.Expected)
+	return fmt.Sprintf("Unexpected digest value for event type %s and algorithm %s (got %x, expected %x)",
+		r.event.EventType, r.Algorithm, r.event.Digests[r.Algorithm], r.Expected)
 }
 
 func (r *UnexpectedDigestValueReportEntry) Event() *Event {
@@ -123,29 +131,40 @@ func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {
 	}
 }
 
-func isValidEventData(data EventData, t EventType) bool {
+func checkEventData(data EventData, t EventType) error {
 	switch t {
 	case EventTypeSeparator:
 		if data.MeasuredBytes() == nil {
-			return true
+			return nil
 		}
-		if len(data.RawBytes()) != 4 {
-			return false
+		s := len(data.RawBytes())
+		if s != 4 {
+			return fmt.Errorf("unexpected event data size of %d", s)
 		}
 		for _, v := range separatorEventNormalValues {
 			if v == *(*uint32)(unsafe.Pointer(&data.RawBytes()[0])) {
-				return true
+				return nil
 			}
 		}
-		return false
+		return errors.New("unexpected event data contents")
 	case EventTypeCompactHash:
-		return len(data.RawBytes()) == 4
+		s := len(data.RawBytes())
+		if s == 4 {
+			return nil
+		}
+		return fmt.Errorf("unexpected event data size of %d", s)
 	case EventTypeOmitBootDeviceEvents:
-		return string(data.RawBytes()) == "BOOT ATTEMPTS OMITTED"
+		if string(data.RawBytes()) == "BOOT ATTEMPTS OMITTED" {
+			return nil
+		}
+		return errors.New("unexpected event data contents")
 	case EventTypeEFIHCRTMEvent:
-		return string(data.RawBytes()) == "HCRTM"
+		if string(data.RawBytes()) == "HCRTM" {
+			return nil
+		}
+		return errors.New("unexpected event data contents")
 	default:
-		return true
+		return nil
 	}
 }
 
@@ -174,21 +193,32 @@ func isExpectedDigestValue(digest Digest, t EventType, data EventData, alg Algor
 	return bytes.Compare(digest, expected) == 0, expected
 }
 
+func checkEventDigests(event *Event, order binary.ByteOrder, report *LogCheckReport) {
+	for alg, digest := range event.Digests {
+		if ok, expected := isExpectedDigestValue(digest, event.EventType, event.Data, alg, order); !ok {
+			report.Entries = append(report.Entries,
+				&UnexpectedDigestValueReportEntry{event: event,
+					Algorithm: alg,
+					Expected:  expected})
+		}
+	}
+}
+
 func checkEvent(event *Event, spec Spec, order binary.ByteOrder, report *LogCheckReport) {
 	if !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec) {
 		report.Entries = append(report.Entries, &UnexpectedEventTypeReportEntry{event: event})
 	}
 
-	if !isValidEventData(event.Data, event.EventType) {
-		report.Entries = append(report.Entries, &InvalidEventDataReportEntry{event: event})
+	if event.dataErr != nil {
+		report.Entries = append(report.Entries,
+			&InvalidEventDataReportEntry{event: event, err: event.dataErr})
 	}
 
-	for alg, digest := range event.Digests {
-		if ok, expected := isExpectedDigestValue(digest, event.EventType, event.Data, alg, order); !ok {
-			report.Entries = append(report.Entries,
-				&UnexpectedDigestValueReportEntry{event: event, Algorithm: alg, Expected: expected})
-		}
+	if err := checkEventData(event.Data, event.EventType); err != nil {
+		report.Entries = append(report.Entries, &InvalidEventDataReportEntry{event: event, err: err})
 	}
+
+	checkEventDigests(event, order, report)
 }
 
 func checkLog(log *Log) (*LogCheckReport, error) {
@@ -196,7 +226,7 @@ func checkLog(log *Log) (*LogCheckReport, error) {
 
 	for {
 		event, err := log.NextEvent()
-		if event == nil {
+		if err != nil {
 			if err == io.EOF {
 				return report, nil
 			}

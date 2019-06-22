@@ -73,7 +73,7 @@ func main() {
 
 	for {
 		event, err := log.NextEvent()
-		if event == nil {
+		if err != nil {
 			if err == io.EOF {
 				break
 			}
