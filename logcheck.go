@@ -15,6 +15,11 @@ import (
 	"unsafe"
 )
 
+type LogCheckOptions struct {
+	EnableGrub bool
+	EfiVariableBootQuirk bool
+}
+
 type UnexpectedEventTypeReportEntry struct {
 	event *Event
 }
@@ -212,7 +217,7 @@ func isExpectedDigestValue(digest Digest, t EventType, alg AlgorithmId, measured
 	return bytes.Compare(digest, expected) == 0, expected
 }
 
-func determineMeasuredBytes(event *Event, order binary.ByteOrder, options *Options) (out []byte) {
+func determineMeasuredBytes(event *Event, order binary.ByteOrder, options *LogCheckOptions) (out []byte) {
 	switch d := event.Data.(type) {
 	case *opaqueEventData:
 		switch event.EventType {
@@ -255,7 +260,7 @@ func determineMeasuredBytes(event *Event, order binary.ByteOrder, options *Optio
 	return
 }
 
-func checkEventDigests(event *Event, order binary.ByteOrder, options *Options, report *LogCheckReport) {
+func checkEventDigests(event *Event, order binary.ByteOrder, options *LogCheckOptions, report *LogCheckReport) {
 	measuredBytes := determineMeasuredBytes(event, order, options)
 
 	for alg, digest := range event.Digests {
@@ -268,7 +273,7 @@ func checkEventDigests(event *Event, order binary.ByteOrder, options *Options, r
 	}
 }
 
-func checkEvent(event *Event, dataErr error, spec Spec, order binary.ByteOrder, options *Options,
+func checkEvent(event *Event, dataErr error, spec Spec, order binary.ByteOrder, options *LogCheckOptions,
 	report *LogCheckReport) {
 	if !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec) {
 		report.Entries = append(report.Entries, &UnexpectedEventTypeReportEntry{event: event})
@@ -286,7 +291,7 @@ func checkEvent(event *Event, dataErr error, spec Spec, order binary.ByteOrder, 
 	checkEventDigests(event, order, options, report)
 }
 
-func checkLog(log *Log, options Options) (*LogCheckReport, error) {
+func checkLog(log *Log, options LogCheckOptions) (*LogCheckReport, error) {
 	report := &LogCheckReport{}
 
 	for {
@@ -302,16 +307,16 @@ func checkLog(log *Log, options Options) (*LogCheckReport, error) {
 	}
 }
 
-func CheckLogFromByteReader(reader *bytes.Reader, options Options) (*LogCheckReport, error) {
-	log, err := NewLogFromByteReader(reader, options)
+func CheckLogFromByteReader(reader *bytes.Reader, options LogCheckOptions) (*LogCheckReport, error) {
+	log, err := NewLogFromByteReader(reader, LogOptions{EnableGrub: options.EnableGrub})
 	if err != nil {
 		return nil, err
 	}
 	return checkLog(log, options)
 }
 
-func CheckLogFromFile(file *os.File, options Options) (*LogCheckReport, error) {
-	log, err := NewLogFromFile(file, options)
+func CheckLogFromFile(file *os.File, options LogCheckOptions) (*LogCheckReport, error) {
+	log, err := NewLogFromFile(file, LogOptions{EnableGrub: options.EnableGrub})
 	if err != nil {
 		return nil, err
 	}

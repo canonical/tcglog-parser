@@ -59,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log, err := tcglog.NewLogFromFile(file, tcglog.Options{EnableGrub: withGrub})
+	log, err := tcglog.NewLogFromFile(file, tcglog.LogOptions{EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log file: %v\n", err)
 		os.Exit(1)

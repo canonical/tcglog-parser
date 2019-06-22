@@ -332,15 +332,14 @@ func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder, options *Options) (out EventData,
-	n int, err error) {
+func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(data, order)
 	case EventTypeAction, EventTypeEFIAction:
 		return makeEventDataAction(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		return makeEventDataEFIVariable(data, eventType, order, options)
+		return makeEventDataEFIVariable(data, eventType, order)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
 		return makeEventDataEFIImageLoad(data, order)

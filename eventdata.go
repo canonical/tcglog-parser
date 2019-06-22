@@ -30,7 +30,7 @@ func bytesRead(stream *bytes.Reader) int {
 }
 
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder, options *Options) (EventData, int, error) {
+	order binary.ByteOrder, options *LogOptions) (EventData, int, error) {
 	switch {
 	case options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9):
 		if d, n, e := makeEventDataGRUB(pcrIndex, eventType, data); d != nil {
@@ -38,12 +38,12 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 		}
 		fallthrough
 	default:
-		return makeEventDataTCG(eventType, data, order, options)
+		return makeEventDataTCG(eventType, data, order)
 	}
 }
 
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder, options *Options) (EventData, error) {
+	order binary.ByteOrder, options *LogOptions) (EventData, error) {
 	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order, options)
 	if event == nil {
 		if err == io.EOF {

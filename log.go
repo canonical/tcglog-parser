@@ -10,9 +10,8 @@ import (
 
 type Spec uint
 
-type Options struct {
+type LogOptions struct {
 	EnableGrub           bool
-	EfiVariableBootQuirk bool
 }
 
 var knownAlgorithms = map[AlgorithmId]uint16{
@@ -56,7 +55,7 @@ func wrapLogReadError(origErr error, partial bool) error {
 
 type stream_1_2 struct {
 	r         io.ReadSeeker
-	options   Options
+	options   LogOptions
 	byteOrder binary.ByteOrder
 }
 
@@ -106,7 +105,7 @@ func (s *stream_1_2) readNextEvent() (*Event, error) {
 
 type stream_2 struct {
 	r              io.ReadSeeker
-	options        Options
+	options        LogOptions
 	byteOrder      binary.ByteOrder
 	algSizes       []EFISpecIdEventAlgorithmSize
 	readFirstEvent bool
@@ -237,7 +236,7 @@ type Log struct {
 	indexTracker map[PCRIndex]uint
 }
 
-func newLogFromReader(r io.ReadSeeker, options Options) (*Log, error) {
+func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 	start, err := r.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, err
@@ -335,10 +334,10 @@ func (l *Log) NextEvent() (*Event, error) {
 	return nil, err
 }
 
-func NewLogFromByteReader(reader *bytes.Reader, options Options) (*Log, error) {
+func NewLogFromByteReader(reader *bytes.Reader, options LogOptions) (*Log, error) {
 	return newLogFromReader(reader, options)
 }
 
-func NewLogFromFile(file *os.File, options Options) (*Log, error) {
+func NewLogFromFile(file *os.File, options LogOptions) (*Log, error) {
 	return newLogFromReader(file, options)
 }

@@ -43,7 +43,7 @@ func main() {
 	}
 
 	report, err := tcglog.CheckLogFromFile(file,
-		tcglog.Options{EfiVariableBootQuirk: efiVariableBootQuirk,
+		tcglog.LogCheckOptions{EfiVariableBootQuirk: efiVariableBootQuirk,
 			EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to check log file: %v\n", err)
