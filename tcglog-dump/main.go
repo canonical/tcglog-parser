@@ -87,7 +87,7 @@ func main() {
 		if verbose {
 			data := event.Data.String()
 			if data != "" {
-				fmt.Fprintf(&builder, " [%s]", data)
+				fmt.Fprintf(&builder, " [ %s ]", data)
 			}
 
 		}

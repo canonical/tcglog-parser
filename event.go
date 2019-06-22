@@ -109,6 +109,7 @@ func (a AlgorithmId) Format(s fmt.State, f rune) {
 }
 
 type Event struct {
+	Index  uint
 	PCRIndex  PCRIndex
 	EventType EventType
 	Digests   DigestMap
