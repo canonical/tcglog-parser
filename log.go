@@ -101,8 +101,7 @@ func (s *stream_1_2) readNextEvent() (*Event, error) {
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-		dataErr:   dataErr,
-	}, nil
+	}, dataErr
 }
 
 type stream_2 struct {
@@ -203,8 +202,7 @@ func (s *stream_2) readNextEvent() (*Event, error) {
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-		dataErr:   dataErr,
-	}, nil
+	}, dataErr
 }
 
 func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
@@ -249,16 +247,8 @@ func newLogFromReader(r io.ReadSeeker, options Options) (*Log, error) {
 
 	var stream stream = &stream_1_2{r: r, options: options, byteOrder: byteOrder}
 	event, err := stream.readNextEvent()
-	if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return nil, err
-	}
-
-	_, err = r.Seek(start, io.SeekStart)
-	if err != nil {
-		return nil, err
+	if event == nil {
+		return nil, wrapLogReadError(err, true)
 	}
 
 	var spec Spec = SpecUnknown
@@ -266,8 +256,8 @@ func newLogFromReader(r io.ReadSeeker, options Options) (*Log, error) {
 	specData, isSpecData := event.Data.(*SpecIdEventData)
 	if isSpecData {
 		spec = specData.Spec
-	} else if _, isSpecErr := event.dataErr.(*InvalidSpecIdEventError); isSpecErr {
-		return nil, event.dataErr
+	} else if _, isSpecErr := err.(*InvalidSpecIdEventError); isSpecErr {
+		return nil, err
 	}
 
 	if spec == SpecEFI_2 {
@@ -286,6 +276,11 @@ func newLogFromReader(r io.ReadSeeker, options Options) (*Log, error) {
 		algorithms = []AlgorithmId{AlgorithmSha1}
 	}
 
+	_, err = r.Seek(start, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Log{Spec: spec,
 		Algorithms:   algorithms,
 		byteOrder:    byteOrder,
@@ -294,24 +289,16 @@ func newLogFromReader(r io.ReadSeeker, options Options) (*Log, error) {
 		indexTracker: map[PCRIndex]uint{}}, nil
 }
 
-func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
-	for _, a := range l.Algorithms {
-		if a == alg {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (l *Log) NextEvent() (*Event, error) {
+func (l *Log) nextEventInternal() (*Event, error) {
 	if l.failed {
 		return nil, &LogReadError{errors.New("log status inconsistent due to a previous error")}
 	}
 
 	event, err := l.stream.readNextEvent()
-	if err != nil {
-		l.failed = true
+	if event == nil {
+		if err != io.EOF {
+			l.failed = true
+		}
 		return nil, err
 	}
 
@@ -327,7 +314,25 @@ func (l *Log) NextEvent() (*Event, error) {
 		fixupSpecIdEvent(event, l.Algorithms)
 	}
 
-	return event, nil
+	return event, err
+}
+
+func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
+	for _, a := range l.Algorithms {
+		if a == alg {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (l *Log) NextEvent() (*Event, error) {
+	event, err := l.nextEventInternal()
+	if event != nil {
+		return event, nil
+	}
+	return nil, err
 }
 
 func NewLogFromByteReader(reader *bytes.Reader, options Options) (*Log, error) {

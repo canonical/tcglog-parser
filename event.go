@@ -114,6 +114,4 @@ type Event struct {
 	EventType EventType
 	Digests   DigestMap
 	Data      EventData
-
-	dataErr error
 }

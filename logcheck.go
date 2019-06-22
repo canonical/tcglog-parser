@@ -268,14 +268,15 @@ func checkEventDigests(event *Event, order binary.ByteOrder, options *Options, r
 	}
 }
 
-func checkEvent(event *Event, spec Spec, order binary.ByteOrder, options *Options, report *LogCheckReport) {
+func checkEvent(event *Event, dataErr error, spec Spec, order binary.ByteOrder, options *Options,
+	report *LogCheckReport) {
 	if !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec) {
 		report.Entries = append(report.Entries, &UnexpectedEventTypeReportEntry{event: event})
 	}
 
-	if event.dataErr != nil {
+	if dataErr != nil {
 		report.Entries = append(report.Entries,
-			&InvalidEventDataReportEntry{event: event, err: event.dataErr})
+			&InvalidEventDataReportEntry{event: event, err: dataErr})
 	}
 
 	if err := checkEventData(event, order); err != nil {
@@ -289,15 +290,15 @@ func checkLog(log *Log, options Options) (*LogCheckReport, error) {
 	report := &LogCheckReport{}
 
 	for {
-		event, err := log.NextEvent()
-		if err != nil {
+		event, err := log.nextEventInternal()
+		if event == nil {
 			if err == io.EOF {
 				return report, nil
 			}
 			return nil, err
 		}
 
-		checkEvent(event, log.Spec, log.byteOrder, &options, report)
+		checkEvent(event, err, log.Spec, log.byteOrder, &options, report)
 	}
 }
 
