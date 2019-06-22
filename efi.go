@@ -92,6 +92,7 @@ func makeEFIGUID(data [16]byte, order binary.ByteOrder) *EFIGUID {
 
 type EFIVariableEventData struct {
 	data         []byte
+	measuredData []byte
 	VariableName EFIGUID
 	UnicodeName  string
 	VariableData []byte
@@ -107,12 +108,12 @@ func (e *EFIVariableEventData) RawBytes() []byte {
 }
 
 func (e *EFIVariableEventData) MeasuredBytes() []byte {
-	return e.data
+	return e.measuredData
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
-func makeEventDataEFIVariableImpl(data []byte, order binary.ByteOrder) (*EFIVariableEventData, int, error) {
+func makeEventDataEFIVariableImpl(data []byte, eventType EventType, order binary.ByteOrder) (*EFIVariableEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
@@ -140,14 +141,20 @@ func makeEventDataEFIVariableImpl(data []byte, order binary.ByteOrder) (*EFIVari
 		return nil, 0, err
 	}
 
+	measuredData := data
+	if eventType == EventTypeEFIVariableBoot {
+		measuredData = variableData
+	}
+
 	return &EFIVariableEventData{data: data,
+		measuredData: measuredData,
 		VariableName: guid,
 		UnicodeName:  unicodeName,
 		VariableData: variableData}, bytesRead(stream), nil
 }
 
-func makeEventDataEFIVariable(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
-	d, n, err := makeEventDataEFIVariableImpl(data, order)
+func makeEventDataEFIVariable(data []byte, eventType EventType, order binary.ByteOrder) (out EventData, n int, err error) {
+	d, n, err := makeEventDataEFIVariableImpl(data, eventType, order)
 	if d != nil {
 		out = d
 	}
