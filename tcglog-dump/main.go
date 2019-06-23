@@ -5,21 +5,60 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/chrisccoulson/tcglog-parser"
 )
 
+type pcrList []tcglog.PCRIndex
+
+func (l *pcrList) String() string {
+	var builder strings.Builder
+	for i, pcr := range *l {
+		if i > 0 {
+			fmt.Fprintf(&builder, ", ")
+		}
+		fmt.Fprintf(&builder, "%d", pcr)
+	}
+	return builder.String()
+}
+
+func (l *pcrList) Set(value string) error {
+	v, err := strconv.ParseUint(value, 10, 32)
+	if err != nil {
+		return err
+	}
+	*l = append(*l, tcglog.PCRIndex(v))
+	return nil
+}
+
 var (
 	alg      string
 	verbose  bool
 	withGrub bool
+	pcrs     pcrList
 )
 
 func init() {
 	flag.StringVar(&alg, "alg", "sha1", "Name of the hash algorithm to display")
 	flag.BoolVar(&verbose, "verbose", false, "Display details of event data")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
+	flag.Var(&pcrs, "pcr", "Display events associated with the specified PCR. Can be specified multiple times")
+}
+
+func shouldDisplayEvent(event *tcglog.Event) bool {
+	if len(pcrs) == 0 {
+		return true
+	}
+
+	for _, pcr := range pcrs {
+		if pcr == event.PCRIndex {
+			return true
+		}
+	}
+
+	return false
 }
 
 func main() {
@@ -80,6 +119,10 @@ func main() {
 
 			fmt.Fprintf(os.Stderr, "Encountered an error when reading the next log event: %v\n", err)
 			os.Exit(1)
+		}
+
+		if !shouldDisplayEvent(event) {
+			continue
 		}
 
 		var builder strings.Builder
