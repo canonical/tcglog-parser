@@ -16,7 +16,7 @@ import (
 )
 
 type LogCheckOptions struct {
-	EnableGrub bool
+	EnableGrub           bool
 	EfiVariableBootQuirk bool
 }
 

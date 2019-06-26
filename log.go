@@ -11,7 +11,7 @@ import (
 type Spec uint
 
 type LogOptions struct {
-	EnableGrub           bool
+	EnableGrub bool
 }
 
 var knownAlgorithms = map[AlgorithmId]uint16{

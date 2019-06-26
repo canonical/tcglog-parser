@@ -90,6 +90,177 @@ func makeEFIGUID(data [16]byte, order binary.ByteOrder) *EFIGUID {
 	return &out
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
+//  (section 7.4 "EV_NO_ACTION Event Types")
+func parseEFI_1_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) (bool, error) {
+	eventData.Spec = SpecEFI_1_2
+
+	// TCG_EfiSpecIdEventStruct.uintnSize
+	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	// TCG_EfiSpecIdEventStruct.vendorInfoSize
+	var vendorInfoSize uint8
+	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	// TCG_EfiSpecIdEventStruct.vendorInfo
+	eventData.VendorInfo = make([]byte, vendorInfoSize)
+	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	var nonFatalErr error
+
+	switch {
+	case eventData.SpecVersionMinor != 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMinor value (0x%02x)",
+			eventData.SpecVersionMinor)
+	case eventData.SpecVersionMajor != 0x01:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMajor value (0x%02x)",
+			eventData.SpecVersionMajor)
+	case eventData.SpecErrata > 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specErrata value (0x%02x)",
+			eventData.SpecErrata)
+	}
+
+	return true, nonFatalErr
+}
+
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
+//  (secion 9.4.5.1 "Specification ID Version Event")
+func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) (bool, error) {
+	eventData.Spec = SpecEFI_2
+
+	// TCG_EfiSpecIdEvent.uintnSize
+	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	// TCG_EfiSpecIdEvent.numberOfAlgorithms
+	var numberOfAlgorithms uint32
+	if err := binary.Read(stream, order, &numberOfAlgorithms); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	if numberOfAlgorithms < 1 {
+		return false, &InvalidSpecIdEventError{"numberOfAlgorithms is zero"}
+	}
+
+	// TCG_EfiSpecIdEvent.digestSizes
+	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
+	for i := uint32(0); i < numberOfAlgorithms; i++ {
+		// TCG_EfiSpecIdEvent.digestSizes[i].algorithmId
+		var algorithmId AlgorithmId
+		if err := binary.Read(stream, order, &algorithmId); err != nil {
+			return false, wrapSpecIdEventReadError(err)
+		}
+
+		// TCG_EfiSpecIdEvent.digestSizes[i].digestSize
+		var digestSize uint16
+		if err := binary.Read(stream, order, &digestSize); err != nil {
+			return false, wrapSpecIdEventReadError(err)
+		}
+
+		knownSize, known := knownAlgorithms[algorithmId]
+		if known && knownSize != digestSize {
+			return false, &InvalidSpecIdEventError{
+				fmt.Sprintf("digestSize for algorithmId 0x%04x doesn't match expected size "+
+					"(got: %d, expected: %d)", algorithmId, digestSize, knownSize)}
+		}
+		eventData.DigestSizes[i] = EFISpecIdEventAlgorithmSize{algorithmId, digestSize}
+	}
+
+	// TCG_EfiSpecIdEvent.vendorInfoSize
+	var vendorInfoSize uint8
+	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	// TCG_EfiSpecIdEvent.vendorInfo
+	eventData.VendorInfo = make([]byte, vendorInfoSize)
+	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
+		return false, wrapSpecIdEventReadError(err)
+	}
+
+	var nonFatalErr error
+
+	switch {
+	case eventData.SpecVersionMinor != 0x00:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMinor value (0x%02x)",
+			eventData.SpecVersionMinor)
+	case eventData.SpecVersionMajor != 0x02:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specVersionMajor value (0x%02x)",
+			eventData.SpecVersionMajor)
+	case eventData.SpecErrata != 0x00:
+		nonFatalErr = fmt.Errorf("unexpected SpecIdEvent.specErrata value (0x%02x)",
+			eventData.SpecErrata)
+	}
+
+	return true, nonFatalErr
+}
+
+type StartupLocalityEventData struct {
+	data     []byte
+	Locality uint8
+}
+
+func (e *StartupLocalityEventData) String() string {
+	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.Locality)
+}
+
+func (e *StartupLocalityEventData) Bytes() []byte {
+	return e.data
+}
+
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
+//  (section 9.4.5.3 "Startup Locality Event")
+func makeStartupLocalityEvent(stream io.Reader, order binary.ByteOrder,
+	data []byte) (*StartupLocalityEventData, error) {
+	var locality uint8
+	if err := binary.Read(stream, order, &locality); err != nil {
+		return nil, err
+	}
+
+	return &StartupLocalityEventData{data: data, Locality: locality}, nil
+}
+
+type BIMReferenceManifestEventData struct {
+	data     []byte
+	VendorId uint32
+	Guid     EFIGUID
+}
+
+func (e *BIMReferenceManifestEventData) String() string {
+	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }",
+		e.VendorId, &e.Guid)
+}
+
+func (e *BIMReferenceManifestEventData) Bytes() []byte {
+	return e.data
+}
+
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
+//  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
+//  (section 7.4 "EV_NO_ACTION Event Types")
+func makeBIMReferenceManifestEvent(stream io.Reader, order binary.ByteOrder,
+	data []byte) (*BIMReferenceManifestEventData, error) {
+	var vendorId uint32
+	if err := binary.Read(stream, order, &vendorId); err != nil {
+		return nil, err
+	}
+
+	var guid EFIGUID
+	if err := readEFIGUID(stream, order, &guid); err != nil {
+		return nil, err
+	}
+
+	return &BIMReferenceManifestEventData{data: data, VendorId: vendorId, Guid: guid}, nil
+}
+
 type EFIVariableEventData struct {
 	data         []byte
 	VariableName EFIGUID
