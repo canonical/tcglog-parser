@@ -3,7 +3,6 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 )
@@ -11,6 +10,22 @@ import (
 type EventData interface {
 	String() string
 	Bytes() []byte
+}
+
+type BrokenEventData struct {
+	data []byte
+	Error error
+}
+
+func (e *BrokenEventData) String() string {
+	if e.Error == io.ErrUnexpectedEOF {
+		return "Invalid event data: event data smaller than expected"
+	}
+	return fmt.Sprintf("Invalid event data: %v", e.Error)
+}
+
+func (e *BrokenEventData) Bytes() []byte {
+	return e.data
 }
 
 type opaqueEventData struct {
@@ -45,14 +60,20 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
 	order binary.ByteOrder, options *LogOptions) (EventData, error) {
 	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order, options)
-	if event == nil {
-		if err == io.EOF {
-			err = errors.New("event data smaller than expected")
+
+	if event != nil {
+		if err == nil && n < len(data) {
+			err = fmt.Errorf("event data contains %d bytes more than expected", len(data)-n)
 		}
-		return &opaqueEventData{data: data}, err
+		return event, err
 	}
-	if n < len(data) {
-		err = fmt.Errorf("event data contains %d bytes more than expected", len(data)-n)
+
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return &BrokenEventData{data: data, Error: err}, nil
 	}
-	return event, err
+
+	return &opaqueEventData{data: data}, nil
 }

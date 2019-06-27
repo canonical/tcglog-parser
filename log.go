@@ -93,14 +93,14 @@ func (s *stream_1_2) readNextEvent() (*Event, error) {
 		return nil, wrapLogReadError(err, true)
 	}
 
-	data, dataErr := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, dataErr
+	}, dataWarning
 }
 
 type stream_2 struct {
@@ -194,14 +194,14 @@ func (s *stream_2) readNextEvent() (*Event, error) {
 		return nil, wrapLogReadError(err, true)
 	}
 
-	data, dataErr := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, dataErr
+	}, dataWarning
 }
 
 func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
@@ -251,17 +251,22 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 	}
 
 	var spec Spec = SpecUnknown
+	var digestSizes []EFISpecIdEventAlgorithmSize
 	var algorithms []AlgorithmId
-	specData, isSpecData := event.Data.(*SpecIdEventData)
-	if isSpecData {
-		spec = specData.Spec
-	} else if _, isSpecErr := err.(*InvalidSpecIdEventError); isSpecErr {
-		return nil, err
+
+	switch d := event.Data.(type) {
+	case *SpecIdEventData:
+		spec = d.Spec
+		digestSizes = d.DigestSizes
+	case *BrokenEventData:
+		if _, isSpecErr := d.Error.(*InvalidSpecIdEventError); isSpecErr {
+			return nil, d.Error
+		}
 	}
 
 	if spec == SpecEFI_2 {
-		algorithms = make([]AlgorithmId, 0, len(specData.DigestSizes))
-		for _, specAlgSize := range specData.DigestSizes {
+		algorithms = make([]AlgorithmId, 0, len(digestSizes))
+		for _, specAlgSize := range digestSizes {
 			if isKnownAlgorithm(specAlgSize.AlgorithmId) {
 				algorithms = append(algorithms, specAlgSize.AlgorithmId)
 			}
@@ -269,7 +274,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 		stream = &stream_2{r: r,
 			options:        options,
 			byteOrder:      byteOrder,
-			algSizes:       specData.DigestSizes,
+			algSizes:       digestSizes,
 			readFirstEvent: false}
 	} else {
 		algorithms = []AlgorithmId{AlgorithmSha1}
