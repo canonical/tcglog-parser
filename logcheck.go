@@ -2,9 +2,6 @@ package tcglog
 
 import (
 	"bytes"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -51,21 +48,6 @@ func (r *InvalidEventDataReportEntry) Event() *Event {
 	return r.event
 }
 
-type UnexpectedDigestValueReportEntry struct {
-	event     *Event
-	Algorithm AlgorithmId
-	Expected  Digest
-}
-
-func (r *UnexpectedDigestValueReportEntry) String() string {
-	return fmt.Sprintf("Unexpected digest value for event type %s and algorithm %s (got %x, expected %x)",
-		r.event.EventType, r.Algorithm, r.event.Digests[r.Algorithm], r.Expected)
-}
-
-func (r *UnexpectedDigestValueReportEntry) Event() *Event {
-	return r.event
-}
-
 type LogCheckReportEntry interface {
 	String() string
 	Event() *Event
@@ -81,45 +63,8 @@ type LogCheckReport struct {
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
 var (
-	separatorEventErrorValue   uint32 = 1
 	separatorEventNormalValues        = [...]uint32{0, math.MaxUint32}
 )
-
-func isSeparatorEventError(event *Event, order binary.ByteOrder) bool {
-	if event.EventType != EventTypeSeparator {
-		panic("Invalid event type")
-	}
-
-	errorValue := make([]byte, 4)
-	order.PutUint32(errorValue, separatorEventErrorValue)
-
-	for alg, digest := range event.Digests {
-		if bytes.Compare(digest, hash(errorValue, alg)) == 0 {
-			return true
-		}
-		break
-	}
-	return false
-}
-
-func hash(data []byte, alg AlgorithmId) []byte {
-	switch alg {
-	case AlgorithmSha1:
-		h := sha1.Sum(data)
-		return h[:]
-	case AlgorithmSha256:
-		h := sha256.Sum256(data)
-		return h[:]
-	case AlgorithmSha384:
-		h := sha512.Sum384(data)
-		return h[:]
-	case AlgorithmSha512:
-		h := sha512.Sum512(data)
-		return h[:]
-	default:
-		panic("Unhandled algorithm")
-	}
-}
 
 func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {
 	if i > 7 {
@@ -201,78 +146,6 @@ func checkEventData(event *Event, order binary.ByteOrder) error {
 	}
 }
 
-func isExpectedDigestValue(digest Digest, t EventType, alg AlgorithmId, measuredBytes []byte) (bool, []byte) {
-	var expected []byte
-	switch {
-	case t == EventTypeNoAction:
-		expected = zeroDigests[alg]
-	case measuredBytes != nil:
-		expected = hash(measuredBytes, alg)
-	}
-
-	if expected == nil {
-		return true, nil
-	}
-
-	return bytes.Compare(digest, expected) == 0, expected
-}
-
-func determineMeasuredBytes(event *Event, order binary.ByteOrder, options *LogCheckOptions) (out []byte) {
-	switch d := event.Data.(type) {
-	case *opaqueEventData:
-		switch event.EventType {
-		case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags,
-			EventTypeTableOfDevices, EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
-			out = event.Data.Bytes()
-		case EventTypeSeparator:
-			if !isSeparatorEventError(event, order) {
-				out = event.Data.Bytes()
-			}
-		}
-	case *AsciiStringEventData:
-		switch event.EventType {
-		case EventTypeAction, EventTypeEFIAction:
-			out = event.Data.Bytes()
-		}
-	case *EFIVariableEventData:
-		if event.EventType == EventTypeEFIVariableBoot && !options.EfiVariableBootQuirk {
-			out = d.VariableData
-		} else {
-			out = event.Data.Bytes()
-		}
-	case *EFIGPTEventData:
-		out = event.Data.Bytes()
-	case *KernelCmdlineEventData:
-		out = d.cmdline
-	case *GrubCmdEventData:
-		out = d.cmd
-	}
-
-	if out != nil {
-		return
-	}
-
-	if event.EventType == EventTypeSeparator {
-		out = make([]byte, 4)
-		order.PutUint32(out, separatorEventErrorValue)
-	}
-
-	return
-}
-
-func checkEventDigests(event *Event, order binary.ByteOrder, options *LogCheckOptions, report *LogCheckReport) {
-	measuredBytes := determineMeasuredBytes(event, order, options)
-
-	for alg, digest := range event.Digests {
-		if ok, expected := isExpectedDigestValue(digest, event.EventType, alg, measuredBytes); !ok {
-			report.Entries = append(report.Entries,
-				&UnexpectedDigestValueReportEntry{event: event,
-					Algorithm: alg,
-					Expected:  expected})
-		}
-	}
-}
-
 func checkEvent(event *Event, dataErr error, spec Spec, order binary.ByteOrder, options *LogCheckOptions,
 	report *LogCheckReport) {
 	if !isExpectedEventTypeForIndex(event.EventType, event.PCRIndex, spec) {
@@ -287,15 +160,13 @@ func checkEvent(event *Event, dataErr error, spec Spec, order binary.ByteOrder, 
 	if err := checkEventData(event, order); err != nil {
 		report.Entries = append(report.Entries, &InvalidEventDataReportEntry{event: event, err: err})
 	}
-
-	checkEventDigests(event, order, options, report)
 }
 
 func checkLog(log *Log, options LogCheckOptions) (*LogCheckReport, error) {
 	report := &LogCheckReport{}
 
 	for {
-		event, err := log.nextEventInternal()
+		event, _, err := log.nextEventInternal()
 		if event == nil {
 			if err == io.EOF {
 				return report, nil

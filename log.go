@@ -8,17 +8,8 @@ import (
 	"os"
 )
 
-type Spec uint
-
 type LogOptions struct {
 	EnableGrub bool
-}
-
-var knownAlgorithms = map[AlgorithmId]uint16{
-	AlgorithmSha1:   20,
-	AlgorithmSha256: 32,
-	AlgorithmSha384: 48,
-	AlgorithmSha512: 64,
 }
 
 func isKnownAlgorithm(alg AlgorithmId) (out bool) {
@@ -33,7 +24,7 @@ var zeroDigests = map[AlgorithmId][]byte{
 	AlgorithmSha512: make([]byte, knownAlgorithms[AlgorithmSha512])}
 
 type stream interface {
-	readNextEvent() (*Event, error)
+	readNextEvent() (*Event, int, error)
 }
 
 const maxPCRIndex PCRIndex = 31
@@ -61,46 +52,46 @@ type stream_1_2 struct {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
-func (s *stream_1_2) readNextEvent() (*Event, error) {
+func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 	var pcrIndex PCRIndex
 	if err := binary.Read(s.r, s.byteOrder, &pcrIndex); err != nil {
-		return nil, wrapLogReadError(err, false)
+		return nil, 0, wrapLogReadError(err, false)
 	}
 
 	if !isPCRIndexInRange(pcrIndex) {
-		return nil, &PCRIndexOutOfRangeError{pcrIndex}
+		return nil, 0, &PCRIndexOutOfRangeError{pcrIndex}
 	}
 
 	var eventType EventType
 	if err := binary.Read(s.r, s.byteOrder, &eventType); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
 	digest := make(Digest, knownAlgorithms[AlgorithmSha1])
 	if _, err := s.r.Read(digest); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 	digests := make(DigestMap)
 	digests[AlgorithmSha1] = digest
 
 	var eventSize uint32
 	if err := binary.Read(s.r, s.byteOrder, &eventSize); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
 	event := make([]byte, eventSize)
 	if _, err := io.ReadFull(s.r, event); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, remaining, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, dataWarning
+	}, remaining, dataWarning
 }
 
 type stream_2 struct {
@@ -113,7 +104,7 @@ type stream_2 struct {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.2.2 "TCG_PCR_EVENT2 Structure")
-func (s *stream_2) readNextEvent() (*Event, error) {
+func (s *stream_2) readNextEvent() (*Event, int, error) {
 	if !s.readFirstEvent {
 		s.readFirstEvent = true
 		stream := stream_1_2{r: s.r, byteOrder: s.byteOrder}
@@ -122,21 +113,21 @@ func (s *stream_2) readNextEvent() (*Event, error) {
 
 	var pcrIndex PCRIndex
 	if err := binary.Read(s.r, s.byteOrder, &pcrIndex); err != nil {
-		return nil, wrapLogReadError(err, false)
+		return nil, 0, wrapLogReadError(err, false)
 	}
 
 	if !isPCRIndexInRange(pcrIndex) {
-		return nil, &PCRIndexOutOfRangeError{pcrIndex}
+		return nil, 0, &PCRIndexOutOfRangeError{pcrIndex}
 	}
 
 	var eventType EventType
 	if err := binary.Read(s.r, s.byteOrder, &eventType); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
 	var count uint32
 	if err := binary.Read(s.r, s.byteOrder, &count); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
 	digests := make(DigestMap)
@@ -144,7 +135,7 @@ func (s *stream_2) readNextEvent() (*Event, error) {
 	for i := uint32(0); i < count; i++ {
 		var algorithmId AlgorithmId
 		if err := binary.Read(s.r, s.byteOrder, &algorithmId); err != nil {
-			return nil, wrapLogReadError(err, true)
+			return nil, 0, wrapLogReadError(err, true)
 		}
 
 		var digestSize uint16
@@ -157,23 +148,23 @@ func (s *stream_2) readNextEvent() (*Event, error) {
 		}
 
 		if j == len(s.algSizes) {
-			return nil, &UnrecognizedAlgorithmError{algorithmId}
+			return nil, 0, &UnrecognizedAlgorithmError{algorithmId}
 		}
 
 		digest := make(Digest, digestSize)
 		if _, err := io.ReadFull(s.r, digest); err != nil {
-			return nil, wrapLogReadError(err, true)
+			return nil, 0, wrapLogReadError(err, true)
 		}
 
 		if _, exists := digests[algorithmId]; exists {
-			return nil, &DuplicateDigestValueError{algorithmId}
+			return nil, 0, &DuplicateDigestValueError{algorithmId}
 		}
 		digests[algorithmId] = digest
 	}
 
 	for _, algSize := range s.algSizes {
 		if _, exists := digests[algSize.AlgorithmId]; !exists {
-			return nil, &MissingDigestValueError{algSize.AlgorithmId}
+			return nil, 0, &MissingDigestValueError{algSize.AlgorithmId}
 		}
 	}
 
@@ -186,22 +177,22 @@ func (s *stream_2) readNextEvent() (*Event, error) {
 
 	var eventSize uint32
 	if err := binary.Read(s.r, s.byteOrder, &eventSize); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
 	event := make([]byte, eventSize)
 	if _, err := io.ReadFull(s.r, event); err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, remaining, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, dataWarning
+	}, remaining, dataWarning
 }
 
 func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
@@ -245,7 +236,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 	var byteOrder binary.ByteOrder = binary.LittleEndian
 
 	var stream stream = &stream_1_2{r: r, options: options, byteOrder: byteOrder}
-	event, err := stream.readNextEvent()
+	event, _, err := stream.readNextEvent()
 	if event == nil {
 		return nil, wrapLogReadError(err, true)
 	}
@@ -293,17 +284,17 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 		indexTracker: map[PCRIndex]uint{}}, nil
 }
 
-func (l *Log) nextEventInternal() (*Event, error) {
+func (l *Log) nextEventInternal() (*Event, int, error) {
 	if l.failed {
-		return nil, &LogReadError{errors.New("log status inconsistent due to a previous error")}
+		return nil, 0, &LogReadError{errors.New("log status inconsistent due to a previous error")}
 	}
 
-	event, err := l.stream.readNextEvent()
+	event, remaining, err := l.stream.readNextEvent()
 	if event == nil {
 		if err != io.EOF {
 			l.failed = true
 		}
-		return nil, err
+		return nil, 0, err
 	}
 
 	if i, exists := l.indexTracker[event.PCRIndex]; exists {
@@ -318,7 +309,7 @@ func (l *Log) nextEventInternal() (*Event, error) {
 		fixupSpecIdEvent(event, l.Algorithms)
 	}
 
-	return event, err
+	return event, remaining, err
 }
 
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
@@ -332,7 +323,7 @@ func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
 }
 
 func (l *Log) NextEvent() (*Event, error) {
-	event, err := l.nextEventInternal()
+	event, _, err := l.nextEventInternal()
 	if event != nil {
 		return event, nil
 	}

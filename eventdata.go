@@ -13,7 +13,7 @@ type EventData interface {
 }
 
 type BrokenEventData struct {
-	data []byte
+	data  []byte
 	Error error
 }
 
@@ -58,22 +58,22 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 }
 
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder, options *LogOptions) (EventData, error) {
+	order binary.ByteOrder, options *LogOptions) (EventData, int, error) {
 	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order, options)
 
 	if event != nil {
 		if err == nil && n < len(data) {
 			err = fmt.Errorf("event data contains %d bytes more than expected", len(data)-n)
 		}
-		return event, err
+		return event, len(data) - n, err
 	}
 
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return &BrokenEventData{data: data, Error: err}, nil
+		return &BrokenEventData{data: data, Error: err}, 0, nil
 	}
 
-	return &opaqueEventData{data: data}, nil
+	return &opaqueEventData{data: data}, 0, nil
 }

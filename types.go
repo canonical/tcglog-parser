@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+type Spec uint
 type PCRIndex uint32
 type EventType uint32
 type AlgorithmId uint16
