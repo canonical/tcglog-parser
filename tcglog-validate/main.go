@@ -64,6 +64,23 @@ func main() {
 		fmt.Printf("EV_EFI_VARIABLE_BOOT events measure entire UEFI_VARIABLE_DATA structure rather " +
 			"than just the variable contents\n")
 	}
+	if len(result.EventsWithExcessMeasuredData) > 0 {
+		fmt.Printf("The following events have padding at the end of their event data that was hashed " +
+			"and measured:\n")
+		for _, v := range result.EventsWithExcessMeasuredData {
+			fmt.Printf("- Event %d in PCR %d (type: %s): %x (%d bytes)\n", v.Event.Index,
+				v.Event.PCRIndex, v.Event.EventType, v.ExcessBytes, len(v.ExcessBytes))
+		}
+	}
+	if len(result.EfiVariableAuthorityEventsWithUnmeasuredByte) > 0 {
+		fmt.Printf("The following events have one extra byte at the end of their event data that " +
+			"was not hashed and measured:\n")
+		for _, e := range result.EfiVariableAuthorityEventsWithUnmeasuredByte {
+			v := e.Data.(*tcglog.EFIVariableEventData)
+			fmt.Printf("- Event %d in PCR %d [ VariableName: %s, UnicodeName: \"%s\" ] (byte: 0x%x)\n",
+				e.Index, e.PCRIndex, &v.VariableName, v.UnicodeName, v.Bytes()[len(v.Bytes())-1])
+		}
+	}
 	fmt.Printf("*** END QUIRKS ***\n\n")
 
 	fmt.Printf("*** UNEXPECTED EVENT DIGESTS ***\n")

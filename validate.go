@@ -12,6 +12,11 @@ import (
 	"github.com/google/go-tpm/tpm2"
 )
 
+type EventWithExcessMeasuredData struct {
+	Event       *Event
+	ExcessBytes []byte
+}
+
 type UnexpectedDigestValue struct {
 	Event     *Event
 	Algorithm AlgorithmId
@@ -26,7 +31,10 @@ type LogConsistencyError struct {
 }
 
 type LogValidateResult struct {
-	EfiVariableBootQuirk   bool
+	EfiVariableBootQuirk                         bool
+	EventsWithExcessMeasuredData                 []EventWithExcessMeasuredData
+	EfiVariableAuthorityEventsWithUnmeasuredByte []*Event
+
 	UnexpectedDigestValues []UnexpectedDigestValue
 	LogConsistencyErrors   []LogConsistencyError
 }
@@ -111,12 +119,14 @@ func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte)
 }
 
 type logValidator struct {
-	log                    *Log
-	options                LogValidateOptions
-	logPCRValues           map[PCRIndex]DigestMap
-	tpmPCRValues           map[PCRIndex]DigestMap
-	efiVarBootQuirkState   efiVarBootQuirkState
-	unexpectedDigestValues []UnexpectedDigestValue
+	log                                          *Log
+	options                                      LogValidateOptions
+	logPCRValues                                 map[PCRIndex]DigestMap
+	tpmPCRValues                                 map[PCRIndex]DigestMap
+	efiVarBootQuirkState                         efiVarBootQuirkState
+	eventsWithExcessMeasuredData                 []EventWithExcessMeasuredData
+	efiVariableAuthorityEventsWithUnmeasuredByte map[*Event]bool
+	unexpectedDigestValues                       []UnexpectedDigestValue
 }
 
 func (v *logValidator) processDigestForEvent(alg AlgorithmId, digest Digest, event *Event) {
@@ -138,7 +148,14 @@ func (v *logValidator) processDigestForEvent(alg AlgorithmId, digest Digest, eve
 			if ok {
 				v.efiVarBootQuirkState = efiVarBootQuirkActive
 			}
+		} else if event.EventType == EventTypeEFIVariableAuthority {
+			measuredBytes = measuredBytes[0 : len(measuredBytes)-1]
+			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
+			if ok {
+				v.efiVariableAuthorityEventsWithUnmeasuredByte[event] = true
+			}
 		}
+
 		if !ok {
 			v.unexpectedDigestValues = append(v.unexpectedDigestValues,
 				UnexpectedDigestValue{Event: event, Algorithm: alg, Expected: exp})
@@ -149,7 +166,7 @@ func (v *logValidator) processDigestForEvent(alg AlgorithmId, digest Digest, eve
 	}
 }
 
-func (v *logValidator) processEvent(event *Event) {
+func (v *logValidator) processEvent(event *Event, remaining int) {
 	if _, exists := v.logPCRValues[event.PCRIndex]; !exists {
 		return
 	}
@@ -161,12 +178,27 @@ func (v *logValidator) processEvent(event *Event) {
 	for alg, digest := range event.Digests {
 		v.processDigestForEvent(alg, digest, event)
 	}
+
+	if remaining > 0 {
+		end := len(event.Data.Bytes())
+		if _, exists := v.efiVariableAuthorityEventsWithUnmeasuredByte[event]; exists {
+			end -= 1
+		}
+		v.eventsWithExcessMeasuredData = append(v.eventsWithExcessMeasuredData,
+			EventWithExcessMeasuredData{Event: event,
+				ExcessBytes: event.Data.Bytes()[len(event.Data.Bytes())-remaining : end]})
+	}
 }
 
 func (v *logValidator) createResult() (out *LogValidateResult) {
 	out = new(LogValidateResult)
 
 	out.EfiVariableBootQuirk = v.efiVarBootQuirkState == efiVarBootQuirkActive
+	out.EventsWithExcessMeasuredData = v.eventsWithExcessMeasuredData
+	for e, _ := range v.efiVariableAuthorityEventsWithUnmeasuredByte {
+		out.EfiVariableAuthorityEventsWithUnmeasuredByte =
+			append(out.EfiVariableAuthorityEventsWithUnmeasuredByte, e)
+	}
 	out.UnexpectedDigestValues = v.unexpectedDigestValues
 
 	for _, i := range v.options.PCRSelection {
@@ -185,14 +217,14 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 
 func (v *logValidator) validateFull() (*LogValidateResult, error) {
 	for {
-		event, _, err := v.log.nextEventInternal()
+		event, remaining, err := v.log.nextEventInternal()
 		if event == nil {
 			if err == io.EOF {
 				return v.createResult(), nil
 			}
 			return nil, err
 		}
-		v.processEvent(event)
+		v.processEvent(event, remaining)
 	}
 }
 
@@ -256,9 +288,10 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 	}
 
 	v := &logValidator{log: log,
-		options:      options,
-		logPCRValues: make(map[PCRIndex]DigestMap),
-		tpmPCRValues: make(map[PCRIndex]DigestMap)}
+		options:                                      options,
+		logPCRValues:                                 make(map[PCRIndex]DigestMap),
+		tpmPCRValues:                                 make(map[PCRIndex]DigestMap),
+		efiVariableAuthorityEventsWithUnmeasuredByte: make(map[*Event]bool)}
 	for _, i := range options.PCRSelection {
 		v.logPCRValues[i] = DigestMap{}
 		for _, alg := range log.Algorithms {

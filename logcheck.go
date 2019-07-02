@@ -63,7 +63,7 @@ type LogCheckReport struct {
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
 var (
-	separatorEventNormalValues        = [...]uint32{0, math.MaxUint32}
+	separatorEventNormalValues = [...]uint32{0, math.MaxUint32}
 )
 
 func isExpectedEventTypeForIndex(t EventType, i PCRIndex, spec Spec) bool {

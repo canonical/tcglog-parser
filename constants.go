@@ -60,7 +60,7 @@ const (
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
 var (
-	separatorEventErrorValue   uint32 = 1
+	separatorEventErrorValue uint32 = 1
 )
 
 var knownAlgorithms = map[AlgorithmId]uint16{

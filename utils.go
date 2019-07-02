@@ -1,9 +1,11 @@
 package tcglog
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/binary"
 	"fmt"
 	"strings"
 )
@@ -61,4 +63,3 @@ func isSeparatorEventError(event *Event, order binary.ByteOrder) bool {
 	}
 	return false
 }
-
