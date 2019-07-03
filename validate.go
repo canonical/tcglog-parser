@@ -41,6 +41,7 @@ type LogValidateResult struct {
 type LogValidateOptions struct {
 	TPMId        int
 	PCRSelection []PCRIndex
+	EnableGrub   bool
 }
 
 type efiVarBootQuirkState uint
@@ -276,7 +277,7 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 		return nil, err
 	}
 
-	log, err := NewLogFromFile(file, LogOptions{})
+	log, err := NewLogFromFile(file, LogOptions{EnableGrub: options.EnableGrub})
 	if err != nil {
 		return nil, err
 	}

@@ -33,10 +33,12 @@ func (l *pcrList) Set(value string) error {
 }
 
 var (
+	withGrub bool
 	pcrs pcrList
 )
 
 func init() {
+	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 	flag.Var(&pcrs, "pcr", "Check the specified PCR. Can be specified multiple times")
 }
 
@@ -51,9 +53,14 @@ func main() {
 
 	if len(pcrs) == 0 {
 		pcrs = pcrList{0, 1, 2, 3, 4, 5, 6, 7}
+		if withGrub {
+			pcrs = append(pcrs, 8, 9)
+		}
 	}
 
-	result, err := tcglog.ValidateLog(tcglog.LogValidateOptions{PCRSelection: pcrs})
+	result, err := tcglog.ValidateLog(tcglog.LogValidateOptions{
+		PCRSelection: pcrs,
+		EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to validate log file: %v\n", err)
 		os.Exit(1)
