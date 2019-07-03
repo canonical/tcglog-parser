@@ -210,6 +210,7 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 					ExpectedPCRDigest: v.logPCRValues[i][alg]})
 		}
 	}
+
 	return
 }
 
