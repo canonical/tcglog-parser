@@ -1,11 +1,9 @@
 package tcglog
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/binary"
 	"fmt"
 	"strconv"
 	"strings"
@@ -46,13 +44,6 @@ func hash(data []byte, alg AlgorithmId) []byte {
 	default:
 		panic("Unhandled algorithm")
 	}
-}
-
-func isDigestOfSeparatorErrorValue(digest Digest, alg AlgorithmId) bool {
-	errorValue := make([]byte, 4)
-	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
-
-	return bytes.Compare(digest, hash(errorValue, alg)) == 0
 }
 
 type PCRList []PCRIndex
