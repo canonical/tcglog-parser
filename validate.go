@@ -12,15 +12,16 @@ import (
 	"github.com/google/go-tpm/tpm2"
 )
 
-type EventWithExcessMeasuredData struct {
-	Event       *Event
-	ExcessBytes []byte
-}
-
 type UnexpectedDigestValue struct {
-	Event     *Event
 	Algorithm AlgorithmId
 	Expected  Digest
+}
+
+type ValidatedEvent struct {
+	Event                                 *Event
+	ExcessMeasuredBytes                   []byte
+	EfiVariableAuthorityHasUnmeasuredByte bool
+	UnexpectedDigestValues                []UnexpectedDigestValue
 }
 
 type LogConsistencyError struct {
@@ -31,12 +32,10 @@ type LogConsistencyError struct {
 }
 
 type LogValidateResult struct {
-	EfiVariableBootQuirk                         bool
-	EventsWithExcessMeasuredData                 []EventWithExcessMeasuredData
-	EfiVariableAuthorityEventsWithUnmeasuredByte []*Event
-
-	UnexpectedDigestValues []UnexpectedDigestValue
-	LogConsistencyErrors   []LogConsistencyError
+	EfiVariableBootQuirk bool
+	ValidatedEvents      []*ValidatedEvent
+	Spec                 Spec
+	LogConsistencyErrors []LogConsistencyError
 }
 
 type LogValidateOptions struct {
@@ -119,48 +118,43 @@ func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte)
 }
 
 type logValidator struct {
-	log                                          *Log
-	options                                      LogValidateOptions
-	logPCRValues                                 map[PCRIndex]DigestMap
-	tpmPCRValues                                 map[PCRIndex]DigestMap
-	efiVarBootQuirkState                         efiVarBootQuirkState
-	eventsWithExcessMeasuredData                 []EventWithExcessMeasuredData
-	efiVariableAuthorityEventsWithUnmeasuredByte map[*Event]bool
-	unexpectedDigestValues                       []UnexpectedDigestValue
+	log                  *Log
+	options              LogValidateOptions
+	logPCRValues         map[PCRIndex]DigestMap
+	tpmPCRValues         map[PCRIndex]DigestMap
+	efiVarBootQuirkState efiVarBootQuirkState
+	validatedEvents      []*ValidatedEvent
 }
 
-func (v *logValidator) processDigestForEvent(alg AlgorithmId, digest Digest, event *Event) {
-	v.logPCRValues[event.PCRIndex][alg] =
-		performHashExtendOperation(alg, v.logPCRValues[event.PCRIndex][alg], digest)
-
+func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *ValidatedEvent) {
 	efiVarBootQuirk := v.efiVarBootQuirkState == efiVarBootQuirkActive
 
-	measuredBytes := determineMeasuredBytes(event, v.log.byteOrder, efiVarBootQuirk)
+	measuredBytes := determineMeasuredBytes(ve.Event, v.log.byteOrder, efiVarBootQuirk)
 	if measuredBytes == nil {
 		return
 	}
 
 	if ok, exp := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
-		if event.EventType == EventTypeEFIVariableBoot &&
+		if ve.Event.EventType == EventTypeEFIVariableBoot &&
 			v.efiVarBootQuirkState == efiVarBootQuirkIndeterminate {
-			measuredBytes = determineMeasuredBytes(event, v.log.byteOrder, true)
+			measuredBytes = determineMeasuredBytes(ve.Event, v.log.byteOrder, true)
 			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
 			if ok {
 				v.efiVarBootQuirkState = efiVarBootQuirkActive
 			}
-		} else if event.EventType == EventTypeEFIVariableAuthority {
+		} else if ve.Event.EventType == EventTypeEFIVariableAuthority {
 			measuredBytes = measuredBytes[0 : len(measuredBytes)-1]
 			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
 			if ok {
-				v.efiVariableAuthorityEventsWithUnmeasuredByte[event] = true
+				ve.EfiVariableAuthorityHasUnmeasuredByte = true
 			}
 		}
 
 		if !ok {
-			v.unexpectedDigestValues = append(v.unexpectedDigestValues,
-				UnexpectedDigestValue{Event: event, Algorithm: alg, Expected: exp})
+			ve.UnexpectedDigestValues = append(ve.UnexpectedDigestValues,
+				UnexpectedDigestValue{Algorithm: alg, Expected: exp})
 		}
-	} else if event.EventType == EventTypeEFIVariableBoot &&
+	} else if ve.Event.EventType == EventTypeEFIVariableBoot &&
 		v.efiVarBootQuirkState == efiVarBootQuirkIndeterminate {
 		v.efiVarBootQuirkState = efiVarBootQuirkInactive
 	}
@@ -171,22 +165,26 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		return
 	}
 
+	ve := &ValidatedEvent{Event: event}
+	v.validatedEvents = append(v.validatedEvents, ve)
+
 	if !doesEventTypeExtendPCR(event.EventType) {
 		return
 	}
 
 	for alg, digest := range event.Digests {
-		v.processDigestForEvent(alg, digest, event)
+		v.logPCRValues[event.PCRIndex][alg] =
+			performHashExtendOperation(alg, v.logPCRValues[event.PCRIndex][alg], digest)
+
+		v.checkDigestForEvent(alg, digest, ve)
 	}
 
 	if remaining > 0 {
 		end := len(event.Data.Bytes())
-		if _, exists := v.efiVariableAuthorityEventsWithUnmeasuredByte[event]; exists {
+		if ve.EfiVariableAuthorityHasUnmeasuredByte {
 			end -= 1
 		}
-		v.eventsWithExcessMeasuredData = append(v.eventsWithExcessMeasuredData,
-			EventWithExcessMeasuredData{Event: event,
-				ExcessBytes: event.Data.Bytes()[len(event.Data.Bytes())-remaining : end]})
+		ve.ExcessMeasuredBytes = event.Data.Bytes()[len(event.Data.Bytes())-remaining : end]
 	}
 }
 
@@ -194,12 +192,8 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 	out = new(LogValidateResult)
 
 	out.EfiVariableBootQuirk = v.efiVarBootQuirkState == efiVarBootQuirkActive
-	out.EventsWithExcessMeasuredData = v.eventsWithExcessMeasuredData
-	for e, _ := range v.efiVariableAuthorityEventsWithUnmeasuredByte {
-		out.EfiVariableAuthorityEventsWithUnmeasuredByte =
-			append(out.EfiVariableAuthorityEventsWithUnmeasuredByte, e)
-	}
-	out.UnexpectedDigestValues = v.unexpectedDigestValues
+	out.ValidatedEvents = v.validatedEvents
+	out.Spec = v.log.Spec
 
 	for _, i := range v.options.PCRSelection {
 		for _, alg := range v.log.Algorithms {
@@ -288,10 +282,9 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 	}
 
 	v := &logValidator{log: log,
-		options:                                      options,
-		logPCRValues:                                 make(map[PCRIndex]DigestMap),
-		tpmPCRValues:                                 make(map[PCRIndex]DigestMap),
-		efiVariableAuthorityEventsWithUnmeasuredByte: make(map[*Event]bool)}
+		options:      options,
+		logPCRValues: make(map[PCRIndex]DigestMap),
+		tpmPCRValues: make(map[PCRIndex]DigestMap)}
 	for _, i := range options.PCRSelection {
 		v.logPCRValues[i] = DigestMap{}
 		for _, alg := range log.Algorithms {

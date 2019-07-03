@@ -60,33 +60,57 @@ func main() {
 	}
 
 	fmt.Printf("*** QUIRKS ***\n")
+
 	if result.EfiVariableBootQuirk {
 		fmt.Printf("EV_EFI_VARIABLE_BOOT events measure entire UEFI_VARIABLE_DATA structure rather " +
 			"than just the variable contents\n")
 	}
-	if len(result.EventsWithExcessMeasuredData) > 0 {
-		fmt.Printf("The following events have padding at the end of their event data that was hashed " +
-			"and measured:\n")
-		for _, v := range result.EventsWithExcessMeasuredData {
-			fmt.Printf("- Event %d in PCR %d (type: %s): %x (%d bytes)\n", v.Event.Index,
-				v.Event.PCRIndex, v.Event.EventType, v.ExcessBytes, len(v.ExcessBytes))
+
+	seenExcessMeasuredBytes := false
+	for _, e := range result.ValidatedEvents {
+		if len(e.ExcessMeasuredBytes) == 0 {
+			continue
 		}
-	}
-	if len(result.EfiVariableAuthorityEventsWithUnmeasuredByte) > 0 {
-		fmt.Printf("The following events have one extra byte at the end of their event data that " +
-			"was not hashed and measured:\n")
-		for _, e := range result.EfiVariableAuthorityEventsWithUnmeasuredByte {
-			v := e.Data.(*tcglog.EFIVariableEventData)
-			fmt.Printf("- Event %d in PCR %d [ VariableName: %s, UnicodeName: \"%s\" ] (byte: 0x%x)\n",
-				e.Index, e.PCRIndex, &v.VariableName, v.UnicodeName, v.Bytes()[len(v.Bytes())-1])
+
+		if !seenExcessMeasuredBytes {
+			seenExcessMeasuredBytes = true
+			fmt.Printf("The following events have padding at the end of their event data that was " +
+				"hashed and measured:\n")
 		}
+
+		fmt.Printf("- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
+			e.Event.EventType, e.ExcessMeasuredBytes, len(e.ExcessMeasuredBytes))
 	}
+
+	seenEVAWithUnmeasuredByte := false
+	for _, e := range result.ValidatedEvents {
+		if !e.EfiVariableAuthorityHasUnmeasuredByte {
+			continue
+		}
+
+		if !seenEVAWithUnmeasuredByte {
+			seenEVAWithUnmeasuredByte = true
+			fmt.Printf("The following events have one extra byte at the end of their event data " +
+				"that was not hashed and measured:\n")
+		}
+		v := e.Event.Data.(*tcglog.EFIVariableEventData)
+		fmt.Printf("- Event %d in PCR %d [ VariableName: %s, UnicodeName: \"%s\" ] (byte: 0x%x)\n",
+			e.Event.Index, e.Event.PCRIndex, &v.VariableName, v.UnicodeName,
+			v.Bytes()[len(v.Bytes())-1])
+	}
+
 	fmt.Printf("*** END QUIRKS ***\n\n")
 
 	fmt.Printf("*** UNEXPECTED EVENT DIGESTS ***\n")
-	for _, v := range result.UnexpectedDigestValues {
-		fmt.Printf("Event %d in PCR %d (type: %s, alg: %s) - expected: %x, got: %x\n", v.Event.Index,
-			v.Event.PCRIndex, v.Event.EventType, v.Algorithm, v.Expected, v.Event.Digests[v.Algorithm])
+	for _, e := range result.ValidatedEvents {
+		if len(e.UnexpectedDigestValues) == 0 {
+			continue
+		}
+		for _, v := range e.UnexpectedDigestValues {
+			fmt.Printf("Event %d in PCR %d (type: %s, alg: %s) - expected: %x, got: %x\n",
+				e.Event.Index, e.Event.PCRIndex, e.Event.EventType, v.Algorithm, v.Expected,
+				e.Event.Digests[v.Algorithm])
+		}
 	}
 	fmt.Printf("*** END UNEXPECTED EVENT DIGESTS ***\n\n")
 
