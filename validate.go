@@ -71,47 +71,42 @@ func performHashExtendOperation(alg AlgorithmId, dest Digest, src Digest) Digest
 	return hash(scratch, alg)
 }
 
-func determineMeasuredBytes(event *Event, efiVarBootQuirk bool) (out []byte) {
+func determineMeasuredBytes(event *Event, efiVarBootQuirk bool) []byte {
 	switch d := event.Data.(type) {
 	case *opaqueEventData:
 		switch event.EventType {
 		case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags,
 			EventTypeTableOfDevices, EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
-			out = event.Data.Bytes()
-		case EventTypeSeparator:
-			if !isSeparatorEventError(event) {
-				out = event.Data.Bytes()
-			}
+			return event.Data.Bytes()
+		}
+	case *separatorEventData:
+		if !d.isError {
+			return event.Data.Bytes()
+		} else {
+			out := make([]byte, 4)
+			binary.LittleEndian.PutUint32(out, separatorEventErrorValue)
+			return out
 		}
 	case *AsciiStringEventData:
 		switch event.EventType {
 		case EventTypeAction, EventTypeEFIAction:
-			out = event.Data.Bytes()
+			return event.Data.Bytes()
 		}
 	case *EFIVariableEventData:
 		if event.EventType == EventTypeEFIVariableBoot && !efiVarBootQuirk {
-			out = d.VariableData
+			return d.VariableData
 		} else {
-			out = event.Data.Bytes()
+			return event.Data.Bytes()
 		}
 	case *EFIGPTEventData:
-		out = event.Data.Bytes()
+		return event.Data.Bytes()
 	case *KernelCmdlineEventData:
-		out = d.cmdline
+		return d.cmdline
 	case *GrubCmdEventData:
-		out = d.cmd
+		return d.cmd
 	}
 
-	if out != nil {
-		return
-	}
-
-	if event.EventType == EventTypeSeparator {
-		out = make([]byte, 4)
-		binary.LittleEndian.PutUint32(out, separatorEventErrorValue)
-	}
-
-	return
+	return nil
 }
 
 func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte) (bool, []byte) {

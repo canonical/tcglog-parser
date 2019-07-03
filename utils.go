@@ -48,21 +48,11 @@ func hash(data []byte, alg AlgorithmId) []byte {
 	}
 }
 
-func isSeparatorEventError(event *Event) bool {
-	if event.EventType != EventTypeSeparator {
-		panic("Invalid event type")
-	}
-
+func isDigestOfSeparatorErrorValue(digest Digest, alg AlgorithmId) bool {
 	errorValue := make([]byte, 4)
 	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
 
-	for alg, digest := range event.Digests {
-		if bytes.Compare(digest, hash(errorValue, alg)) == 0 {
-			return true
-		}
-		break
-	}
-	return false
+	return bytes.Compare(digest, hash(errorValue, alg)) == 0
 }
 
 type PCRList []PCRIndex

@@ -283,7 +283,7 @@ func makeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVariabl
 		VariableData: variableData}, bytesRead(stream), nil
 }
 
-func makeEventDataEFIVariable(data []byte, eventType EventType) (out EventData,	n int, err error) {
+func makeEventDataEFIVariable(data []byte, eventType EventType) (out EventData, n int, err error) {
 	d, n, err := makeEventDataEFIVariableImpl(data, eventType)
 	if d != nil {
 		out = d

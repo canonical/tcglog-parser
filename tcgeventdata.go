@@ -211,13 +211,36 @@ func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
 	return &AsciiStringEventData{data: data}, len(data), nil
 }
 
+type separatorEventData struct {
+	data    []byte
+	isError bool
+}
+
+func (e *separatorEventData) String() string {
+	if !e.isError {
+		return ""
+	}
+	return "*ERROR*"
+}
+
+func (e *separatorEventData) Bytes() []byte {
+	return e.data
+}
+
+func makeEventDataSeparator(data []byte, isError bool) (*separatorEventData, int, error) {
+	return &separatorEventData{data: data, isError: isError}, len(data), nil
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func makeEventDataTCG(eventType EventType, data []byte) (out EventData, n int, err error) {
+func makeEventDataTCG(eventType EventType, data []byte,
+	hasDigestOfSeparatorError bool) (out EventData, n int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		return makeEventDataNoAction(data)
+	case EventTypeSeparator:
+		return makeEventDataSeparator(data, hasDigestOfSeparatorError)
 	case EventTypeAction, EventTypeEFIAction:
 		return makeEventDataAction(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:

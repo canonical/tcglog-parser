@@ -45,8 +45,8 @@ func wrapLogReadError(origErr error, partial bool) error {
 }
 
 type stream_1_2 struct {
-	r         io.ReadSeeker
-	options   LogOptions
+	r       io.ReadSeeker
+	options LogOptions
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -83,7 +83,8 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options)
+	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options,
+		isDigestOfSeparatorErrorValue(digest, AlgorithmSha1))
 
 	return &Event{
 		PCRIndex:  pcrIndex,
@@ -183,7 +184,8 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options)
+	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options,
+		isDigestOfSeparatorErrorValue(digests[s.algSizes[0].AlgorithmId], s.algSizes[0].AlgorithmId))
 
 	return &Event{
 		PCRIndex:  pcrIndex,
