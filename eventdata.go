@@ -58,22 +58,19 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 }
 
 func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder, options *LogOptions) (EventData, int, error) {
+	order binary.ByteOrder, options *LogOptions) (EventData, int) {
 	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order, options)
-
-	if event != nil {
-		if err == nil && n < len(data) {
-			err = fmt.Errorf("event data contains %d bytes more than expected", len(data)-n)
-		}
-		return event, len(data) - n, err
-	}
 
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return &BrokenEventData{data: data, Error: err}, 0, nil
+		return &BrokenEventData{data: data, Error: err}, 0
 	}
 
-	return &opaqueEventData{data: data}, 0, nil
+	if event != nil {
+		return event, len(data) - n
+	}
+
+	return &opaqueEventData{data: data}, 0
 }

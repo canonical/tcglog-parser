@@ -217,7 +217,7 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 func (v *logValidator) validateFull() (*LogValidateResult, error) {
 	for {
 		event, remaining, err := v.log.nextEventInternal()
-		if event == nil {
+		if err != nil {
 			if err == io.EOF {
 				return v.createResult(), nil
 			}

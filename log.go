@@ -84,14 +84,14 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, remaining := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, remaining, dataWarning
+	}, remaining, nil
 }
 
 type stream_2 struct {
@@ -185,14 +185,14 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining, dataWarning := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, remaining := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, remaining, dataWarning
+	}, remaining, nil
 }
 
 func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
@@ -237,7 +237,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 
 	var stream stream = &stream_1_2{r: r, options: options, byteOrder: byteOrder}
 	event, _, err := stream.readNextEvent()
-	if event == nil {
+	if err != nil {
 		return nil, wrapLogReadError(err, true)
 	}
 
@@ -290,7 +290,7 @@ func (l *Log) nextEventInternal() (*Event, int, error) {
 	}
 
 	event, remaining, err := l.stream.readNextEvent()
-	if event == nil {
+	if err != nil {
 		if err != io.EOF {
 			l.failed = true
 		}
@@ -309,7 +309,7 @@ func (l *Log) nextEventInternal() (*Event, int, error) {
 		fixupSpecIdEvent(event, l.Algorithms)
 	}
 
-	return event, remaining, err
+	return event, remaining, nil
 }
 
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
@@ -322,12 +322,9 @@ func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
 	return false
 }
 
-func (l *Log) NextEvent() (*Event, error) {
-	event, _, err := l.nextEventInternal()
-	if event != nil {
-		return event, nil
-	}
-	return nil, err
+func (l *Log) NextEvent() (event *Event, err error) {
+	event, _, err = l.nextEventInternal()
+	return
 }
 
 func NewLogFromByteReader(reader *bytes.Reader, options LogOptions) (*Log, error) {
