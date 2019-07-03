@@ -199,13 +199,15 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 
 	for _, i := range v.pcrs {
 		for _, alg := range v.log.Algorithms {
-			if bytes.Compare(v.logPCRValues[i][alg], v.tpmPCRValues[i][alg]) != 0 {
-				out.LogConsistencyErrors = append(out.LogConsistencyErrors,
-					LogConsistencyError{Index: i,
-						Algorithm:         alg,
-						PCRDigest:         v.tpmPCRValues[i][alg],
-						ExpectedPCRDigest: v.logPCRValues[i][alg]})
+			if bytes.Compare(v.logPCRValues[i][alg], v.tpmPCRValues[i][alg]) == 0 {
+				continue
 			}
+
+			out.LogConsistencyErrors = append(out.LogConsistencyErrors,
+				LogConsistencyError{Index: i,
+					Algorithm:         alg,
+					PCRDigest:         v.tpmPCRValues[i][alg],
+					ExpectedPCRDigest: v.logPCRValues[i][alg]})
 		}
 	}
 	return
