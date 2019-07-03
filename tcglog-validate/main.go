@@ -4,42 +4,20 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/chrisccoulson/tcglog-parser"
 )
 
-type pcrList []tcglog.PCRIndex
-
-func (l *pcrList) String() string {
-	var builder strings.Builder
-	for i, pcr := range *l {
-		if i > 0 {
-			fmt.Fprintf(&builder, ", ")
-		}
-		fmt.Fprintf(&builder, "%d", pcr)
-	}
-	return builder.String()
-}
-
-func (l *pcrList) Set(value string) error {
-	v, err := strconv.ParseUint(value, 10, 32)
-	if err != nil {
-		return err
-	}
-	*l = append(*l, tcglog.PCRIndex(v))
-	return nil
-}
-
 var (
-	withGrub bool
-	pcrs pcrList
+	withGrub      bool
+	noDefaultPcrs bool
+	pcrs          tcglog.PCRList
 )
 
 func init() {
-	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
-	flag.Var(&pcrs, "pcr", "Check the specified PCR. Can be specified multiple times")
+	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
+	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
+	flag.Var(&pcrs, "pcr", "Validate log entries for the specified PCR. Can be specified multiple times")
 }
 
 func main() {
@@ -51,15 +29,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(pcrs) == 0 {
-		pcrs = pcrList{0, 1, 2, 3, 4, 5, 6, 7}
+	if !noDefaultPcrs {
+		pcrs = append(pcrs, 0, 1, 2, 3, 4, 5, 6, 7)
 		if withGrub {
 			pcrs = append(pcrs, 8, 9)
 		}
 	}
 
 	result, err := tcglog.ValidateLog(tcglog.LogValidateOptions{
-		PCRSelection: pcrs,
+		PCRList:    pcrs,
 		EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to validate log file: %v\n", err)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/google/go-tpm/tpm"
 	"github.com/google/go-tpm/tpm2"
@@ -39,9 +40,9 @@ type LogValidateResult struct {
 }
 
 type LogValidateOptions struct {
-	TPMId        int
-	PCRSelection []PCRIndex
-	EnableGrub   bool
+	TPMId      int
+	PCRList    PCRList
+	EnableGrub bool
 }
 
 type efiVarBootQuirkState uint
@@ -120,7 +121,7 @@ func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte)
 
 type logValidator struct {
 	log                  *Log
-	options              LogValidateOptions
+	pcrs                 PCRList
 	logPCRValues         map[PCRIndex]DigestMap
 	tpmPCRValues         map[PCRIndex]DigestMap
 	efiVarBootQuirkState efiVarBootQuirkState
@@ -196,7 +197,7 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 	out.ValidatedEvents = v.validatedEvents
 	out.Spec = v.log.Spec
 
-	for _, i := range v.options.PCRSelection {
+	for _, i := range v.pcrs {
 		for _, alg := range v.log.Algorithms {
 			if bytes.Compare(v.logPCRValues[i][alg], v.tpmPCRValues[i][alg]) != 0 {
 				out.LogConsistencyErrors = append(out.LogConsistencyErrors,
@@ -234,12 +235,12 @@ func (v *logValidator) readPCRsFromTPM2Device(rw io.ReadWriter) error {
 	for _, alg := range v.log.Algorithms {
 		pcrSelection := tpm2.PCRSelection{
 			Hash: tpm2.Algorithm(alg),
-			PCRs: pcrIndexSliceToInts(v.options.PCRSelection)}
+			PCRs: pcrIndexSliceToInts(v.pcrs)}
 		res, err := tpm2.ReadPCRs(rw, pcrSelection)
 		if err != nil {
 			return err
 		}
-		for _, i := range v.options.PCRSelection {
+		for _, i := range v.pcrs {
 			v.tpmPCRValues[i][alg] = res[int(i)]
 		}
 	}
@@ -247,7 +248,7 @@ func (v *logValidator) readPCRsFromTPM2Device(rw io.ReadWriter) error {
 }
 
 func (v *logValidator) readPCRsFromTPM1Device(rw io.ReadWriter) error {
-	for _, i := range v.options.PCRSelection {
+	for _, i := range v.pcrs {
 		res, err := tpm.ReadPCR(rw, uint32(i))
 		if err != nil {
 			return err
@@ -257,8 +258,8 @@ func (v *logValidator) readPCRsFromTPM1Device(rw io.ReadWriter) error {
 	return nil
 }
 
-func (v *logValidator) readPCRs() error {
-	path := fmt.Sprintf("/dev/tpm%d", v.options.TPMId)
+func (v *logValidator) readPCRs(id int) error {
+	path := fmt.Sprintf("/dev/tpm%d", id)
 	if rw, err := tpm2.OpenTPM(path); err == nil {
 		defer rw.Close()
 		return v.readPCRsFromTPM2Device(rw)
@@ -282,11 +283,29 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 		return nil, err
 	}
 
+	tmp := options.PCRList
+	sort.SliceStable(tmp, func(i, j int) bool { return tmp[i] < tmp[j] })
+	var pcrs PCRList
+	for _, i := range tmp {
+		found := false
+		for _, j := range pcrs {
+			if i == j {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		pcrs = append(pcrs, i)
+	}
+	fmt.Println(pcrs)
+
 	v := &logValidator{log: log,
-		options:      options,
+		pcrs:         pcrs,
 		logPCRValues: make(map[PCRIndex]DigestMap),
 		tpmPCRValues: make(map[PCRIndex]DigestMap)}
-	for _, i := range options.PCRSelection {
+	for _, i := range pcrs {
 		v.logPCRValues[i] = DigestMap{}
 		for _, alg := range log.Algorithms {
 			v.logPCRValues[i][alg] = make(Digest, knownAlgorithms[alg])
@@ -294,7 +313,7 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 		v.tpmPCRValues[i] = DigestMap{}
 	}
 
-	if err := v.readPCRs(); err != nil {
+	if err := v.readPCRs(options.TPMId); err != nil {
 		return nil, err
 	}
 

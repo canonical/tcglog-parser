@@ -5,39 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/chrisccoulson/tcglog-parser"
 )
 
-type pcrList []tcglog.PCRIndex
-
-func (l *pcrList) String() string {
-	var builder strings.Builder
-	for i, pcr := range *l {
-		if i > 0 {
-			fmt.Fprintf(&builder, ", ")
-		}
-		fmt.Fprintf(&builder, "%d", pcr)
-	}
-	return builder.String()
-}
-
-func (l *pcrList) Set(value string) error {
-	v, err := strconv.ParseUint(value, 10, 32)
-	if err != nil {
-		return err
-	}
-	*l = append(*l, tcglog.PCRIndex(v))
-	return nil
-}
-
 var (
 	alg      string
 	verbose  bool
 	withGrub bool
-	pcrs     pcrList
+	pcrs     tcglog.PCRList
 )
 
 func init() {

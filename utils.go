@@ -7,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -62,4 +63,26 @@ func isSeparatorEventError(event *Event, order binary.ByteOrder) bool {
 		break
 	}
 	return false
+}
+
+type PCRList []PCRIndex
+
+func (l *PCRList) String() string {
+	var builder strings.Builder
+	for i, pcr := range *l {
+		if i > 0 {
+			fmt.Fprintf(&builder, ", ")
+		}
+		fmt.Fprintf(&builder, "%d", pcr)
+	}
+	return builder.String()
+}
+
+func (l *PCRList) Set(value string) error {
+	v, err := strconv.ParseUint(value, 10, 32)
+	if err != nil {
+		return err
+	}
+	*l = append(*l, PCRIndex(v))
+	return nil
 }
