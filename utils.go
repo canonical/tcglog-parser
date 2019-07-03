@@ -48,13 +48,13 @@ func hash(data []byte, alg AlgorithmId) []byte {
 	}
 }
 
-func isSeparatorEventError(event *Event, order binary.ByteOrder) bool {
+func isSeparatorEventError(event *Event) bool {
 	if event.EventType != EventTypeSeparator {
 		panic("Invalid event type")
 	}
 
 	errorValue := make([]byte, 4)
-	order.PutUint32(errorValue, separatorEventErrorValue)
+	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
 
 	for alg, digest := range event.Digests {
 		if bytes.Compare(digest, hash(errorValue, alg)) == 0 {

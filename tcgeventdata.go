@@ -67,18 +67,18 @@ func wrapSpecIdEventReadError(origErr error) error {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
-func parsePCClientSpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) error {
+func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecPCClient
 
 	// TCG_PCClientSpecIdEventStruct.reserved
 	var reserved uint8
-	if err := binary.Read(stream, order, &reserved); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &reserved); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_PCClientSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
@@ -97,29 +97,29 @@ func parsePCClientSpecIdEvent(stream io.Reader, order binary.ByteOrder, eventDat
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func makeSpecIdEvent(stream io.Reader, order binary.ByteOrder, data []byte,
-	helper func(io.Reader, binary.ByteOrder, *SpecIdEventData) error) (*SpecIdEventData, error) {
+func makeSpecIdEvent(stream io.Reader, data []byte,
+	helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
 	// platformClass field
 	var platformClass uint32
-	if err := binary.Read(stream, order, &platformClass); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &platformClass); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	// specVersionMinor field
 	var specVersionMinor uint8
-	if err := binary.Read(stream, order, &specVersionMinor); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &specVersionMinor); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	// specVersionMajor field
 	var specVersionMajor uint8
-	if err := binary.Read(stream, order, &specVersionMajor); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &specVersionMajor); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	// specErrata field
 	var specErrata uint8
-	if err := binary.Read(stream, order, &specErrata); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &specErrata); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
 	}
 
@@ -130,7 +130,7 @@ func makeSpecIdEvent(stream io.Reader, order binary.ByteOrder, data []byte,
 		SpecVersionMajor: specVersionMajor,
 		SpecErrata:       specErrata}
 
-	if err := helper(stream, order, eventData); err != nil {
+	if err := helper(stream, eventData); err != nil {
 		return nil, err
 	}
 
@@ -157,7 +157,7 @@ func (e *AsciiStringEventData) Bytes() []byte {
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5 "EV_NO_ACTION Event Types")
-func makeEventDataNoAction(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+func makeEventDataNoAction(data []byte) (out EventData, n int, err error) {
 	stream := bytes.NewReader(data)
 
 	// Signature field
@@ -168,31 +168,31 @@ func makeEventDataNoAction(data []byte, order binary.ByteOrder) (out EventData, 
 
 	switch *(*string)(unsafe.Pointer(&signature)) {
 	case "Spec ID Event00\x00":
-		d, e := makeSpecIdEvent(stream, order, data, parsePCClientSpecIdEvent)
+		d, e := makeSpecIdEvent(stream, data, parsePCClientSpecIdEvent)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "Spec ID Event02\x00":
-		d, e := makeSpecIdEvent(stream, order, data, parseEFI_1_2_SpecIdEvent)
+		d, e := makeSpecIdEvent(stream, data, parseEFI_1_2_SpecIdEvent)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "Spec ID Event03\x00":
-		d, e := makeSpecIdEvent(stream, order, data, parseEFI_2_SpecIdEvent)
+		d, e := makeSpecIdEvent(stream, data, parseEFI_2_SpecIdEvent)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "SP800-155 Event\x00":
-		d, e := makeBIMReferenceManifestEvent(stream, order, data)
+		d, e := makeBIMReferenceManifestEvent(stream, data)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "StartupLocality\x00":
-		d, e := makeStartupLocalityEvent(stream, order, data)
+		d, e := makeStartupLocalityEvent(stream, data)
 		if d != nil {
 			out = d
 		}
@@ -214,19 +214,19 @@ func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func makeEventDataTCG(eventType EventType, data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
+func makeEventDataTCG(eventType EventType, data []byte) (out EventData, n int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
-		return makeEventDataNoAction(data, order)
+		return makeEventDataNoAction(data)
 	case EventTypeAction, EventTypeEFIAction:
 		return makeEventDataAction(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		return makeEventDataEFIVariable(data, eventType, order)
+		return makeEventDataEFIVariable(data, eventType)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
-		return makeEventDataEFIImageLoad(data, order)
+		return makeEventDataEFIImageLoad(data)
 	case EventTypeEFIGPTEvent:
-		return makeEventDataEFIGPT(data, order)
+		return makeEventDataEFIGPT(data)
 	default:
 	}
 	return nil, 0, nil

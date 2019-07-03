@@ -2,7 +2,6 @@ package tcglog
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 )
@@ -45,7 +44,7 @@ func bytesRead(stream *bytes.Reader) int {
 }
 
 func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder, options *LogOptions) (EventData, int, error) {
+	options *LogOptions) (EventData, int, error) {
 	switch {
 	case options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9):
 		if d, n, e := makeEventDataGRUB(pcrIndex, eventType, data); d != nil {
@@ -53,13 +52,12 @@ func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte,
 		}
 		fallthrough
 	default:
-		return makeEventDataTCG(eventType, data, order)
+		return makeEventDataTCG(eventType, data)
 	}
 }
 
-func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,
-	order binary.ByteOrder, options *LogOptions) (EventData, int) {
-	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, order, options)
+func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte,	options *LogOptions) (EventData, int) {
+	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, options)
 
 	if err != nil {
 		if err == io.EOF {

@@ -47,14 +47,13 @@ func wrapLogReadError(origErr error, partial bool) error {
 type stream_1_2 struct {
 	r         io.ReadSeeker
 	options   LogOptions
-	byteOrder binary.ByteOrder
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
 func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 	var pcrIndex PCRIndex
-	if err := binary.Read(s.r, s.byteOrder, &pcrIndex); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &pcrIndex); err != nil {
 		return nil, 0, wrapLogReadError(err, false)
 	}
 
@@ -63,7 +62,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 	}
 
 	var eventType EventType
-	if err := binary.Read(s.r, s.byteOrder, &eventType); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &eventType); err != nil {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
@@ -75,7 +74,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 	digests[AlgorithmSha1] = digest
 
 	var eventSize uint32
-	if err := binary.Read(s.r, s.byteOrder, &eventSize); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &eventSize); err != nil {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
@@ -84,7 +83,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
@@ -97,7 +96,6 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 type stream_2 struct {
 	r              io.ReadSeeker
 	options        LogOptions
-	byteOrder      binary.ByteOrder
 	algSizes       []EFISpecIdEventAlgorithmSize
 	readFirstEvent bool
 }
@@ -107,12 +105,12 @@ type stream_2 struct {
 func (s *stream_2) readNextEvent() (*Event, int, error) {
 	if !s.readFirstEvent {
 		s.readFirstEvent = true
-		stream := stream_1_2{r: s.r, byteOrder: s.byteOrder}
+		stream := stream_1_2{r: s.r}
 		return stream.readNextEvent()
 	}
 
 	var pcrIndex PCRIndex
-	if err := binary.Read(s.r, s.byteOrder, &pcrIndex); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &pcrIndex); err != nil {
 		return nil, 0, wrapLogReadError(err, false)
 	}
 
@@ -121,12 +119,12 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}
 
 	var eventType EventType
-	if err := binary.Read(s.r, s.byteOrder, &eventType); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &eventType); err != nil {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
 	var count uint32
-	if err := binary.Read(s.r, s.byteOrder, &count); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &count); err != nil {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
@@ -134,7 +132,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 
 	for i := uint32(0); i < count; i++ {
 		var algorithmId AlgorithmId
-		if err := binary.Read(s.r, s.byteOrder, &algorithmId); err != nil {
+		if err := binary.Read(s.r, binary.LittleEndian, &algorithmId); err != nil {
 			return nil, 0, wrapLogReadError(err, true)
 		}
 
@@ -176,7 +174,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}
 
 	var eventSize uint32
-	if err := binary.Read(s.r, s.byteOrder, &eventSize); err != nil {
+	if err := binary.Read(s.r, binary.LittleEndian, &eventSize); err != nil {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
@@ -185,7 +183,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := makeEventData(pcrIndex, eventType, event, s.byteOrder, &s.options)
+	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options)
 
 	return &Event{
 		PCRIndex:  pcrIndex,
@@ -221,7 +219,6 @@ func isSpecIdEvent(event *Event) (out bool) {
 type Log struct {
 	Spec         Spec
 	Algorithms   []AlgorithmId
-	byteOrder    binary.ByteOrder
 	stream       stream
 	failed       bool
 	indexTracker map[PCRIndex]uint
@@ -233,9 +230,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 		return nil, err
 	}
 
-	var byteOrder binary.ByteOrder = binary.LittleEndian
-
-	var stream stream = &stream_1_2{r: r, options: options, byteOrder: byteOrder}
+	var stream stream = &stream_1_2{r: r, options: options}
 	event, _, err := stream.readNextEvent()
 	if err != nil {
 		return nil, wrapLogReadError(err, true)
@@ -264,7 +259,6 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 		}
 		stream = &stream_2{r: r,
 			options:        options,
-			byteOrder:      byteOrder,
 			algSizes:       digestSizes,
 			readFirstEvent: false}
 	} else {
@@ -278,7 +272,6 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 
 	return &Log{Spec: spec,
 		Algorithms:   algorithms,
-		byteOrder:    byteOrder,
 		stream:       stream,
 		failed:       false,
 		indexTracker: map[PCRIndex]uint{}}, nil

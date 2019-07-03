@@ -20,12 +20,12 @@ var (
 // buffer. We need to know the size of the buffer so we can calculate the slice to pass it, but we
 // need to decode it first)
 // This will decode the specified number of characters or until a null character is found
-func decodeUTF16ToString(stream io.Reader, count uint64, order binary.ByteOrder) (string, error) {
+func decodeUTF16ToString(stream io.Reader, count uint64) (string, error) {
 	var builder strings.Builder
 
 	for i := uint64(0); i < count; i++ {
 		var c1 uint16
-		if err := binary.Read(stream, order, &c1); err != nil {
+		if err := binary.Read(stream, binary.LittleEndian, &c1); err != nil {
 			return "", err
 		}
 		if c1 == 0x0000 {
@@ -37,7 +37,7 @@ func decodeUTF16ToString(stream io.Reader, count uint64, order binary.ByteOrder)
 		}
 		if c1 >= surr1 && c1 < surr2 {
 			var c2 uint16
-			if err := binary.Read(stream, order, &c2); err != nil {
+			if err := binary.Read(stream, binary.LittleEndian, &c2); err != nil {
 				return "", err
 			}
 			if c2 >= surr2 && c2 < surr3 {
@@ -63,14 +63,14 @@ func (g *EFIGUID) String() string {
 	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, g.Data4[0:2], g.Data4[2:8])
 }
 
-func readEFIGUID(stream io.Reader, order binary.ByteOrder, out *EFIGUID) error {
-	if err := binary.Read(stream, order, &out.Data1); err != nil {
+func readEFIGUID(stream io.Reader, out *EFIGUID) error {
+	if err := binary.Read(stream, binary.LittleEndian, &out.Data1); err != nil {
 		return err
 	}
-	if err := binary.Read(stream, order, &out.Data2); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &out.Data2); err != nil {
 		return err
 	}
-	if err := binary.Read(stream, order, &out.Data3); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &out.Data3); err != nil {
 		return err
 	}
 	if _, err := io.ReadFull(stream, out.Data4[:]); err != nil {
@@ -79,11 +79,11 @@ func readEFIGUID(stream io.Reader, order binary.ByteOrder, out *EFIGUID) error {
 	return nil
 }
 
-func makeEFIGUID(data [16]byte, order binary.ByteOrder) *EFIGUID {
+func makeEFIGUID(data [16]byte) *EFIGUID {
 	stream := bytes.NewReader(data[:])
 
 	var out EFIGUID
-	if err := readEFIGUID(stream, order, &out); err != nil {
+	if err := readEFIGUID(stream, &out); err != nil {
 		return nil
 	}
 
@@ -92,17 +92,17 @@ func makeEFIGUID(data [16]byte, order binary.ByteOrder) *EFIGUID {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) error {
+func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecEFI_1_2
 
 	// TCG_EfiSpecIdEventStruct.uintnSize
-	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &eventData.uintnSize); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_EfiSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
@@ -117,17 +117,17 @@ func parseEFI_1_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventDat
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData *SpecIdEventData) error {
+func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecEFI_2
 
 	// TCG_EfiSpecIdEvent.uintnSize
-	if err := binary.Read(stream, order, &eventData.uintnSize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &eventData.uintnSize); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
 	// TCG_EfiSpecIdEvent.numberOfAlgorithms
 	var numberOfAlgorithms uint32
-	if err := binary.Read(stream, order, &numberOfAlgorithms); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &numberOfAlgorithms); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
@@ -140,13 +140,13 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData 
 	for i := uint32(0); i < numberOfAlgorithms; i++ {
 		// TCG_EfiSpecIdEvent.digestSizes[i].algorithmId
 		var algorithmId AlgorithmId
-		if err := binary.Read(stream, order, &algorithmId); err != nil {
+		if err := binary.Read(stream, binary.LittleEndian, &algorithmId); err != nil {
 			return wrapSpecIdEventReadError(err)
 		}
 
 		// TCG_EfiSpecIdEvent.digestSizes[i].digestSize
 		var digestSize uint16
-		if err := binary.Read(stream, order, &digestSize); err != nil {
+		if err := binary.Read(stream, binary.LittleEndian, &digestSize); err != nil {
 			return wrapSpecIdEventReadError(err)
 		}
 
@@ -161,7 +161,7 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, order binary.ByteOrder, eventData 
 
 	// TCG_EfiSpecIdEvent.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, order, &vendorInfoSize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 
@@ -189,10 +189,9 @@ func (e *StartupLocalityEventData) Bytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func makeStartupLocalityEvent(stream io.Reader, order binary.ByteOrder,
-	data []byte) (*StartupLocalityEventData, error) {
+func makeStartupLocalityEvent(stream io.Reader, data []byte) (*StartupLocalityEventData, error) {
 	var locality uint8
-	if err := binary.Read(stream, order, &locality); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &locality); err != nil {
 		return nil, err
 	}
 
@@ -218,15 +217,14 @@ func (e *BIMReferenceManifestEventData) Bytes() []byte {
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func makeBIMReferenceManifestEvent(stream io.Reader, order binary.ByteOrder,
-	data []byte) (*BIMReferenceManifestEventData, error) {
+func makeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*BIMReferenceManifestEventData, error) {
 	var vendorId uint32
-	if err := binary.Read(stream, order, &vendorId); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &vendorId); err != nil {
 		return nil, err
 	}
 
 	var guid EFIGUID
-	if err := readEFIGUID(stream, order, &guid); err != nil {
+	if err := readEFIGUID(stream, &guid); err != nil {
 		return nil, err
 	}
 
@@ -251,26 +249,25 @@ func (e *EFIVariableEventData) Bytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
-func makeEventDataEFIVariableImpl(data []byte, eventType EventType, order binary.ByteOrder) (*EFIVariableEventData,
-	int, error) {
+func makeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVariableEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	var guid EFIGUID
-	if err := readEFIGUID(stream, order, &guid); err != nil {
+	if err := readEFIGUID(stream, &guid); err != nil {
 		return nil, 0, err
 	}
 
 	var unicodeNameLength uint64
-	if err := binary.Read(stream, order, &unicodeNameLength); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &unicodeNameLength); err != nil {
 		return nil, 0, err
 	}
 
 	var variableDataLength uint64
-	if err := binary.Read(stream, order, &variableDataLength); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &variableDataLength); err != nil {
 		return nil, 0, err
 	}
 
-	unicodeName, err := decodeUTF16ToString(stream, unicodeNameLength, order)
+	unicodeName, err := decodeUTF16ToString(stream, unicodeNameLength)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -286,9 +283,8 @@ func makeEventDataEFIVariableImpl(data []byte, eventType EventType, order binary
 		VariableData: variableData}, bytesRead(stream), nil
 }
 
-func makeEventDataEFIVariable(data []byte, eventType EventType, order binary.ByteOrder) (out EventData,
-	n int, err error) {
-	d, n, err := makeEventDataEFIVariableImpl(data, eventType, order)
+func makeEventDataEFIVariable(data []byte, eventType EventType) (out EventData,	n int, err error) {
+	d, n, err := makeEventDataEFIVariableImpl(data, eventType)
 	if d != nil {
 		out = d
 	}
@@ -342,7 +338,6 @@ type efiDevicePathNode struct {
 	t       efiDevicePathNodeType
 	subType uint8
 	data    []byte
-	order   binary.ByteOrder
 	next    *efiDevicePathNode
 }
 
@@ -350,7 +345,7 @@ func firmwareDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
 	var name EFIGUID
-	if err := readEFIGUID(stream, n.order, &name); err != nil {
+	if err := readEFIGUID(stream, &name); err != nil {
 		return ""
 	}
 
@@ -377,12 +372,12 @@ func acpiDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
 	var hid uint32
-	if err := binary.Read(stream, n.order, &hid); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &hid); err != nil {
 		return ""
 	}
 
 	var uid uint32
-	if err := binary.Read(stream, n.order, &uid); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &uid); err != nil {
 		return ""
 	}
 
@@ -406,12 +401,12 @@ func pciDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
 	var function uint8
-	if err := binary.Read(stream, n.order, &function); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &function); err != nil {
 		return ""
 	}
 
 	var device uint8
-	if err := binary.Read(stream, n.order, &device); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &device); err != nil {
 		return ""
 	}
 
@@ -422,7 +417,7 @@ func luDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
 	var lun uint8
-	if err := binary.Read(stream, n.order, &lun); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &lun); err != nil {
 		return ""
 	}
 
@@ -433,17 +428,17 @@ func hardDriveDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
 	var partNumber uint32
-	if err := binary.Read(stream, n.order, &partNumber); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &partNumber); err != nil {
 		return ""
 	}
 
 	var partStart uint64
-	if err := binary.Read(stream, n.order, &partStart); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &partStart); err != nil {
 		return ""
 	}
 
 	var partSize uint64
-	if err := binary.Read(stream, n.order, &partSize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &partSize); err != nil {
 		return ""
 	}
 
@@ -453,12 +448,12 @@ func hardDriveDevicePathNodeToString(n *efiDevicePathNode) string {
 	}
 
 	var partFormat uint8
-	if err := binary.Read(stream, n.order, &partFormat); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &partFormat); err != nil {
 		return ""
 	}
 
 	var sigType uint8
-	if err := binary.Read(stream, n.order, &sigType); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &sigType); err != nil {
 		return ""
 	}
 
@@ -466,9 +461,9 @@ func hardDriveDevicePathNodeToString(n *efiDevicePathNode) string {
 
 	switch sigType {
 	case 0x01:
-		fmt.Fprintf(&builder, "HD(%d,MBR,0x%08x,", partNumber, n.order.Uint32(sig[:]))
+		fmt.Fprintf(&builder, "HD(%d,MBR,0x%08x,", partNumber, binary.LittleEndian.Uint32(sig[:]))
 	case 0x02:
-		fmt.Fprintf(&builder, "HD(%d,GPT,%s,", partNumber, makeEFIGUID(sig, n.order))
+		fmt.Fprintf(&builder, "HD(%d,GPT,%s,", partNumber, makeEFIGUID(sig))
 	default:
 		fmt.Fprintf(&builder, "HD(%d,%d,0,", partNumber, sigType)
 	}
@@ -481,17 +476,17 @@ func sataDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
 	var hbaPortNumber uint16
-	if err := binary.Read(stream, n.order, &hbaPortNumber); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &hbaPortNumber); err != nil {
 		return ""
 	}
 
 	var portMultiplierPortNumber uint16
-	if err := binary.Read(stream, n.order, &portMultiplierPortNumber); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &portMultiplierPortNumber); err != nil {
 		return ""
 	}
 
 	var lun uint16
-	if err := binary.Read(stream, n.order, &lun); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &lun); err != nil {
 		return ""
 	}
 
@@ -501,7 +496,7 @@ func sataDevicePathNodeToString(n *efiDevicePathNode) string {
 func filePathDevicePathNodeToString(n *efiDevicePathNode) string {
 	stream := bytes.NewReader(n.data)
 
-	s, err := decodeUTF16ToString(stream, uint64(len(n.data)), n.order)
+	s, err := decodeUTF16ToString(stream, uint64(len(n.data)))
 	if err != nil {
 		return ""
 	}
@@ -516,12 +511,12 @@ func relOffsetRangePathNodeToString(n *efiDevicePathNode) string {
 	}
 
 	var start uint64
-	if err := binary.Read(stream, n.order, &start); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &start); err != nil {
 		return ""
 	}
 
 	var end uint64
-	if err := binary.Read(stream, n.order, &end); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &end); err != nil {
 		return ""
 	}
 
@@ -569,19 +564,19 @@ func (n *efiDevicePathNode) String() string {
 	return builder.String()
 }
 
-func readDevicePathNode(stream io.Reader, order binary.ByteOrder) *efiDevicePathNode {
+func readDevicePathNode(stream io.Reader) *efiDevicePathNode {
 	var t efiDevicePathNodeType
-	if err := binary.Read(stream, order, &t); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &t); err != nil {
 		return nil
 	}
 
 	var subType uint8
-	if err := binary.Read(stream, order, &subType); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &subType); err != nil {
 		return nil
 	}
 
 	var length uint16
-	if err := binary.Read(stream, order, &length); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &length); err != nil {
 		return nil
 	}
 
@@ -594,7 +589,7 @@ func readDevicePathNode(stream io.Reader, order binary.ByteOrder) *efiDevicePath
 		return nil
 	}
 
-	return &efiDevicePathNode{t: t, subType: subType, data: data, order: order}
+	return &efiDevicePathNode{t: t, subType: subType, data: data}
 }
 
 type EFIDevicePath struct {
@@ -612,12 +607,12 @@ func (p *EFIDevicePath) String() string {
 	return builder.String()
 }
 
-func readDevicePath(data []byte, order binary.ByteOrder) *EFIDevicePath {
+func readDevicePath(data []byte) *EFIDevicePath {
 	stream := bytes.NewReader(data)
 
 	var rootNode, lastNode *efiDevicePathNode
 	for {
-		node := readDevicePathNode(stream, order)
+		node := readDevicePathNode(stream)
 		if node == nil {
 			return &EFIDevicePath{}
 		}
@@ -657,26 +652,26 @@ func (e *EFIImageLoadEventData) Bytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
-func makeEventDataEFIImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIImageLoadEventData, int, error) {
+func makeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
-	if err := binary.Read(stream, order, &locationInMemory); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &locationInMemory); err != nil {
 		return nil, 0, err
 	}
 
 	var lengthInMemory uint64
-	if err := binary.Read(stream, order, &lengthInMemory); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &lengthInMemory); err != nil {
 		return nil, 0, err
 	}
 
 	var linkTimeAddress uint64
-	if err := binary.Read(stream, order, &linkTimeAddress); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &linkTimeAddress); err != nil {
 		return nil, 0, err
 	}
 
 	var devicePathLength uint64
-	if err := binary.Read(stream, order, &devicePathLength); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &devicePathLength); err != nil {
 		return nil, 0, err
 	}
 
@@ -686,7 +681,7 @@ func makeEventDataEFIImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIIma
 		return nil, 0, err
 	}
 
-	path := readDevicePath(devicePathBuf, order)
+	path := readDevicePath(devicePathBuf)
 
 	return &EFIImageLoadEventData{data: data,
 		LocationInMemory: locationInMemory,
@@ -695,8 +690,8 @@ func makeEventDataEFIImageLoadImpl(data []byte, order binary.ByteOrder) (*EFIIma
 		Path:             path}, bytesRead(stream), nil
 }
 
-func makeEventDataEFIImageLoad(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
-	d, n, err := makeEventDataEFIImageLoadImpl(data, order)
+func makeEventDataEFIImageLoad(data []byte) (out EventData, n int, err error) {
+	d, n, err := makeEventDataEFIImageLoadImpl(data)
 	if d != nil {
 		out = d
 	}
@@ -738,7 +733,7 @@ func (e *EFIGPTEventData) Bytes() []byte {
 	return e.data
 }
 
-func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventData, int, error) {
+func makeEventDataEFIGPTImpl(data []byte) (*EFIGPTEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{Header, MyLBA, AlternateLBA, FirstUsableLBA, LastUsableLBA}
@@ -748,7 +743,7 @@ func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventD
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader.DiskGUID
 	var diskGUID EFIGUID
-	if err := readEFIGUID(stream, order, &diskGUID); err != nil {
+	if err := readEFIGUID(stream, &diskGUID); err != nil {
 		return nil, 0, err
 	}
 
@@ -759,7 +754,7 @@ func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventD
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader.SizeOfPartitionEntry
 	var partEntrySize uint32
-	if err := binary.Read(stream, order, &partEntrySize); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &partEntrySize); err != nil {
 		return nil, 0, err
 	}
 
@@ -770,7 +765,7 @@ func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventD
 
 	// UEFI_GPT_DATA.NumberOfPartitions
 	var numberOfParts uint64
-	if err := binary.Read(stream, order, &numberOfParts); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &numberOfParts); err != nil {
 		return nil, 0, err
 	}
 
@@ -785,12 +780,12 @@ func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventD
 		entryStream := bytes.NewReader(entryData)
 
 		var typeGUID EFIGUID
-		if err := readEFIGUID(entryStream, order, &typeGUID); err != nil {
+		if err := readEFIGUID(entryStream, &typeGUID); err != nil {
 			return nil, 0, err
 		}
 
 		var uniqueGUID EFIGUID
-		if err := readEFIGUID(entryStream, order, &uniqueGUID); err != nil {
+		if err := readEFIGUID(entryStream, &uniqueGUID); err != nil {
 			return nil, 0, err
 		}
 
@@ -800,11 +795,11 @@ func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventD
 		}
 
 		var attrs uint64
-		if err := binary.Read(entryStream, order, &attrs); err != nil {
+		if err := binary.Read(entryStream, binary.LittleEndian, &attrs); err != nil {
 			return nil, 0, err
 		}
 
-		name, err := decodeUTF16ToString(entryStream, uint64(entryStream.Len()), order)
+		name, err := decodeUTF16ToString(entryStream, uint64(entryStream.Len()))
 		if err != nil {
 			return nil, 0, err
 		}
@@ -816,8 +811,8 @@ func makeEventDataEFIGPTImpl(data []byte, order binary.ByteOrder) (*EFIGPTEventD
 	return eventData, bytesRead(stream), nil
 }
 
-func makeEventDataEFIGPT(data []byte, order binary.ByteOrder) (out EventData, n int, err error) {
-	d, n, err := makeEventDataEFIGPTImpl(data, order)
+func makeEventDataEFIGPT(data []byte) (out EventData, n int, err error) {
+	d, n, err := makeEventDataEFIGPTImpl(data)
 	if d != nil {
 		out = d
 	}

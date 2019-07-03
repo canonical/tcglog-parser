@@ -71,7 +71,7 @@ func performHashExtendOperation(alg AlgorithmId, dest Digest, src Digest) Digest
 	return hash(scratch, alg)
 }
 
-func determineMeasuredBytes(event *Event, order binary.ByteOrder, efiVarBootQuirk bool) (out []byte) {
+func determineMeasuredBytes(event *Event, efiVarBootQuirk bool) (out []byte) {
 	switch d := event.Data.(type) {
 	case *opaqueEventData:
 		switch event.EventType {
@@ -79,7 +79,7 @@ func determineMeasuredBytes(event *Event, order binary.ByteOrder, efiVarBootQuir
 			EventTypeTableOfDevices, EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
 			out = event.Data.Bytes()
 		case EventTypeSeparator:
-			if !isSeparatorEventError(event, order) {
+			if !isSeparatorEventError(event) {
 				out = event.Data.Bytes()
 			}
 		}
@@ -108,7 +108,7 @@ func determineMeasuredBytes(event *Event, order binary.ByteOrder, efiVarBootQuir
 
 	if event.EventType == EventTypeSeparator {
 		out = make([]byte, 4)
-		order.PutUint32(out, separatorEventErrorValue)
+		binary.LittleEndian.PutUint32(out, separatorEventErrorValue)
 	}
 
 	return
@@ -131,7 +131,7 @@ type logValidator struct {
 func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *ValidatedEvent) {
 	efiVarBootQuirk := v.efiVarBootQuirkState == efiVarBootQuirkActive
 
-	measuredBytes := determineMeasuredBytes(ve.Event, v.log.byteOrder, efiVarBootQuirk)
+	measuredBytes := determineMeasuredBytes(ve.Event, efiVarBootQuirk)
 	if measuredBytes == nil {
 		return
 	}
@@ -139,7 +139,7 @@ func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *V
 	if ok, exp := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
 		if ve.Event.EventType == EventTypeEFIVariableBoot &&
 			v.efiVarBootQuirkState == efiVarBootQuirkIndeterminate {
-			measuredBytes = determineMeasuredBytes(ve.Event, v.log.byteOrder, true)
+			measuredBytes = determineMeasuredBytes(ve.Event, true)
 			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
 			if ok {
 				v.efiVarBootQuirkState = efiVarBootQuirkActive
