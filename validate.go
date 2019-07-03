@@ -224,8 +224,8 @@ func (v *logValidator) validateFull() (*LogValidateResult, error) {
 	}
 }
 
-func pcrIndexSliceToInts(s []PCRIndex) (out []int) {
-	for _, i := range s {
+func pcrListToInts(l PCRList) (out []int) {
+	for _, i := range l {
 		out = append(out, int(i))
 	}
 	return
@@ -233,15 +233,23 @@ func pcrIndexSliceToInts(s []PCRIndex) (out []int) {
 
 func (v *logValidator) readPCRsFromTPM2Device(rw io.ReadWriter) error {
 	for _, alg := range v.log.Algorithms {
-		pcrSelection := tpm2.PCRSelection{
-			Hash: tpm2.Algorithm(alg),
-			PCRs: pcrIndexSliceToInts(v.pcrs)}
-		res, err := tpm2.ReadPCRs(rw, pcrSelection)
-		if err != nil {
-			return err
-		}
-		for _, i := range v.pcrs {
-			v.tpmPCRValues[i][alg] = res[int(i)]
+		todo := v.pcrs
+		for len(todo) > 0 {
+			pcrSelection := tpm2.PCRSelection{
+				Hash: tpm2.Algorithm(alg),
+				PCRs: pcrListToInts(todo)}
+			res, err := tpm2.ReadPCRs(rw, pcrSelection)
+			if err != nil {
+				return err
+			}
+			todo = PCRList{}
+			for _, i := range v.pcrs {
+				if d, exists := res[int(i)]; exists {
+					v.tpmPCRValues[i][alg] = d
+				} else if _, exists := v.tpmPCRValues[i][alg]; !exists {
+					todo = append(todo, i)
+				}
+			}
 		}
 	}
 	return nil
@@ -299,7 +307,6 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 		}
 		pcrs = append(pcrs, i)
 	}
-	fmt.Println(pcrs)
 
 	v := &logValidator{log: log,
 		pcrs:         pcrs,
