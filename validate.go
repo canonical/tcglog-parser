@@ -36,6 +36,7 @@ type LogValidateResult struct {
 	EfiVariableBootQuirk bool
 	ValidatedEvents      []*ValidatedEvent
 	Spec                 Spec
+	Algorithms	     []AlgorithmId
 	LogConsistencyErrors []LogConsistencyError
 }
 
@@ -192,6 +193,7 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 	out.EfiVariableBootQuirk = v.efiVarBootQuirkState == efiVarBootQuirkActive
 	out.ValidatedEvents = v.validatedEvents
 	out.Spec = v.log.Spec
+	out.Algorithms = v.log.Algorithms
 
 	for _, i := range v.pcrs {
 		for _, alg := range v.log.Algorithms {
