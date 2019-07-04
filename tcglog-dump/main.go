@@ -41,18 +41,9 @@ func shouldDisplayEvent(event *tcglog.Event) bool {
 func main() {
 	flag.Parse()
 
-	var algorithmId tcglog.AlgorithmId
-	switch alg {
-	case "sha1":
-		algorithmId = tcglog.AlgorithmSha1
-	case "sha256":
-		algorithmId = tcglog.AlgorithmSha256
-	case "sha384":
-		algorithmId = tcglog.AlgorithmSha384
-	case "sha512":
-		algorithmId = tcglog.AlgorithmSha512
-	default:
-		fmt.Fprintf(os.Stderr, "Unrecognized algorithm\n")
+	algorithmId, err := tcglog.ParseAlgorithm(alg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 

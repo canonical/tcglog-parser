@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -24,18 +23,9 @@ func (l *AlgorithmIdArgList) String() string {
 }
 
 func (l *AlgorithmIdArgList) Set(value string) error {
-	var algorithmId tcglog.AlgorithmId
-	switch value {
-	case "sha1":
-		algorithmId = tcglog.AlgorithmSha1
-	case "sha256":
-		algorithmId = tcglog.AlgorithmSha256
-	case "sha384":
-		algorithmId = tcglog.AlgorithmSha384
-	case "sha512":
-		algorithmId = tcglog.AlgorithmSha512
-	default:
-		return errors.New("Unrecognized algorithm")
+	algorithmId, err := tcglog.ParseAlgorithm(value)
+	if err != nil {
+		return err
 	}
 	*l = append(*l, algorithmId)
 	return nil

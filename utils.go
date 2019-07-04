@@ -84,3 +84,18 @@ func contains(slice interface{}, elem interface{}) bool {
 	}
 	return false
 }
+
+func ParseAlgorithm(alg string) (AlgorithmId, error) {
+	switch alg {
+	case "sha1":
+		return AlgorithmSha1, nil
+	case "sha256":
+		return AlgorithmSha256, nil
+	case "sha384":
+		return AlgorithmSha384, nil
+	case "sha512":
+		return AlgorithmSha512, nil
+	default:
+		return 0, fmt.Errorf("Unrecognized algorithm \"%s\"", alg)
+	}
+}
