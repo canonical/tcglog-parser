@@ -36,7 +36,7 @@ func main() {
 		}
 	}
 
-	result, err := tcglog.ValidateLog(tcglog.LogValidateOptions{
+	result, err := tcglog.ParseAndValidateLog(tcglog.LogValidateOptions{
 		PCRList:    pcrs,
 		EnableGrub: withGrub})
 	if err != nil {

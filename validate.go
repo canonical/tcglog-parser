@@ -209,7 +209,7 @@ func (v *logValidator) createResult() (out *LogValidateResult) {
 	return
 }
 
-func (v *logValidator) validateFull() (*LogValidateResult, error) {
+func (v *logValidator) run() (*LogValidateResult, error) {
 	for {
 		event, remaining, err := v.log.nextEventInternal()
 		if err != nil {
@@ -277,7 +277,7 @@ func (v *logValidator) readPCRs(id int) error {
 	return errors.New("failed to read PCR contents - couldn't open any TPM device")
 }
 
-func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
+func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 	path := fmt.Sprintf("/sys/kernel/security/tpm%d/binary_bios_measurements", options.TPMId)
 	file, err := os.Open(path)
 	if err != nil {
@@ -322,5 +322,5 @@ func ValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 		return nil, err
 	}
 
-	return v.validateFull()
+	return v.run()
 }
