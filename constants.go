@@ -54,7 +54,7 @@ const (
 	SpecEFI_2         = 3
 )
 
-var (
+const (
 	separatorEventErrorValue uint32 = 1
 )
 

@@ -62,3 +62,11 @@ type InvalidOptionError struct {
 func (e *InvalidOptionError) Error() string {
 	return fmt.Sprintf("invalid option (%s)", e.msg)
 }
+
+type TPMCommError struct {
+	OrigError error
+}
+
+func (e *TPMCommError) Error() string {
+	return fmt.Sprintf("error whilst communicating with TPM (%v)", e.OrigError)
+}

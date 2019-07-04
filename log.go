@@ -27,12 +27,6 @@ type stream interface {
 	readNextEvent() (*Event, int, error)
 }
 
-const maxPCRIndex PCRIndex = 31
-
-func isPCRIndexInRange(index PCRIndex) bool {
-	return index <= maxPCRIndex
-}
-
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:

@@ -282,14 +282,14 @@ func (v *logValidator) readPCRs(id int) error {
 		return v.readPCRsFromTPM1Device(rw)
 	}
 
-	return errors.New("failed to read PCR contents - couldn't open any TPM device")
+	return errors.New("couldn't open TPM device")
 }
 
 func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 	path := fmt.Sprintf("/sys/kernel/security/tpm%d/binary_bios_measurements", options.TPMId)
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, &LogReadError{OrigError: err}
 	}
 
 	log, err := NewLogFromFile(file, LogOptions{EnableGrub: options.EnableGrub})
@@ -302,7 +302,10 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 	var pcrs []PCRIndex
 	for _, i := range tmp {
 		if contains(pcrs, i) {
-			continue
+			return nil, &InvalidOptionError{msg: fmt.Sprintf("duplicate entries for PCR %d", i)}
+		}
+		if !isPCRIndexInRange(i) {
+			return nil, &InvalidOptionError{msg: fmt.Sprintf("PCR index out-of-range (%d)", i)}
 		}
 		pcrs = append(pcrs, i)
 	}
@@ -332,7 +335,7 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 	}
 
 	if err := v.readPCRs(options.TPMId); err != nil {
-		return nil, err
+		return nil, &TPMCommError{OrigError: err}
 	}
 
 	return v.run()

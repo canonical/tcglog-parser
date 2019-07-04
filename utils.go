@@ -99,3 +99,8 @@ func ParseAlgorithm(alg string) (AlgorithmId, error) {
 		return 0, fmt.Errorf("Unrecognized algorithm \"%s\"", alg)
 	}
 }
+
+func isPCRIndexInRange(index PCRIndex) bool {
+	const maxPCRIndex PCRIndex = 31
+	return index <= maxPCRIndex
+}
