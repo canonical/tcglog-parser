@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -66,4 +67,20 @@ func (l *PCRArgList) Set(value string) error {
 	}
 	*l = append(*l, PCRIndex(v))
 	return nil
+}
+
+func contains(slice interface{}, elem interface{}) bool {
+	sv := reflect.ValueOf(slice)
+	if sv.Kind() != reflect.Slice {
+		panic(fmt.Sprintf("Invalid kind - expected a slice (got %s)", sv.Kind()))
+	}
+	if sv.Type().Elem() != reflect.ValueOf(elem).Type() {
+		panic(fmt.Sprintf("Type mismatch (%s vs %s)", sv.Type().Elem(), reflect.ValueOf(elem).Type()))
+	}
+	for i := 0; i < sv.Len(); i++ {
+		if sv.Index(i).Interface() == elem {
+			return true
+		}
+	}
+	return false
 }

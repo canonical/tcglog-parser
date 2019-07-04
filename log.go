@@ -320,13 +320,7 @@ func (l *Log) nextEventInternal() (*Event, int, error) {
 }
 
 func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
-	for _, a := range l.Algorithms {
-		if a == alg {
-			return true
-		}
-	}
-
-	return false
+	return contains(l.Algorithms, alg)
 }
 
 func (l *Log) NextEvent() (event *Event, err error) {

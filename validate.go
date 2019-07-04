@@ -36,7 +36,7 @@ type LogValidateResult struct {
 	EfiVariableBootQuirk bool
 	ValidatedEvents      []*ValidatedEvent
 	Spec                 Spec
-	Algorithms	     []AlgorithmId
+	Algorithms           []AlgorithmId
 	LogConsistencyErrors []LogConsistencyError
 }
 
@@ -119,6 +119,7 @@ func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte)
 type logValidator struct {
 	log                  *Log
 	pcrs                 []PCRIndex
+	algorithms           []AlgorithmId
 	logPCRValues         map[PCRIndex]DigestMap
 	tpmPCRValues         map[PCRIndex]DigestMap
 	efiVarBootQuirkState efiVarBootQuirkState
@@ -172,6 +173,10 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 	}
 
 	for alg, digest := range event.Digests {
+		if !contains(v.algorithms, alg) {
+			continue
+		}
+
 		v.logPCRValues[event.PCRIndex][alg] =
 			performHashExtendOperation(alg, v.logPCRValues[event.PCRIndex][alg], digest)
 
@@ -233,7 +238,7 @@ func pcrIndexListToIntList(l []PCRIndex) (out []int) {
 }
 
 func (v *logValidator) readPCRsFromTPM2Device(rw io.ReadWriter) error {
-	for _, alg := range v.log.Algorithms {
+	for _, alg := range v.algorithms {
 		todo := v.pcrs
 		for len(todo) > 0 {
 			pcrSelection := tpm2.PCRSelection{
@@ -296,26 +301,31 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 	sort.SliceStable(tmp, func(i, j int) bool { return tmp[i] < tmp[j] })
 	var pcrs []PCRIndex
 	for _, i := range tmp {
-		found := false
-		for _, j := range pcrs {
-			if i == j {
-				found = true
-				break
-			}
-		}
-		if found {
+		if contains(pcrs, i) {
 			continue
 		}
 		pcrs = append(pcrs, i)
 	}
 
+	algorithms := options.Algorithms
+	if len(algorithms) == 0 {
+		algorithms = log.Algorithms
+	}
+	for _, alg := range algorithms {
+		if !contains(log.Algorithms, alg) {
+			return nil, &InvalidOptionError{
+				msg: fmt.Sprintf("log doesn't contain entries for %s algorithm", alg)}
+		}
+	}
+
 	v := &logValidator{log: log,
 		pcrs:         pcrs,
+		algorithms:   algorithms,
 		logPCRValues: make(map[PCRIndex]DigestMap),
 		tpmPCRValues: make(map[PCRIndex]DigestMap)}
 	for _, i := range pcrs {
 		v.logPCRValues[i] = DigestMap{}
-		for _, alg := range log.Algorithms {
+		for _, alg := range algorithms {
 			v.logPCRValues[i][alg] = make(Digest, knownAlgorithms[alg])
 		}
 		v.tpmPCRValues[i] = DigestMap{}

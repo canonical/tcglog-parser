@@ -54,3 +54,11 @@ func (e *DuplicateDigestValueError) Error() string {
 	return fmt.Sprintf("crypto-agile log entry contains more than one digest value for algorithm %s",
 		e.Algorithm)
 }
+
+type InvalidOptionError struct {
+	msg string
+}
+
+func (e *InvalidOptionError) Error() string {
+	return fmt.Sprintf("invalid option (%s)", e.msg)
+}

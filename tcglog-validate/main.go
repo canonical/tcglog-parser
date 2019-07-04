@@ -1,23 +1,59 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/chrisccoulson/tcglog-parser"
 )
+
+type AlgorithmIdArgList []tcglog.AlgorithmId
+
+func (l *AlgorithmIdArgList) String() string {
+	var builder strings.Builder
+	for i, alg := range *l {
+		if i > 0 {
+			fmt.Fprintf(&builder, ", ")
+		}
+		fmt.Fprintf(&builder, "%s", alg)
+	}
+	return builder.String()
+}
+
+func (l *AlgorithmIdArgList) Set(value string) error {
+	var algorithmId tcglog.AlgorithmId
+	switch value {
+	case "sha1":
+		algorithmId = tcglog.AlgorithmSha1
+	case "sha256":
+		algorithmId = tcglog.AlgorithmSha256
+	case "sha384":
+		algorithmId = tcglog.AlgorithmSha384
+	case "sha512":
+		algorithmId = tcglog.AlgorithmSha512
+	default:
+		return errors.New("Unrecognized algorithm")
+	}
+	*l = append(*l, algorithmId)
+	return nil
+}
 
 var (
 	withGrub      bool
 	noDefaultPcrs bool
 	pcrs          tcglog.PCRArgList
+	algorithms    AlgorithmIdArgList
 )
 
 func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.Var(&pcrs, "pcr", "Validate log entries for the specified PCR. Can be specified multiple times")
+	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified "+
+		"multiple times")
 }
 
 func main() {
@@ -38,6 +74,7 @@ func main() {
 
 	result, err := tcglog.ParseAndValidateLog(tcglog.LogValidateOptions{
 		PCRs:       []tcglog.PCRIndex(pcrs),
+		Algorithms: algorithms,
 		EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to validate log file: %v\n", err)
