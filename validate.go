@@ -126,12 +126,12 @@ type logValidator struct {
 	validatedEvents      []*ValidatedEvent
 }
 
-func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *ValidatedEvent) {
+func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *ValidatedEvent) bool {
 	efiVarBootQuirk := v.efiVarBootQuirkState == efiVarBootQuirkActive
 
 	measuredBytes := determineMeasuredBytes(ve.Event, efiVarBootQuirk)
 	if measuredBytes == nil {
-		return
+		return false
 	}
 
 	if ok, exp := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
@@ -158,6 +158,8 @@ func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *V
 		v.efiVarBootQuirkState == efiVarBootQuirkIndeterminate {
 		v.efiVarBootQuirkState = efiVarBootQuirkInactive
 	}
+
+	return true
 }
 
 func (v *logValidator) processEvent(event *Event, remaining int) {
@@ -172,6 +174,7 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		return
 	}
 
+	informational := false
 	for alg, digest := range event.Digests {
 		if !contains(v.algorithms, alg) {
 			continue
@@ -180,10 +183,14 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		v.logPCRValues[event.PCRIndex][alg] =
 			performHashExtendOperation(alg, v.logPCRValues[event.PCRIndex][alg], digest)
 
-		v.checkDigestForEvent(alg, digest, ve)
+		if informational {
+			continue
+		}
+
+		informational = !v.checkDigestForEvent(alg, digest, ve)
 	}
 
-	if remaining > 0 {
+	if remaining > 0 && !informational {
 		end := len(event.Data.Bytes())
 		if ve.EfiVariableAuthorityHasUnmeasuredByte {
 			end -= 1
