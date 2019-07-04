@@ -46,9 +46,9 @@ func hash(data []byte, alg AlgorithmId) []byte {
 	}
 }
 
-type PCRList []PCRIndex
+type PCRArgList []PCRIndex
 
-func (l *PCRList) String() string {
+func (l *PCRArgList) String() string {
 	var builder strings.Builder
 	for i, pcr := range *l {
 		if i > 0 {
@@ -59,7 +59,7 @@ func (l *PCRList) String() string {
 	return builder.String()
 }
 
-func (l *PCRList) Set(value string) error {
+func (l *PCRArgList) Set(value string) error {
 	v, err := strconv.ParseUint(value, 10, 32)
 	if err != nil {
 		return err

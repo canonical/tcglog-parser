@@ -41,7 +41,8 @@ type LogValidateResult struct {
 
 type LogValidateOptions struct {
 	TPMId      int
-	PCRList    PCRList
+	PCRs       []PCRIndex
+	Algorithms []AlgorithmId
 	EnableGrub bool
 }
 
@@ -116,7 +117,7 @@ func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte)
 
 type logValidator struct {
 	log                  *Log
-	pcrs                 PCRList
+	pcrs                 []PCRIndex
 	logPCRValues         map[PCRIndex]DigestMap
 	tpmPCRValues         map[PCRIndex]DigestMap
 	efiVarBootQuirkState efiVarBootQuirkState
@@ -222,7 +223,7 @@ func (v *logValidator) run() (*LogValidateResult, error) {
 	}
 }
 
-func pcrListToInts(l PCRList) (out []int) {
+func pcrIndexListToIntList(l []PCRIndex) (out []int) {
 	for _, i := range l {
 		out = append(out, int(i))
 	}
@@ -235,12 +236,12 @@ func (v *logValidator) readPCRsFromTPM2Device(rw io.ReadWriter) error {
 		for len(todo) > 0 {
 			pcrSelection := tpm2.PCRSelection{
 				Hash: tpm2.Algorithm(alg),
-				PCRs: pcrListToInts(todo)}
+				PCRs: pcrIndexListToIntList(todo)}
 			res, err := tpm2.ReadPCRs(rw, pcrSelection)
 			if err != nil {
 				return err
 			}
-			todo = PCRList{}
+			todo = []PCRIndex{}
 			for _, i := range v.pcrs {
 				if d, exists := res[int(i)]; exists {
 					v.tpmPCRValues[i][alg] = d
@@ -289,9 +290,9 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 		return nil, err
 	}
 
-	tmp := options.PCRList
+	tmp := options.PCRs
 	sort.SliceStable(tmp, func(i, j int) bool { return tmp[i] < tmp[j] })
-	var pcrs PCRList
+	var pcrs []PCRIndex
 	for _, i := range tmp {
 		found := false
 		for _, j := range pcrs {

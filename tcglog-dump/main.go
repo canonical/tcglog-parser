@@ -14,7 +14,7 @@ var (
 	alg      string
 	verbose  bool
 	withGrub bool
-	pcrs     tcglog.PCRList
+	pcrs     tcglog.PCRArgList
 )
 
 func init() {

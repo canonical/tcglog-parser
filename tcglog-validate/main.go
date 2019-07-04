@@ -11,7 +11,7 @@ import (
 var (
 	withGrub      bool
 	noDefaultPcrs bool
-	pcrs          tcglog.PCRList
+	pcrs          tcglog.PCRArgList
 )
 
 func init() {
@@ -37,7 +37,7 @@ func main() {
 	}
 
 	result, err := tcglog.ParseAndValidateLog(tcglog.LogValidateOptions{
-		PCRList:    pcrs,
+		PCRs:       []tcglog.PCRIndex(pcrs),
 		EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to validate log file: %v\n", err)
