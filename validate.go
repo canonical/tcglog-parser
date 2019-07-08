@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/google/go-tpm/tpm"
@@ -41,7 +42,7 @@ type LogValidateResult struct {
 }
 
 type LogValidateOptions struct {
-	TPMId      int
+	TPMPath    string
 	PCRs       []PCRIndex
 	Algorithms []AlgorithmId
 	EnableGrub bool
@@ -279,8 +280,7 @@ func (v *logValidator) readPCRsFromTPM1Device(rw io.ReadWriter) error {
 	return nil
 }
 
-func (v *logValidator) readPCRs(id int) error {
-	path := fmt.Sprintf("/dev/tpm%d", id)
+func (v *logValidator) readPCRs(path string) error {
 	if rw, err := tpm2.OpenTPM(path); err == nil {
 		defer rw.Close()
 		return v.readPCRsFromTPM2Device(rw)
@@ -293,8 +293,16 @@ func (v *logValidator) readPCRs(id int) error {
 }
 
 func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
-	path := fmt.Sprintf("/sys/kernel/security/tpm%d/binary_bios_measurements", options.TPMId)
-	file, err := os.Open(path)
+	if options.TPMPath == "" {
+		return nil, &InvalidOptionError{msg: fmt.Sprintf("missing TPM path")}
+	}
+	if filepath.Dir(options.TPMPath) != "/dev" {
+		return nil, &InvalidOptionError{msg: fmt.Sprintf("expected TPM path to be a device node in /dev")}
+	}
+	tpmNode := filepath.Base(options.TPMPath)
+
+	logPath := fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", tpmNode)
+	file, err := os.Open(logPath)
 	if err != nil {
 		return nil, &LogReadError{OrigError: err}
 	}
@@ -341,7 +349,7 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 		v.tpmPCRValues[i] = DigestMap{}
 	}
 
-	if err := v.readPCRs(options.TPMId); err != nil {
+	if err := v.readPCRs(options.TPMPath); err != nil {
 		return nil, &TPMCommError{OrigError: err}
 	}
 

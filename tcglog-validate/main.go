@@ -34,6 +34,7 @@ func (l *AlgorithmIdArgList) Set(value string) error {
 var (
 	withGrub      bool
 	noDefaultPcrs bool
+	tpmPath       string
 	pcrs          tcglog.PCRArgList
 	algorithms    AlgorithmIdArgList
 )
@@ -41,6 +42,7 @@ var (
 func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
+	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.Var(&pcrs, "pcr", "Validate log entries for the specified PCR. Can be specified multiple times")
 	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified "+
 		"multiple times")
@@ -63,6 +65,7 @@ func main() {
 	}
 
 	result, err := tcglog.ParseAndValidateLog(tcglog.LogValidateOptions{
+		TPMPath:    tpmPath,
 		PCRs:       []tcglog.PCRIndex(pcrs),
 		Algorithms: algorithms,
 		EnableGrub: withGrub})
@@ -118,7 +121,6 @@ func main() {
 		fmt.Printf("\n")
 	}
 
-
 	seenUnexpectedDigests := false
 	for _, e := range result.ValidatedEvents {
 		if len(e.UnexpectedDigestValues) == 0 {
@@ -132,7 +134,7 @@ func main() {
 		}
 
 		for _, v := range e.UnexpectedDigestValues {
-			fmt.Printf("  - Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, " +
+			fmt.Printf("  - Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, "+
 				"got: %x\n", e.Event.Index, e.Event.PCRIndex, e.Event.EventType, v.Algorithm,
 				v.Expected, e.Event.Digests[v.Algorithm])
 		}
