@@ -49,10 +49,10 @@ type LogValidateOptions struct {
 
 type efiVarBootQuirkState uint
 
-var (
-	efiVarBootQuirkIndeterminate efiVarBootQuirkState = 0
-	efiVarBootQuirkInactive      efiVarBootQuirkState = 1
-	efiVarBootQuirkActive        efiVarBootQuirkState = 2
+const (
+	efiVarBootQuirkIndeterminate efiVarBootQuirkState = iota
+	efiVarBootQuirkInactive
+	efiVarBootQuirkActive
 )
 
 func doesEventTypeExtendPCR(t EventType) bool {

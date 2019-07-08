@@ -48,10 +48,10 @@ const (
 )
 
 const (
-	SpecUnknown  Spec = 0
-	SpecPCClient      = 1
-	SpecEFI_1_2       = 2
-	SpecEFI_2         = 3
+	SpecUnknown  Spec = iota
+	SpecPCClient
+	SpecEFI_1_2
+	SpecEFI_2
 )
 
 const (
