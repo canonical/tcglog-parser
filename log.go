@@ -47,7 +47,7 @@ func wrapLogReadError(origErr error, partial bool) error {
 		origErr = io.ErrUnexpectedEOF
 	}
 
-	return &LogReadError{origErr}
+	return LogReadError{origErr}
 }
 
 type stream_1_2 struct {
@@ -64,7 +64,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 	}
 
 	if !isPCRIndexInRange(pcrIndex) {
-		return nil, 0, &PCRIndexOutOfRangeError{pcrIndex}
+		return nil, 0, PCRIndexOutOfRangeError{pcrIndex}
 	}
 
 	var eventType EventType
@@ -122,7 +122,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}
 
 	if !isPCRIndexInRange(pcrIndex) {
-		return nil, 0, &PCRIndexOutOfRangeError{pcrIndex}
+		return nil, 0, PCRIndexOutOfRangeError{pcrIndex}
 	}
 
 	var eventType EventType
@@ -153,7 +153,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		}
 
 		if j == len(s.algSizes) {
-			return nil, 0, &UnrecognizedAlgorithmError{algorithmId}
+			return nil, 0, UnrecognizedAlgorithmError{algorithmId}
 		}
 
 		digest := make(Digest, digestSize)
@@ -162,14 +162,14 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		}
 
 		if _, exists := digests[algorithmId]; exists {
-			return nil, 0, &DuplicateDigestValueError{algorithmId}
+			return nil, 0, DuplicateDigestValueError{algorithmId}
 		}
 		digests[algorithmId] = digest
 	}
 
 	for _, algSize := range s.algSizes {
 		if _, exists := digests[algSize.AlgorithmId]; !exists {
-			return nil, 0, &MissingDigestValueError{algSize.AlgorithmId}
+			return nil, 0, MissingDigestValueError{algSize.AlgorithmId}
 		}
 	}
 
@@ -253,7 +253,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 		spec = d.Spec
 		digestSizes = d.DigestSizes
 	case *BrokenEventData:
-		if _, isSpecErr := d.Error.(*InvalidSpecIdEventError); isSpecErr {
+		if _, isSpecErr := d.Error.(InvalidSpecIdEventError); isSpecErr {
 			return nil, d.Error
 		}
 	}
@@ -287,7 +287,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 
 func (l *Log) nextEventInternal() (*Event, int, error) {
 	if l.failed {
-		return nil, 0, &LogReadError{errors.New("log status inconsistent due to a previous error")}
+		return nil, 0, LogReadError{errors.New("log status inconsistent due to a previous error")}
 	}
 
 	event, remaining, err := l.stream.readNextEvent()

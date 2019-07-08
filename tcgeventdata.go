@@ -59,10 +59,10 @@ func (e *SpecIdEventData) Bytes() []byte {
 
 func wrapSpecIdEventReadError(origErr error) error {
 	if origErr == io.EOF {
-		return &InvalidSpecIdEventError{"not enough data"}
+		return InvalidSpecIdEventError{"not enough data"}
 	}
 
-	return &InvalidSpecIdEventError{origErr.Error()}
+	return InvalidSpecIdEventError{origErr.Error()}
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf

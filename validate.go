@@ -294,17 +294,17 @@ func (v *logValidator) readPCRs(path string) error {
 
 func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
 	if options.TPMPath == "" {
-		return nil, &InvalidOptionError{msg: fmt.Sprintf("missing TPM path")}
+		return nil, InvalidOptionError{msg: fmt.Sprintf("missing TPM path")}
 	}
 	if filepath.Dir(options.TPMPath) != "/dev" {
-		return nil, &InvalidOptionError{msg: fmt.Sprintf("expected TPM path to be a device node in /dev")}
+		return nil, InvalidOptionError{msg: fmt.Sprintf("expected TPM path to be a device node in /dev")}
 	}
 	tpmNode := filepath.Base(options.TPMPath)
 
 	logPath := fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", tpmNode)
 	file, err := os.Open(logPath)
 	if err != nil {
-		return nil, &LogReadError{OrigError: err}
+		return nil, LogReadError{OrigError: err}
 	}
 
 	log, err := NewLogFromFile(file, LogOptions{EnableGrub: options.EnableGrub})
@@ -317,10 +317,10 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 	var pcrs []PCRIndex
 	for _, i := range tmp {
 		if contains(pcrs, i) {
-			return nil, &InvalidOptionError{msg: fmt.Sprintf("duplicate entries for PCR %d", i)}
+			return nil, InvalidOptionError{msg: fmt.Sprintf("duplicate entries for PCR %d", i)}
 		}
 		if !isPCRIndexInRange(i) {
-			return nil, &InvalidOptionError{msg: fmt.Sprintf("PCR index out-of-range (%d)", i)}
+			return nil, InvalidOptionError{msg: fmt.Sprintf("PCR index out-of-range (%d)", i)}
 		}
 		pcrs = append(pcrs, i)
 	}
@@ -331,7 +331,7 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 	}
 	for _, alg := range algorithms {
 		if !contains(log.Algorithms, alg) {
-			return nil, &InvalidOptionError{
+			return nil, InvalidOptionError{
 				msg: fmt.Sprintf("log doesn't contain entries for %s algorithm", alg)}
 		}
 	}
@@ -350,7 +350,7 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 	}
 
 	if err := v.readPCRs(options.TPMPath); err != nil {
-		return nil, &TPMCommError{OrigError: err}
+		return nil, TPMCommError{OrigError: err}
 	}
 
 	return v.run()
