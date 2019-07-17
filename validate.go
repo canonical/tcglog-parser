@@ -63,15 +63,11 @@ func doesEventTypeExtendPCR(t EventType) bool {
 	return true
 }
 
-func performHashExtendOperation(alg AlgorithmId, dest Digest, src Digest) Digest {
-	algLen := knownAlgorithms[alg]
-	scratch := make([]byte, algLen*2)
-	if len(dest) != 0 {
-		copy(scratch, dest)
-	}
-	copy(scratch[algLen:], src)
-
-	return hash(scratch, alg)
+func performHashExtendOperation(alg AlgorithmId, initial Digest, event Digest) Digest {
+	hash := hasher(alg)
+	hash.Write(initial)
+	hash.Write(event)
+	return hash.Sum(nil)
 }
 
 func determineMeasuredBytes(event *Event, efiVarBootQuirk bool) []byte {
@@ -113,7 +109,7 @@ func determineMeasuredBytes(event *Event, efiVarBootQuirk bool) []byte {
 }
 
 func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte) (bool, []byte) {
-	expected := hash(measuredBytes, alg)
+	expected := hashSum(measuredBytes, alg)
 	return bytes.Compare(digest, expected) == 0, expected
 }
 

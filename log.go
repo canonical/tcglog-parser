@@ -36,7 +36,7 @@ func isDigestOfSeparatorErrorValue(digest Digest, alg AlgorithmId) bool {
 	errorValue := make([]byte, 4)
 	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
 
-	return bytes.Compare(digest, hash(errorValue, alg)) == 0
+	return bytes.Compare(digest, hashSum(errorValue, alg)) == 0
 }
 
 func wrapLogReadError(origErr error, partial bool) error {

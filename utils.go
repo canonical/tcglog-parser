@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
+	"hash"
 	"reflect"
 	"strconv"
 	"strings"
@@ -28,23 +29,25 @@ func makeDefaultFormatter(s fmt.State, f rune) string {
 	return builder.String()
 }
 
-func hash(data []byte, alg AlgorithmId) []byte {
+func hasher(alg AlgorithmId) hash.Hash {
 	switch alg {
 	case AlgorithmSha1:
-		h := sha1.Sum(data)
-		return h[:]
+		return sha1.New()
 	case AlgorithmSha256:
-		h := sha256.Sum256(data)
-		return h[:]
+		return sha256.New()
 	case AlgorithmSha384:
-		h := sha512.Sum384(data)
-		return h[:]
+		return sha512.New384()
 	case AlgorithmSha512:
-		h := sha512.Sum512(data)
-		return h[:]
+		return sha512.New()
 	default:
 		panic("Unhandled algorithm")
 	}
+}
+
+func hashSum(data []byte, alg AlgorithmId) []byte {
+	h := hasher(alg)
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 type PCRArgList []PCRIndex
