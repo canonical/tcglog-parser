@@ -10,8 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/google/go-tpm/tpm"
-	"github.com/google/go-tpm/tpm2"
+	"github.com/chrisccoulson/go-tpm2"
 )
 
 type UnexpectedDigestValue struct {
@@ -234,55 +233,86 @@ func (v *logValidator) run() (*LogValidateResult, error) {
 	}
 }
 
-func pcrIndexListToIntList(l []PCRIndex) (out []int) {
+func pcrIndexListToSelectionData(l []PCRIndex) (out tpm2.PCRSelectionData) {
 	for _, i := range l {
 		out = append(out, int(i))
 	}
 	return
 }
 
-func (v *logValidator) readPCRsFromTPM2Device(rw io.ReadWriter) error {
+func (v *logValidator) readPCRsFromTPM2Device(tpm tpm2.TPMContext) error {
+	var selections tpm2.PCRSelectionList
 	for _, alg := range v.algorithms {
-		todo := v.pcrs
-		for len(todo) > 0 {
-			pcrSelection := tpm2.PCRSelection{
-				Hash: tpm2.Algorithm(alg),
-				PCRs: pcrIndexListToIntList(todo)}
-			res, err := tpm2.ReadPCRs(rw, pcrSelection)
-			if err != nil {
-				return err
-			}
-			todo = []PCRIndex{}
-			for _, i := range v.pcrs {
-				if d, exists := res[int(i)]; exists {
-					v.tpmPCRValues[i][alg] = d
-				} else if _, exists := v.tpmPCRValues[i][alg]; !exists {
-					todo = append(todo, i)
-				}
-			}
+		selections = append(selections,
+			tpm2.PCRSelection{Hash: tpm2.AlgorithmId(alg),
+				Select: pcrIndexListToSelectionData(v.pcrs)})
+	}
+
+	_, digests, err := tpm.PCRRead(selections)
+	if err != nil {
+		return fmt.Errorf("cannot read PCR values: %v", err)
+	}
+
+	j := 0
+	for _, s := range selections {
+		for _, i := range s.Select {
+			v.tpmPCRValues[PCRIndex(i)][AlgorithmId(s.Hash)] = Digest(digests[j])
+			j++
 		}
 	}
 	return nil
 }
 
-func (v *logValidator) readPCRsFromTPM1Device(rw io.ReadWriter) error {
+func (v *logValidator) readPCRsFromTPM1Device(tpm tpm2.TPMContext) error {
 	for _, i := range v.pcrs {
-		res, err := tpm.ReadPCR(rw, uint32(i))
+		in, err := tpm2.MarshalToBytes(uint32(i))
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot read PCR values due to a marshalling error: %v", err)
 		}
-		v.tpmPCRValues[i][AlgorithmSha1] = res
+		rc, _, out, err := tpm.RunCommandBytes(tpm2.StructTag(0x00c1), tpm2.CommandCode(0x00000015), in)
+		if err != nil {
+			return fmt.Errorf("cannot read PCR values: %v", err)
+		}
+		if rc != tpm2.Success {
+			return fmt.Errorf("cannot read PCR values: unexpected response code (0x%08x)", rc)
+		}
+		v.tpmPCRValues[i][AlgorithmSha1] = out
 	}
 	return nil
+}
+
+func getTPMDeviceVersion(tpm tpm2.TPMContext) int {
+	if _, err := tpm.GetCapabilityTPMProperties(tpm2.PropertyManufacturer, 1); err == nil {
+		return 2
+	}
+
+	in, err := tpm2.MarshalToBytes(uint32(0x00000005), uint32(4), uint32(0x00000103))
+	if err != nil {
+		return 0
+	}
+	if rc, _, _, err := tpm.RunCommandBytes(tpm2.StructTag(0x00c1), tpm2.CommandCode(0x00000065),
+		in); err == nil && rc == tpm2.Success {
+		return 1
+	} else {
+		fmt.Println("rc:", rc, "err:", err)
+	}
+
+	return 0
 }
 
 func (v *logValidator) readPCRs(path string) error {
-	if rw, err := tpm2.OpenTPM(path); err == nil {
-		defer rw.Close()
-		return v.readPCRsFromTPM2Device(rw)
-	} else if rw, err := tpm.OpenTPM(path); err == nil {
-		defer rw.Close()
-		return v.readPCRsFromTPM1Device(rw)
+	tcti, err := tpm2.OpenTPMDevice(path)
+	if err != nil {
+		return fmt.Errorf("couldn't open TPM device: %v", err)
+	}
+	tpm, _ := tpm2.NewTPMContext(tcti)
+	defer tpm.Close()
+
+	switch getTPMDeviceVersion(tpm) {
+	case 2:
+		return v.readPCRsFromTPM2Device(tpm)
+	case 1:
+		return v.readPCRsFromTPM1Device(tpm)
 	}
 
 	return errors.New("couldn't open TPM device")

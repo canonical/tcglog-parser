@@ -48,7 +48,7 @@ const (
 )
 
 const (
-	SpecUnknown  Spec = iota
+	SpecUnknown Spec = iota
 	SpecPCClient
 	SpecEFI_1_2
 	SpecEFI_2
