@@ -64,11 +64,12 @@ func main() {
 		}
 	}
 
-	result, err := tcglog.ParseAndValidateLog(tcglog.LogValidateOptions{
-		TPMPath:    tpmPath,
-		PCRs:       []tcglog.PCRIndex(pcrs),
-		Algorithms: algorithms,
-		EnableGrub: withGrub})
+	result, err := tcglog.ValidateLogAgainstTPMByPath(
+		tpmPath,
+		tcglog.LogValidateOptions{
+			PCRs:       []tcglog.PCRIndex(pcrs),
+			Algorithms: algorithms,
+			EnableGrub: withGrub})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to validate log file: %v\n", err)
 		os.Exit(1)

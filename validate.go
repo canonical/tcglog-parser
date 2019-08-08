@@ -41,7 +41,6 @@ type LogValidateResult struct {
 }
 
 type LogValidateOptions struct {
-	TPMPath    string
 	PCRs       []PCRIndex
 	Algorithms []AlgorithmId
 	EnableGrub bool
@@ -318,14 +317,14 @@ func (v *logValidator) readPCRs(path string) error {
 	return errors.New("couldn't open TPM device")
 }
 
-func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error) {
-	if options.TPMPath == "" {
+func ValidateLogAgainstTPMByPath(tpmPath string, options LogValidateOptions) (*LogValidateResult, error) {
+	if tpmPath == "" {
 		return nil, InvalidOptionError{msg: fmt.Sprintf("missing TPM path")}
 	}
-	if filepath.Dir(options.TPMPath) != "/dev" {
+	if filepath.Dir(tpmPath) != "/dev" {
 		return nil, InvalidOptionError{msg: fmt.Sprintf("expected TPM path to be a device node in /dev")}
 	}
-	tpmNode := filepath.Base(options.TPMPath)
+	tpmNode := filepath.Base(tpmPath)
 
 	logPath := fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", tpmNode)
 	file, err := os.Open(logPath)
@@ -375,7 +374,7 @@ func ParseAndValidateLog(options LogValidateOptions) (*LogValidateResult, error)
 		v.tpmPCRValues[i] = DigestMap{}
 	}
 
-	if err := v.readPCRs(options.TPMPath); err != nil {
+	if err := v.readPCRs(tpmPath); err != nil {
 		return nil, TPMCommError{OrigError: err}
 	}
 
