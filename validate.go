@@ -299,14 +299,7 @@ func getTPMDeviceVersion(tpm tpm2.TPMContext) int {
 	return 0
 }
 
-func (v *logValidator) readPCRs(path string) error {
-	tcti, err := tpm2.OpenTPMDevice(path)
-	if err != nil {
-		return fmt.Errorf("couldn't open TPM device: %v", err)
-	}
-	tpm, _ := tpm2.NewTPMContext(tcti)
-	defer tpm.Close()
-
+func (v *logValidator) readPCRs(tpm tpm2.TPMContext) error {
 	switch getTPMDeviceVersion(tpm) {
 	case 2:
 		return v.readPCRsFromTPM2Device(tpm)
@@ -314,19 +307,11 @@ func (v *logValidator) readPCRs(path string) error {
 		return v.readPCRsFromTPM1Device(tpm)
 	}
 
-	return errors.New("couldn't open TPM device")
+	return errors.New("not a valid TPM device")
 }
 
-func ValidateLogAgainstTPMByPath(tpmPath string, options LogValidateOptions) (*LogValidateResult, error) {
-	if tpmPath == "" {
-		return nil, InvalidOptionError{msg: fmt.Sprintf("missing TPM path")}
-	}
-	if filepath.Dir(tpmPath) != "/dev" {
-		return nil, InvalidOptionError{msg: fmt.Sprintf("expected TPM path to be a device node in /dev")}
-	}
-	tpmNode := filepath.Base(tpmPath)
-
-	logPath := fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", tpmNode)
+func ValidateLogAgainstTPM(tpm tpm2.TPMContext, logPath string, options LogValidateOptions) (*LogValidateResult,
+	error) {
 	file, err := os.Open(logPath)
 	if err != nil {
 		return nil, LogReadError{OrigError: err}
@@ -374,9 +359,28 @@ func ValidateLogAgainstTPMByPath(tpmPath string, options LogValidateOptions) (*L
 		v.tpmPCRValues[i] = DigestMap{}
 	}
 
-	if err := v.readPCRs(tpmPath); err != nil {
+	if err := v.readPCRs(tpm); err != nil {
 		return nil, TPMCommError{OrigError: err}
 	}
 
 	return v.run()
+}
+
+func ValidateLogAgainstTPMByPath(tpmPath string, options LogValidateOptions) (*LogValidateResult, error) {
+	if tpmPath == "" {
+		return nil, InvalidOptionError{msg: fmt.Sprintf("missing TPM path")}
+	}
+	if filepath.Dir(tpmPath) != "/dev" {
+		return nil, InvalidOptionError{msg: fmt.Sprintf("expected TPM path to be a device node in /dev")}
+	}
+	tcti, err := tpm2.OpenTPMDevice(tpmPath)
+	if err != nil {
+		return nil, TPMCommError{OrigError: fmt.Errorf("couldn't open TPM device: %v", err)}
+	}
+	tpm, _ := tpm2.NewTPMContext(tcti)
+	defer tpm.Close()
+
+	logPath := fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", filepath.Base(tpmPath))
+
+	return ValidateLogAgainstTPM(tpm, logPath, options)
 }
