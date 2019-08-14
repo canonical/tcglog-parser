@@ -53,27 +53,31 @@ func decodeUTF16ToString(stream io.Reader, count uint64) (string, error) {
 }
 
 type EFIGUID struct {
-	Data1 uint32
-	Data2 uint16
-	Data3 uint16
-	Data4 [8]uint8
+	A uint32
+	B uint16
+	C uint16
+	D uint16
+	E [6]uint8
 }
 
 func (g *EFIGUID) String() string {
-	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, g.Data4[0:2], g.Data4[2:8])
+	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.A, g.B, g.C, g.D, g.E)
 }
 
 func readEFIGUID(stream io.Reader, out *EFIGUID) error {
-	if err := binary.Read(stream, binary.LittleEndian, &out.Data1); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &out.A); err != nil {
 		return err
 	}
-	if err := binary.Read(stream, binary.LittleEndian, &out.Data2); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &out.B); err != nil {
 		return err
 	}
-	if err := binary.Read(stream, binary.LittleEndian, &out.Data3); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, &out.C); err != nil {
 		return err
 	}
-	if _, err := io.ReadFull(stream, out.Data4[:]); err != nil {
+	if err := binary.Read(stream, binary.BigEndian, &out.D); err != nil {
+		return err
+	}
+	if _, err := io.ReadFull(stream, out.E[:]); err != nil {
 		return err
 	}
 	return nil
