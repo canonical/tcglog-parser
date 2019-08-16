@@ -162,12 +162,13 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		return
 	}
 
-	ve := ValidatedEvent{Event: event}
-	v.validatedEvents = append(v.validatedEvents, ve)
+	v.validatedEvents = append(v.validatedEvents, ValidatedEvent{Event: event})
 
 	if !doesEventTypeExtendPCR(event.EventType) {
 		return
 	}
+
+	ve := &v.validatedEvents[len(v.validatedEvents) - 1]
 
 	informational := false
 	for alg, digest := range event.Digests {
@@ -182,7 +183,7 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 			continue
 		}
 
-		informational = !v.checkDigestForEvent(alg, digest, &ve)
+		informational = !v.checkDigestForEvent(alg, digest, ve)
 	}
 
 	if remaining > 0 && !informational {
