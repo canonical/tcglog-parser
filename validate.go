@@ -168,7 +168,7 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		return
 	}
 
-	ve := &v.validatedEvents[len(v.validatedEvents) - 1]
+	ve := &v.validatedEvents[len(v.validatedEvents)-1]
 
 	informational := false
 	for alg, digest := range event.Digests {
