@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strings"
 	"unsafe"
 )
 
@@ -28,28 +27,28 @@ type SpecIdEventData struct {
 }
 
 func (e *SpecIdEventData) String() string {
-	var builder strings.Builder
+	var builder bytes.Buffer
 	switch e.Spec {
 	case SpecPCClient:
-		fmt.Fprintf(&builder, "PCClientSpecIdEvent")
+		builder.WriteString("PCClientSpecIdEvent")
 	case SpecEFI_1_2, SpecEFI_2:
-		fmt.Fprintf(&builder, "EfiSpecIDEvent")
+		builder.WriteString("EfiSpecIDEvent")
 	}
 
 	fmt.Fprintf(&builder, "{ spec=%d, platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, "+
 		"specErrata=%d", e.Spec, e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
 	if e.Spec == SpecEFI_2 {
-		fmt.Fprintf(&builder, ", digestSizes=[")
+		builder.WriteString(", digestSizes=[")
 		for i, algSize := range e.DigestSizes {
 			if i > 0 {
-				fmt.Fprintf(&builder, ", ")
+				builder.WriteString(", ")
 			}
 			fmt.Fprintf(&builder, "{ algorithmId=0x%04x, digestSize=%d }",
 				uint16(algSize.AlgorithmId), algSize.DigestSize)
 		}
-		fmt.Fprintf(&builder, "]")
+		builder.WriteString("]")
 	}
-	fmt.Fprintf(&builder, " }")
+	builder.WriteString(" }")
 	return builder.String()
 }
 

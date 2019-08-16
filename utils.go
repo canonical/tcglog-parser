@@ -1,6 +1,7 @@
 package tcglog
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -8,12 +9,11 @@ import (
 	"hash"
 	"reflect"
 	"strconv"
-	"strings"
 )
 
 func makeDefaultFormatter(s fmt.State, f rune) string {
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "%%")
+	var builder bytes.Buffer
+	builder.WriteString("%%")
 	for _, flag := range [...]int{'+', '-', '#', ' ', '0'} {
 		if s.Flag(flag) {
 			fmt.Fprintf(&builder, "%c", flag)
@@ -53,10 +53,10 @@ func hashSum(data []byte, alg AlgorithmId) []byte {
 type PCRArgList []PCRIndex
 
 func (l *PCRArgList) String() string {
-	var builder strings.Builder
+	var builder bytes.Buffer
 	for i, pcr := range *l {
 		if i > 0 {
-			fmt.Fprintf(&builder, ", ")
+			builder.WriteString(", ")
 		}
 		fmt.Fprintf(&builder, "%d", pcr)
 	}

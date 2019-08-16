@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/chrisccoulson/tcglog-parser"
 )
@@ -12,10 +12,10 @@ import (
 type AlgorithmIdArgList []tcglog.AlgorithmId
 
 func (l *AlgorithmIdArgList) String() string {
-	var builder strings.Builder
+	var builder bytes.Buffer
 	for i, alg := range *l {
 		if i > 0 {
-			fmt.Fprintf(&builder, ", ")
+			builder.WriteString(", ")
 		}
 		fmt.Fprintf(&builder, "%s", alg)
 	}

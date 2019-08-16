@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"strings"
 )
 
 var (
@@ -21,7 +20,7 @@ var (
 // need to decode it first)
 // This will decode the specified number of characters or until a null character is found
 func decodeUTF16ToString(stream io.Reader, count uint64) (string, error) {
-	var builder strings.Builder
+	var builder bytes.Buffer
 
 	for i := uint64(0); i < count; i++ {
 		var c1 uint16
@@ -353,7 +352,7 @@ func firmwareDevicePathNodeToString(n *efiDevicePathNode) string {
 		return ""
 	}
 
-	var builder strings.Builder
+	var builder bytes.Buffer
 	switch n.subType {
 	case efiMediaDevicePathNodeFvFile:
 		builder.WriteString("FvFile")
@@ -461,7 +460,7 @@ func hardDriveDevicePathNodeToString(n *efiDevicePathNode) string {
 		return ""
 	}
 
-	var builder strings.Builder
+	var builder bytes.Buffer
 
 	switch sigType {
 	case 0x01:
@@ -556,7 +555,7 @@ func (n *efiDevicePathNode) String() string {
 		return s
 	}
 
-	var builder strings.Builder
+	var builder bytes.Buffer
 	fmt.Fprintf(&builder, "%s(%d", n.t, n.subType)
 	if len(n.data) > 0 {
 		fmt.Fprintf(&builder, ", 0x")
@@ -601,7 +600,7 @@ type EFIDevicePath struct {
 }
 
 func (p *EFIDevicePath) String() string {
-	var builder strings.Builder
+	var builder bytes.Buffer
 	for node := p.root; node != nil; node = node.next {
 		if node != p.root {
 			builder.WriteString("/")
@@ -721,7 +720,7 @@ type EFIGPTEventData struct {
 }
 
 func (e *EFIGPTEventData) String() string {
-	var builder strings.Builder
+	var builder bytes.Buffer
 	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", &e.DiskGUID)
 	for i, part := range e.Partitions {
 		if i > 0 {

@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/chrisccoulson/tcglog-parser"
 )
@@ -93,7 +93,7 @@ func main() {
 			continue
 		}
 
-		var builder strings.Builder
+		var builder bytes.Buffer
 		fmt.Fprintf(&builder, "%2d %x %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
 		if verbose {
 			data := event.Data.String()
