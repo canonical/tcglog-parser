@@ -293,8 +293,6 @@ func getTPMDeviceVersion(tpm tpm2.TPMContext) int {
 	if rc, _, _, err := tpm.RunCommandBytes(tpm2.StructTag(0x00c1), tpm2.CommandCode(0x00000065),
 		in); err == nil && rc == tpm2.Success {
 		return 1
-	} else {
-		fmt.Println("rc:", rc, "err:", err)
 	}
 
 	return 0
