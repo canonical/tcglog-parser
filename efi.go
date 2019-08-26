@@ -5,50 +5,45 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"unicode/utf16"
 )
 
 var (
 	surr1 uint16 = 0xd800
 	surr2 uint16 = 0xdc00
 	surr3 uint16 = 0xe000
-	surr4 rune   = 0x10000
 )
 
-// UEFI_VARIABLE_DATA specifies the number of *characters* for a UTF-16 rather than the size of
-// the buffer, which makes it difficult for us to use go's utf16 module (which will decode the whole
-// buffer. We need to know the size of the buffer so we can calculate the slice to pass it, but we
-// need to decode it first)
-// This will decode the specified number of characters or until a null character is found
-func decodeUTF16ToString(stream io.Reader, count uint64) (string, error) {
-	var builder bytes.Buffer
+// UEFI_VARIABLE_DATA specifies the number of *characters* for a UTF-16 sequence rather than the size of
+// the buffer. Extract a UTF-16 sequence of the correct length, given a buffer and the number of characters.
+// The returned buffer can be passed to utf16.Decode.
+func extractUTF16Buffer(stream io.ReadSeeker, nchars uint64) ([]uint16, error) {
+	var out []uint16
 
-	for i := uint64(0); i < count; i++ {
-		var c1 uint16
-		if err := binary.Read(stream, binary.LittleEndian, &c1); err != nil {
-			return "", err
+	for i := nchars; i > 0; i-- {
+		var c uint16
+		if err := binary.Read(stream, binary.LittleEndian, &c); err != nil {
+			return nil, err
 		}
-		if c1 == 0x0000 {
-			break
-		}
-		if c1 < surr1 || c1 >= surr3 {
-			builder.WriteRune(rune(c1))
-			continue
-		}
-		if c1 >= surr1 && c1 < surr2 {
-			var c2 uint16
-			if err := binary.Read(stream, binary.LittleEndian, &c2); err != nil {
-				return "", err
+		out = append(out, c)
+		if c >= surr1 && c < surr2 {
+			if err := binary.Read(stream, binary.LittleEndian, &c); err != nil {
+				return nil, err
 			}
-			if c2 >= surr2 && c2 < surr3 {
-				builder.WriteRune(rune((c1-surr1)<<10|(c2-surr2)) + surr4)
-				i++
+			if c < surr2 || c >= surr3 {
+				// Invalid surrogate sequence. utf16.Decode doesn't consume this
+				// byte when inserting the replacement char
+				if _, err := stream.Seek(-1, io.SeekCurrent); err != nil {
+					return nil, err
+				}
 				continue
 			}
+			// Valid surrogate sequence
+			out = append(out, c)
 		}
-		builder.WriteRune(rune(0xfffd))
 	}
 
-	return builder.String(), nil
+	return out, nil
 }
 
 type EFIGUID struct {
@@ -270,9 +265,14 @@ func makeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVariabl
 		return nil, 0, err
 	}
 
-	unicodeName, err := decodeUTF16ToString(stream, unicodeNameLength)
+	utf16Name, err := extractUTF16Buffer(stream, unicodeNameLength)
 	if err != nil {
 		return nil, 0, err
+	}
+
+	var unicodeName bytes.Buffer
+	for _, r := range utf16.Decode(utf16Name) {
+		unicodeName.WriteRune(r)
 	}
 
 	variableData := make([]byte, variableDataLength)
@@ -282,7 +282,7 @@ func makeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVariabl
 
 	return &EFIVariableEventData{data: data,
 		VariableName: guid,
-		UnicodeName:  unicodeName,
+		UnicodeName:  unicodeName.String(),
 		VariableData: variableData}, bytesRead(stream), nil
 }
 
@@ -497,13 +497,15 @@ func sataDevicePathNodeToString(n *efiDevicePathNode) string {
 }
 
 func filePathDevicePathNodeToString(n *efiDevicePathNode) string {
+	u16 := make([]uint16, len(n.data)/2)
 	stream := bytes.NewReader(n.data)
+	binary.Read(stream, binary.LittleEndian, &u16)
 
-	s, err := decodeUTF16ToString(stream, uint64(len(n.data)))
-	if err != nil {
-		return ""
+	var buf bytes.Buffer
+	for _, r := range utf16.Decode(u16) {
+		buf.WriteRune(r)
 	}
-	return s
+	return buf.String()
 }
 
 func relOffsetRangePathNodeToString(n *efiDevicePathNode) string {
@@ -802,13 +804,19 @@ func makeEventDataEFIGPTImpl(data []byte) (*EFIGPTEventData, int, error) {
 			return nil, 0, err
 		}
 
-		name, err := decodeUTF16ToString(entryStream, uint64(entryStream.Len()))
-		if err != nil {
+		nameUtf16 := make([]uint16, entryStream.Len()/2)
+		if err := binary.Read(entryStream, binary.LittleEndian, &nameUtf16); err != nil {
 			return nil, 0, err
 		}
 
+		var name bytes.Buffer
+		for _, r := range utf16.Decode(nameUtf16) {
+			name.WriteRune(r)
+		}
+
 		eventData.Partitions[i] =
-			EFIGPTPartitionEntry{TypeGUID: typeGUID, UniqueGUID: uniqueGUID, Attrs: attrs, Name: name}
+			EFIGPTPartitionEntry{TypeGUID: typeGUID, UniqueGUID: uniqueGUID, Attrs: attrs,
+				Name: name.String()}
 	}
 
 	return eventData, bytesRead(stream), nil
