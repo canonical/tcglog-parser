@@ -96,7 +96,7 @@ func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) erro
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func makeSpecIdEvent(stream io.Reader, data []byte,
+func decodeSpecIdEvent(stream io.Reader, data []byte,
 	helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
 	// platformClass field
 	var platformClass uint32
@@ -156,7 +156,7 @@ func (e *AsciiStringEventData) Bytes() []byte {
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5 "EV_NO_ACTION Event Types")
-func makeEventDataNoAction(data []byte) (out EventData, n int, err error) {
+func decodeEventDataNoAction(data []byte) (out EventData, n int, err error) {
 	stream := bytes.NewReader(data)
 
 	// Signature field
@@ -167,31 +167,31 @@ func makeEventDataNoAction(data []byte) (out EventData, n int, err error) {
 
 	switch *(*string)(unsafe.Pointer(&signature)) {
 	case "Spec ID Event00\x00":
-		d, e := makeSpecIdEvent(stream, data, parsePCClientSpecIdEvent)
+		d, e := decodeSpecIdEvent(stream, data, parsePCClientSpecIdEvent)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "Spec ID Event02\x00":
-		d, e := makeSpecIdEvent(stream, data, parseEFI_1_2_SpecIdEvent)
+		d, e := decodeSpecIdEvent(stream, data, parseEFI_1_2_SpecIdEvent)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "Spec ID Event03\x00":
-		d, e := makeSpecIdEvent(stream, data, parseEFI_2_SpecIdEvent)
+		d, e := decodeSpecIdEvent(stream, data, parseEFI_2_SpecIdEvent)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "SP800-155 Event\x00":
-		d, e := makeBIMReferenceManifestEvent(stream, data)
+		d, e := decodeBIMReferenceManifestEvent(stream, data)
 		if d != nil {
 			out = d
 		}
 		err = e
 	case "StartupLocality\x00":
-		d, e := makeStartupLocalityEvent(stream, data)
+		d, e := decodeStartupLocalityEvent(stream, data)
 		if d != nil {
 			out = d
 		}
@@ -206,7 +206,7 @@ func makeEventDataNoAction(data []byte) (out EventData, n int, err error) {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func makeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
+func decodeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
 	return &AsciiStringEventData{data: data}, len(data), nil
 }
 
@@ -226,29 +226,29 @@ func (e *separatorEventData) Bytes() []byte {
 	return e.data
 }
 
-func makeEventDataSeparator(data []byte, isError bool) (*separatorEventData, int, error) {
+func decodeEventDataSeparator(data []byte, isError bool) (*separatorEventData, int, error) {
 	return &separatorEventData{data: data, isError: isError}, len(data), nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func makeEventDataTCG(eventType EventType, data []byte,
+func decodeEventDataTCG(eventType EventType, data []byte,
 	hasDigestOfSeparatorError bool) (out EventData, n int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
-		return makeEventDataNoAction(data)
+		return decodeEventDataNoAction(data)
 	case EventTypeSeparator:
-		return makeEventDataSeparator(data, hasDigestOfSeparatorError)
+		return decodeEventDataSeparator(data, hasDigestOfSeparatorError)
 	case EventTypeAction, EventTypeEFIAction:
-		return makeEventDataAction(data)
+		return decodeEventDataAction(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		return makeEventDataEFIVariable(data, eventType)
+		return decodeEventDataEFIVariable(data, eventType)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver,
 		EventTypeEFIRuntimeServicesDriver:
-		return makeEventDataEFIImageLoad(data)
+		return decodeEventDataEFIImageLoad(data)
 	case EventTypeEFIGPTEvent:
-		return makeEventDataEFIGPT(data)
+		return decodeEventDataEFIGPT(data)
 	default:
 	}
 	return nil, 0, nil

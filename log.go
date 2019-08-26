@@ -89,7 +89,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options,
+	data, remaining := decodeEventData(pcrIndex, eventType, event, &s.options,
 		isDigestOfSeparatorErrorValue(digest, AlgorithmSha1))
 
 	return &Event{
@@ -190,7 +190,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := makeEventData(pcrIndex, eventType, event, &s.options,
+	data, remaining := decodeEventData(pcrIndex, eventType, event, &s.options,
 		isDigestOfSeparatorErrorValue(digests[s.algSizes[0].AlgorithmId], s.algSizes[0].AlgorithmId))
 
 	return &Event{

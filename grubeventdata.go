@@ -46,7 +46,7 @@ func (e *GrubCmdEventData) Cmd() string {
 	return *(*string)(unsafe.Pointer(&e.cmd))
 }
 
-func makeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int, error) {
+func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int, error) {
 	if eventType != EventTypeIPL {
 		return nil, 0, nil
 	}

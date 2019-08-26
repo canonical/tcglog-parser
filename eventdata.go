@@ -43,22 +43,22 @@ func bytesRead(stream *bytes.Reader) int {
 	return int(stream.Size()) - stream.Len()
 }
 
-func makeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, options *LogOptions,
+func decodeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, options *LogOptions,
 	hasDigestOfSeparatorError bool) (EventData, int, error) {
 	switch {
 	case options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9):
-		if d, n, e := makeEventDataGRUB(pcrIndex, eventType, data); d != nil {
+		if d, n, e := decodeEventDataGRUB(pcrIndex, eventType, data); d != nil {
 			return d, n, e
 		}
 		fallthrough
 	default:
-		return makeEventDataTCG(eventType, data, hasDigestOfSeparatorError)
+		return decodeEventDataTCG(eventType, data, hasDigestOfSeparatorError)
 	}
 }
 
-func makeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, options *LogOptions,
+func decodeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, options *LogOptions,
 	hasDigestOfSeparatorError bool) (EventData, int) {
-	event, n, err := makeEventDataImpl(pcrIndex, eventType, data, options, hasDigestOfSeparatorError)
+	event, n, err := decodeEventDataImpl(pcrIndex, eventType, data, options, hasDigestOfSeparatorError)
 
 	if err != nil {
 		if err == io.EOF {
