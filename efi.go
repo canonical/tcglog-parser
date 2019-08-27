@@ -58,6 +58,25 @@ func (g *EFIGUID) String() string {
 	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.A, g.B, g.C, g.D, g.E)
 }
 
+func (g *EFIGUID) Encode(buf io.Writer) error {
+	if err := binary.Write(buf, binary.LittleEndian, g.A); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, g.B); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, g.C); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.BigEndian, g.D); err != nil {
+		return err
+	}
+	if _, err := buf.Write(g.E[:]); err != nil {
+		return err
+	}
+	return nil
+}
+
 func decodeEFIGUID(stream io.Reader) (*EFIGUID, error) {
 	var out EFIGUID
 	if err := binary.Read(stream, binary.LittleEndian, &out.A); err != nil {
@@ -238,6 +257,47 @@ func (e *EFIVariableEventData) String() string {
 
 func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
+}
+
+func (e *EFIVariableEventData) Encode(buf io.Writer) error {
+	if err := e.VariableName.Encode(buf); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint64(len(e.UnicodeName))); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
+		return err
+	}
+
+	nameReader := bytes.NewReader([]byte(e.UnicodeName))
+	var unicodeNameBuilder bytes.Buffer
+	for {
+		r, _, err := nameReader.ReadRune()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		if err := binary.Write(&unicodeNameBuilder, binary.LittleEndian, r); err != nil {
+			return err
+		}
+	}
+	unicodeName := make([]rune, unicodeNameBuilder.Len()/binary.Size(rune(0)))
+	if err := binary.Read(&unicodeNameBuilder, binary.LittleEndian, &unicodeName); err != nil {
+		return err
+	}
+	utf16Name := utf16.Encode(unicodeName)
+	if err := binary.Write(buf, binary.LittleEndian, utf16Name); err != nil {
+		return err
+	}
+
+	if _, err := buf.Write(e.VariableData); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
