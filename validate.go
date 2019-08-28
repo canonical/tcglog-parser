@@ -34,7 +34,7 @@ type LogConsistencyError struct {
 
 type LogValidateResult struct {
 	EfiVariableBootQuirk bool
-	ValidatedEvents      []ValidatedEvent
+	ValidatedEvents      []*ValidatedEvent
 	Spec                 Spec
 	Algorithms           []AlgorithmId
 	LogConsistencyErrors []LogConsistencyError
@@ -118,7 +118,7 @@ type logValidator struct {
 	logPCRValues         map[PCRIndex]DigestMap
 	tpmPCRValues         map[PCRIndex]DigestMap
 	efiVarBootQuirkState efiVarBootQuirkState
-	validatedEvents      []ValidatedEvent
+	validatedEvents      []*ValidatedEvent
 }
 
 func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *ValidatedEvent) bool {
@@ -162,13 +162,12 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		return
 	}
 
-	v.validatedEvents = append(v.validatedEvents, ValidatedEvent{Event: event})
+	ve := &ValidatedEvent{Event: event}
+	v.validatedEvents = append(v.validatedEvents, ve)
 
 	if !doesEventTypeExtendPCR(event.EventType) {
 		return
 	}
-
-	ve := &v.validatedEvents[len(v.validatedEvents)-1]
 
 	informational := false
 	for alg, digest := range event.Digests {
