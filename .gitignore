@@ -1,1 +1,4 @@
+tcglog-dump/tcglog-dump
+tcglog-parser.test
+tcglog-validate/tcglog-validate
 vendor/*/
