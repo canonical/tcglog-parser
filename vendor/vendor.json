@@ -3,10 +3,10 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "Bbr9oMHQi2dSzkLyNmSrHR+MlCk=",
+			"checksumSHA1": "B9ZamUYiZjDG5gWtYLLxZ/oIaZo=",
 			"path": "github.com/chrisccoulson/go-tpm2",
-			"revision": "74f64bc2ade2d9a829626b70839ff449aa603875",
-			"revisionTime": "2019-09-05T10:30:01Z"
+			"revision": "b12e8f6b8cd13815acd487e6f02984e418dd8f7b",
+			"revisionTime": "2019-09-11T23:50:26Z"
 		},
 		{
 			"checksumSHA1": "hYsuWh8Zj6z+8rFsK7F7mABIR44=",

@@ -239,7 +239,7 @@ func pcrIndexListToSelectionData(l []PCRIndex) (out tpm2.PCRSelectionData) {
 	return
 }
 
-func (v *logValidator) readPCRsFromTPM2Device(tpm tpm2.TPMContext) error {
+func (v *logValidator) readPCRsFromTPM2Device(tpm *tpm2.TPMContext) error {
 	var selections tpm2.PCRSelectionList
 	for _, alg := range v.algorithms {
 		selections = append(selections,
@@ -262,7 +262,7 @@ func (v *logValidator) readPCRsFromTPM2Device(tpm tpm2.TPMContext) error {
 	return nil
 }
 
-func (v *logValidator) readPCRsFromTPM1Device(tpm tpm2.TPMContext) error {
+func (v *logValidator) readPCRsFromTPM1Device(tpm *tpm2.TPMContext) error {
 	for _, i := range v.pcrs {
 		in, err := tpm2.MarshalToBytes(uint32(i))
 		if err != nil {
@@ -280,7 +280,7 @@ func (v *logValidator) readPCRsFromTPM1Device(tpm tpm2.TPMContext) error {
 	return nil
 }
 
-func getTPMDeviceVersion(tpm tpm2.TPMContext) int {
+func getTPMDeviceVersion(tpm *tpm2.TPMContext) int {
 	if _, err := tpm.GetCapabilityTPMProperties(tpm2.PropertyManufacturer, 1); err == nil {
 		return 2
 	}
@@ -297,7 +297,7 @@ func getTPMDeviceVersion(tpm tpm2.TPMContext) int {
 	return 0
 }
 
-func (v *logValidator) readPCRs(tpm tpm2.TPMContext) error {
+func (v *logValidator) readPCRs(tpm *tpm2.TPMContext) error {
 	switch getTPMDeviceVersion(tpm) {
 	case 2:
 		return v.readPCRsFromTPM2Device(tpm)
@@ -308,7 +308,7 @@ func (v *logValidator) readPCRs(tpm tpm2.TPMContext) error {
 	return errors.New("not a valid TPM device")
 }
 
-func ValidateLogAgainstTPM(tpm tpm2.TPMContext, logPath string, options LogValidateOptions) (*LogValidateResult,
+func ValidateLogAgainstTPM(tpm *tpm2.TPMContext, logPath string, options LogValidateOptions) (*LogValidateResult,
 	error) {
 	file, err := os.Open(logPath)
 	if err != nil {
