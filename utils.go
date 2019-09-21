@@ -7,7 +7,6 @@ import (
 	"crypto/sha512"
 	"fmt"
 	"hash"
-	"reflect"
 	"strconv"
 )
 
@@ -72,22 +71,6 @@ func (l *PCRArgList) Set(value string) error {
 	return nil
 }
 
-func contains(slice interface{}, elem interface{}) bool {
-	sv := reflect.ValueOf(slice)
-	if sv.Kind() != reflect.Slice {
-		panic(fmt.Sprintf("Invalid kind - expected a slice (got %s)", sv.Kind()))
-	}
-	if sv.Type().Elem() != reflect.ValueOf(elem).Type() {
-		panic(fmt.Sprintf("Type mismatch (%s vs %s)", sv.Type().Elem(), reflect.ValueOf(elem).Type()))
-	}
-	for i := 0; i < sv.Len(); i++ {
-		if sv.Index(i).Interface() == elem {
-			return true
-		}
-	}
-	return false
-}
-
 func ParseAlgorithm(alg string) (AlgorithmId, error) {
 	switch alg {
 	case "sha1":
@@ -101,9 +84,4 @@ func ParseAlgorithm(alg string) (AlgorithmId, error) {
 	default:
 		return 0, fmt.Errorf("Unrecognized algorithm \"%s\"", alg)
 	}
-}
-
-func isPCRIndexInRange(index PCRIndex) bool {
-	const maxPCRIndex PCRIndex = 31
-	return index <= maxPCRIndex
 }

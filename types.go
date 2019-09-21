@@ -109,6 +109,17 @@ func (a AlgorithmId) Format(s fmt.State, f rune) {
 	}
 }
 
+type AlgorithmIdList []AlgorithmId
+
+func (l AlgorithmIdList) Contains(a AlgorithmId) bool {
+	for _, alg := range l {
+		if alg == a {
+			return true
+		}
+	}
+	return false
+}
+
 type Event struct {
 	Index     uint
 	PCRIndex  PCRIndex

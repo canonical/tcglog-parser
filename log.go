@@ -27,6 +27,11 @@ type stream interface {
 	readNextEvent() (*Event, int, error)
 }
 
+func isPCRIndexInRange(index PCRIndex) bool {
+	const maxPCRIndex PCRIndex = 31
+	return index <= maxPCRIndex
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
@@ -201,7 +206,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}, remaining, nil
 }
 
-func fixupSpecIdEvent(event *Event, algorithms []AlgorithmId) {
+func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
 	if event.Data.(*SpecIdEventData).Spec != SpecEFI_2 {
 		return
 	}
@@ -226,7 +231,7 @@ func isSpecIdEvent(event *Event) (out bool) {
 
 type Log struct {
 	Spec         Spec
-	Algorithms   []AlgorithmId
+	Algorithms   AlgorithmIdList
 	stream       stream
 	failed       bool
 	indexTracker map[PCRIndex]uint
@@ -246,7 +251,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 
 	var spec Spec = SpecUnknown
 	var digestSizes []EFISpecIdEventAlgorithmSize
-	var algorithms []AlgorithmId
+	var algorithms AlgorithmIdList
 
 	switch d := event.Data.(type) {
 	case *SpecIdEventData:
@@ -259,7 +264,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 	}
 
 	if spec == SpecEFI_2 {
-		algorithms = make([]AlgorithmId, 0, len(digestSizes))
+		algorithms = make(AlgorithmIdList, 0, len(digestSizes))
 		for _, specAlgSize := range digestSizes {
 			if isKnownAlgorithm(specAlgSize.AlgorithmId) {
 				algorithms = append(algorithms, specAlgSize.AlgorithmId)
@@ -270,7 +275,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 			algSizes:       digestSizes,
 			readFirstEvent: false}
 	} else {
-		algorithms = []AlgorithmId{AlgorithmSha1}
+		algorithms = AlgorithmIdList{AlgorithmSha1}
 	}
 
 	_, err = r.Seek(start, io.SeekStart)
@@ -311,10 +316,6 @@ func (l *Log) nextEventInternal() (*Event, int, error) {
 	}
 
 	return event, remaining, nil
-}
-
-func (l *Log) HasAlgorithm(alg AlgorithmId) bool {
-	return contains(l.Algorithms, alg)
 }
 
 func (l *Log) NextEvent() (event *Event, err error) {
