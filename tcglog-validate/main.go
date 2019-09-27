@@ -202,7 +202,7 @@ func main() {
 
 		if !seenTrailingMeasuredBytes {
 			seenTrailingMeasuredBytes = true
-			fmt.Printf("- The following events have trailing bytes at the end of their event data "+
+			fmt.Printf("- The following events have trailing bytes at the end of their event data " +
 				"that was hashed and measured:\n")
 		}
 
@@ -210,8 +210,8 @@ func main() {
 			e.Event.EventType, e.TrailingMeasuredBytes, len(e.TrailingMeasuredBytes))
 	}
 	if seenTrailingMeasuredBytes {
-		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated digests "+
-			"for these events when the components that are being measured are upgraded or changed "+
+		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated digests " +
+			"for these events when the components that are being measured are upgraded or changed " +
 			"in some way.\n\n")
 	}
 
@@ -223,7 +223,7 @@ func main() {
 
 		if !seenEVAWithUnmeasuredTrailingByte {
 			seenEVAWithUnmeasuredTrailingByte = true
-			fmt.Printf("- The following events have one trailing byte at the end of their event data "+
+			fmt.Printf("- The following events have one trailing byte at the end of their event data " +
 				"that was not hashed and measured:\n")
 		}
 
@@ -263,7 +263,7 @@ func main() {
 	seenLogConsistencyError := false
 	for _, i := range pcrs {
 		for _, alg := range algorithms {
-			if bytes.Equal(result.LogPCRValues[i][alg], tpmPCRValues[i][alg]) {
+			if bytes.Equal(result.ExpectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
 				continue
 			}
 			if !seenLogConsistencyError {
@@ -272,7 +272,7 @@ func main() {
 					"for some PCRs:\n")
 			}
 			fmt.Printf("  - PCR %d, bank %s - actual PCR value: %x, expected PCR value from log: %x\n",
-				i, alg, tpmPCRValues[i][alg], result.LogPCRValues[i][alg])
+				i, alg, tpmPCRValues[i][alg], result.ExpectedPCRValues[i][alg])
 		}
 	}
 
