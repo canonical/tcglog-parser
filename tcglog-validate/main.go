@@ -194,36 +194,36 @@ func main() {
 			"than just the variable contents\n\n")
 	}
 
-	seenExcessMeasuredBytes := false
+	seenTrailingMeasuredBytes := false
 	for _, e := range result.ValidatedEvents {
-		if len(e.ExcessMeasuredBytes) == 0 {
+		if len(e.TrailingMeasuredBytes) == 0 {
 			continue
 		}
 
-		if !seenExcessMeasuredBytes {
-			seenExcessMeasuredBytes = true
-			fmt.Printf("- The following events have padding at the end of their event data that was " +
-				"hashed and measured:\n")
+		if !seenTrailingMeasuredBytes {
+			seenTrailingMeasuredBytes = true
+			fmt.Printf("- The following events have trailing bytes at the end of their event data "+
+				"that was hashed and measured:\n")
 		}
 
 		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
-			e.Event.EventType, e.ExcessMeasuredBytes, len(e.ExcessMeasuredBytes))
+			e.Event.EventType, e.TrailingMeasuredBytes, len(e.TrailingMeasuredBytes))
 	}
-	if seenExcessMeasuredBytes {
-		fmt.Printf("  This extra padding should be taken in to account when calculating updated digests " +
-			"for these events when the components that are being measured are upgraded or changed " +
+	if seenTrailingMeasuredBytes {
+		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated digests "+
+			"for these events when the components that are being measured are upgraded or changed "+
 			"in some way.\n\n")
 	}
 
-	seenEVAWithUnmeasuredByte := false
+	seenEVAWithUnmeasuredTrailingByte := false
 	for _, e := range result.ValidatedEvents {
-		if !e.EfiVariableAuthorityHasUnmeasuredByte {
+		if !e.EfiVariableAuthorityHasUnmeasuredTrailingByte {
 			continue
 		}
 
-		if !seenEVAWithUnmeasuredByte {
-			seenEVAWithUnmeasuredByte = true
-			fmt.Printf("- The following events have one extra byte at the end of their event data " +
+		if !seenEVAWithUnmeasuredTrailingByte {
+			seenEVAWithUnmeasuredTrailingByte = true
+			fmt.Printf("- The following events have one trailing byte at the end of their event data "+
 				"that was not hashed and measured:\n")
 		}
 
@@ -232,7 +232,7 @@ func main() {
 			e.Event.Index, e.Event.PCRIndex, &v.VariableName, v.UnicodeName,
 			v.Bytes()[len(v.Bytes())-1])
 	}
-	if seenEVAWithUnmeasuredByte {
+	if seenEVAWithUnmeasuredTrailingByte {
 		fmt.Printf("\n")
 	}
 

@@ -14,8 +14,8 @@ type UnexpectedDigestValue struct {
 
 type ValidatedEvent struct {
 	Event                                 *Event
-	ExcessMeasuredBytes                   []byte
-	EfiVariableAuthorityHasUnmeasuredByte bool
+	TrailingMeasuredBytes                  []byte
+	EfiVariableAuthorityHasUnmeasuredTrailingByte   bool
 	UnexpectedDigestValues                []UnexpectedDigestValue
 }
 
@@ -119,7 +119,7 @@ func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *V
 			measuredBytes = measuredBytes[0 : len(measuredBytes)-1]
 			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
 			if ok {
-				ve.EfiVariableAuthorityHasUnmeasuredByte = true
+				ve.EfiVariableAuthorityHasUnmeasuredTrailingByte = true
 			}
 		}
 
@@ -164,10 +164,10 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 
 	if remaining > 0 && !informational {
 		end := len(event.Data.Bytes())
-		if ve.EfiVariableAuthorityHasUnmeasuredByte {
+		if ve.EfiVariableAuthorityHasUnmeasuredTrailingByte {
 			end -= 1
 		}
-		ve.ExcessMeasuredBytes = event.Data.Bytes()[len(event.Data.Bytes())-remaining : end]
+		ve.TrailingMeasuredBytes = event.Data.Bytes()[len(event.Data.Bytes())-remaining : end]
 	}
 }
 
