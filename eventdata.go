@@ -62,7 +62,8 @@ func decodeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, op
 
 func decodeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, options *LogOptions,
 	hasDigestOfSeparatorError bool) (EventData, int) {
-	event, n, err := decodeEventDataImpl(pcrIndex, eventType, data, options, hasDigestOfSeparatorError)
+	event, trailingBytes, err :=
+		decodeEventDataImpl(pcrIndex, eventType, data, options, hasDigestOfSeparatorError)
 
 	if err != nil {
 		if err == io.EOF {
@@ -72,7 +73,7 @@ func decodeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, option
 	}
 
 	if event != nil {
-		return event, len(data) - n
+		return event, trailingBytes
 	}
 
 	return &opaqueEventData{data: data}, 0

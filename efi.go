@@ -341,11 +341,11 @@ func decodeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVaria
 	return &EFIVariableEventData{data: data,
 		VariableName: *guid,
 		UnicodeName:  unicodeName.String(),
-		VariableData: variableData}, bytesRead(stream), nil
+		VariableData: variableData}, stream.Len(), nil
 }
 
-func decodeEventDataEFIVariable(data []byte, eventType EventType) (out EventData, n int, err error) {
-	d, n, err := decodeEventDataEFIVariableImpl(data, eventType)
+func decodeEventDataEFIVariable(data []byte, eventType EventType) (out EventData, trailingBytes int, err error) {
+	d, trailingBytes, err := decodeEventDataEFIVariableImpl(data, eventType)
 	if d != nil {
 		out = d
 	}
@@ -723,33 +723,33 @@ func (e *EFIImageLoadEventData) Path() string {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
-func decodeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, int, error) {
+func decodeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, error) {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
 	if err := binary.Read(stream, binary.LittleEndian, &locationInMemory); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	var lengthInMemory uint64
 	if err := binary.Read(stream, binary.LittleEndian, &lengthInMemory); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	var linkTimeAddress uint64
 	if err := binary.Read(stream, binary.LittleEndian, &linkTimeAddress); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	var devicePathLength uint64
 	if err := binary.Read(stream, binary.LittleEndian, &devicePathLength); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	devicePathBuf := make([]byte, devicePathLength)
 
 	if _, err := io.ReadFull(stream, devicePathBuf); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	path := readDevicePath(devicePathBuf)
@@ -758,11 +758,11 @@ func decodeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, int, 
 		locationInMemory: locationInMemory,
 		lengthInMemory:   lengthInMemory,
 		linkTimeAddress:  linkTimeAddress,
-		path:             path}, len(data), nil
+		path:             path}, nil
 }
 
-func decodeEventDataEFIImageLoad(data []byte) (out EventData, n int, err error) {
-	d, n, err := decodeEventDataEFIImageLoadImpl(data)
+func decodeEventDataEFIImageLoad(data []byte) (out EventData, trailingBytes int, err error) {
+	d, err := decodeEventDataEFIImageLoadImpl(data)
 	if d != nil {
 		out = d
 	}
@@ -878,11 +878,11 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 			efiGPTPartitionEntry{typeGUID: *typeGUID, uniqueGUID: *uniqueGUID, name: name.String()}
 	}
 
-	return eventData, bytesRead(stream), nil
+	return eventData, stream.Len(), nil
 }
 
-func decodeEventDataEFIGPT(data []byte) (out EventData, n int, err error) {
-	d, n, err := decodeEventDataEFIGPTImpl(data)
+func decodeEventDataEFIGPT(data []byte) (out EventData, trailingBytes int, err error) {
+	d, trailingBytes, err := decodeEventDataEFIGPTImpl(data)
 	if d != nil {
 		out = d
 	}

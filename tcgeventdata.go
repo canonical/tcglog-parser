@@ -161,7 +161,7 @@ func (e *AsciiStringEventData) Bytes() []byte {
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5 "EV_NO_ACTION Event Types")
-func decodeEventDataNoAction(data []byte) (out EventData, n int, err error) {
+func decodeEventDataNoAction(data []byte) (out EventData, trailingBytes int, err error) {
 	stream := bytes.NewReader(data)
 
 	// Signature field
@@ -205,14 +205,14 @@ func decodeEventDataNoAction(data []byte) (out EventData, n int, err error) {
 		return nil, 0, nil
 	}
 
-	n = bytesRead(stream)
+	trailingBytes = stream.Len()
 	return
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func decodeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
-	return &AsciiStringEventData{data: data}, len(data), nil
+	return &AsciiStringEventData{data: data}, 0, nil
 }
 
 type separatorEventData struct {
@@ -232,14 +232,14 @@ func (e *separatorEventData) Bytes() []byte {
 }
 
 func decodeEventDataSeparator(data []byte, isError bool) (*separatorEventData, int, error) {
-	return &separatorEventData{data: data, isError: isError}, len(data), nil
+	return &separatorEventData{data: data, isError: isError}, 0, nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
 func decodeEventDataTCG(eventType EventType, data []byte,
-	hasDigestOfSeparatorError bool) (out EventData, n int, err error) {
+	hasDigestOfSeparatorError bool) (out EventData, trailingBytes int, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		return decodeEventDataNoAction(data)

@@ -59,14 +59,14 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 		case strings.Index(str, kernelCmdlinePrefix) == 0:
 			return &KernelCmdlineEventData{data,
 					data[len(kernelCmdlinePrefix) : len(str)-1]},
-				len(data), nil
+				0, nil
 		case strings.Index(str, grubCmdPrefix) == 0:
-			return &GrubCmdEventData{data, data[len(grubCmdPrefix) : len(str)-1]}, len(data), nil
+			return &GrubCmdEventData{data, data[len(grubCmdPrefix) : len(str)-1]}, 0, nil
 		default:
 			return nil, 0, errors.New("unexpected prefix for GRUB string")
 		}
 	case 9:
-		return &AsciiStringEventData{data: data}, len(data), nil
+		return &AsciiStringEventData{data: data}, 0, nil
 	default:
 		panic("unhandled PCR index")
 	}
