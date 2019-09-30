@@ -205,7 +205,6 @@ func decodeEventDataNoAction(data []byte) (out EventData, trailingBytes int, err
 		return nil, 0, nil
 	}
 
-	trailingBytes = stream.Len()
 	return
 }
 
