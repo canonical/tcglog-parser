@@ -7,32 +7,32 @@ import (
 	"os"
 )
 
-type UnexpectedDigestValue struct {
+type IncorrectDigestValue struct {
 	Algorithm AlgorithmId
 	Expected  Digest
 }
 
 type ValidatedEvent struct {
-	Event                                         *Event
-	TrailingMeasuredBytes                         []byte
-	EfiVariableAuthorityHasUnmeasuredTrailingByte bool
-	UnexpectedDigestValues                        []UnexpectedDigestValue
+	Event                   *Event
+	MeasuredTrailingBytes   int
+	UnmeasuredTrailingBytes int
+	IncorrectDigestValues   []IncorrectDigestValue
 }
 
 type LogValidateResult struct {
-	EfiVariableBootDigestsContainFullVariableStruct bool
+	EfiBootVariableDigestsContainFullVariableStruct bool
 	ValidatedEvents                                 []*ValidatedEvent
 	Spec                                            Spec
 	Algorithms                                      AlgorithmIdList
 	ExpectedPCRValues                               map[PCRIndex]DigestMap
 }
 
-type efiVarBootQuirkState uint
+type efiBootVariableQuirkState int
 
 const (
-	efiVarBootQuirkIndeterminate efiVarBootQuirkState = iota
-	efiVarBootQuirkInactive
-	efiVarBootQuirkActive
+	efiBootVariableQuirkStateUnknown efiBootVariableQuirkState = iota
+	efiBootVariablesCorrect
+	efiBootVariablesContainFullVariableStruct
 )
 
 func doesEventTypeExtendPCR(t EventType) bool {
@@ -49,42 +49,42 @@ func performHashExtendOperation(alg AlgorithmId, initial Digest, event Digest) D
 	return hash.Sum(nil)
 }
 
-func determineMeasuredBytes(event *Event, efiVarBootQuirk bool) []byte {
+func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bool) {
 	switch d := event.Data.(type) {
 	case *opaqueEventData:
 		switch event.EventType {
 		case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags,
 			EventTypeTableOfDevices, EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
-			return event.Data.Bytes()
+			return event.Data.Bytes(), true
 		}
 	case *separatorEventData:
 		if !d.isError {
-			return event.Data.Bytes()
+			return event.Data.Bytes(), true
 		} else {
 			out := make([]byte, 4)
 			binary.LittleEndian.PutUint32(out, separatorEventErrorValue)
-			return out
+			return out, false
 		}
 	case *AsciiStringEventData:
 		switch event.EventType {
 		case EventTypeAction, EventTypeEFIAction:
-			return event.Data.Bytes()
+			return event.Data.Bytes(), true
 		}
 	case *EFIVariableEventData:
-		if event.EventType == EventTypeEFIVariableBoot && !efiVarBootQuirk {
-			return d.VariableData
+		if event.EventType == EventTypeEFIVariableBoot && !efiBootVariableQuirk {
+			return d.VariableData, false
 		} else {
-			return event.Data.Bytes()
+			return event.Data.Bytes(), true
 		}
-	case *EFIGPTEventData:
-		return event.Data.Bytes()
+	case *efiGPTEventData:
+		return event.Data.Bytes(), true
 	case *KernelCmdlineEventData:
-		return d.cmdline
+		return d.cmdline, false
 	case *GrubCmdEventData:
-		return d.cmd
+		return d.cmd, false
 	}
 
-	return nil
+	return nil, false
 }
 
 func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte) (bool, []byte) {
@@ -93,49 +93,78 @@ func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte)
 }
 
 type logValidator struct {
-	log                  *Log
-	expectedPCRValues    map[PCRIndex]DigestMap
-	efiVarBootQuirkState efiVarBootQuirkState
-	validatedEvents      []*ValidatedEvent
+	log                       *Log
+	expectedPCRValues         map[PCRIndex]DigestMap
+	efiBootVariableQuirkState efiBootVariableQuirkState
+	validatedEvents           []*ValidatedEvent
 }
 
-func (v *logValidator) checkDigestForEvent(alg AlgorithmId, digest Digest, ve *ValidatedEvent) bool {
-	efiVarBootQuirk := v.efiVarBootQuirkState == efiVarBootQuirkActive
+func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
+	var measuredBytes []byte
 
-	measuredBytes := determineMeasuredBytes(ve.Event, efiVarBootQuirk)
-	if measuredBytes == nil {
-		return false
-	}
-
-	if ok, exp := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
-		if ve.Event.EventType == EventTypeEFIVariableBoot &&
-			v.efiVarBootQuirkState == efiVarBootQuirkIndeterminate {
-			measuredBytes = determineMeasuredBytes(ve.Event, true)
-			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
-			if ok {
-				v.efiVarBootQuirkState = efiVarBootQuirkActive
+	for alg, digest := range e.Event.Digests {
+		if len(measuredBytes) > 0 {
+			if ok, expected := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
+				e.IncorrectDigestValues = append(e.IncorrectDigestValues,
+					IncorrectDigestValue{Algorithm: alg, Expected: expected})
 			}
-		} else if ve.Event.EventType == EventTypeEFIVariableAuthority {
-			measuredBytes = measuredBytes[0 : len(measuredBytes)-1]
-			ok, _ = isExpectedDigestValue(digest, alg, measuredBytes)
-			if ok {
-				ve.EfiVariableAuthorityHasUnmeasuredTrailingByte = true
-			}
+			continue
 		}
 
-		if !ok {
-			ve.UnexpectedDigestValues = append(ve.UnexpectedDigestValues,
-				UnexpectedDigestValue{Algorithm: alg, Expected: exp})
-		}
-	} else if ve.Event.EventType == EventTypeEFIVariableBoot &&
-		v.efiVarBootQuirkState == efiVarBootQuirkIndeterminate {
-		v.efiVarBootQuirkState = efiVarBootQuirkInactive
-	}
+		efiBootVariableQuirk := v.efiBootVariableQuirkState == efiBootVariablesContainFullVariableStruct
 
-	return true
+	Loop:
+		for {
+			t := trailingBytes
+			expectedMeasuredBytes, eventDataIsMeasured :=
+				determineMeasuredBytes(e.Event, efiBootVariableQuirk)
+			if expectedMeasuredBytes == nil {
+				return
+			}
+
+			bytes := expectedMeasuredBytes
+
+			for {
+				ok, _ := isExpectedDigestValue(digest, alg, bytes)
+				switch {
+				case ok:
+					measuredBytes = bytes
+					if eventDataIsMeasured && trailingBytes > 0 {
+						e.MeasuredTrailingBytes = t
+						e.UnmeasuredTrailingBytes = trailingBytes - t
+					}
+					if e.Event.EventType == EventTypeEFIVariableBoot &&
+						v.efiBootVariableQuirkState == efiBootVariableQuirkStateUnknown {
+						if efiBootVariableQuirk {
+							v.efiBootVariableQuirkState =
+								efiBootVariablesContainFullVariableStruct
+						} else {
+							v.efiBootVariableQuirkState = efiBootVariablesCorrect
+						}
+					}
+					break Loop
+				case t > 0 && len(bytes) > 1 && eventDataIsMeasured:
+					bytes = bytes[0 : len(bytes)-1]
+					t -= 1
+				case !ok:
+					if e.Event.EventType == EventTypeEFIVariableBoot &&
+						v.efiBootVariableQuirkState == efiBootVariableQuirkStateUnknown &&
+						efiBootVariableQuirk == false {
+						efiBootVariableQuirk = true
+						continue Loop
+					}
+					expectedMeasuredBytes, _ = determineMeasuredBytes(e.Event, false)
+					e.IncorrectDigestValues = append(e.IncorrectDigestValues,
+						IncorrectDigestValue{Algorithm: alg,
+							Expected: hashSum(expectedMeasuredBytes, alg)})
+					break Loop
+				}
+			}
+		}
+	}
 }
 
-func (v *logValidator) processEvent(event *Event, remaining int) {
+func (v *logValidator) processEvent(event *Event, trailingBytes int) {
 	if _, exists := v.expectedPCRValues[event.PCRIndex]; !exists {
 		v.expectedPCRValues[event.PCRIndex] = DigestMap{}
 		for _, alg := range v.log.Algorithms {
@@ -150,34 +179,21 @@ func (v *logValidator) processEvent(event *Event, remaining int) {
 		return
 	}
 
-	informational := false
 	for alg, digest := range event.Digests {
 		v.expectedPCRValues[event.PCRIndex][alg] =
 			performHashExtendOperation(alg, v.expectedPCRValues[event.PCRIndex][alg], digest)
-
-		if informational {
-			continue
-		}
-
-		informational = !v.checkDigestForEvent(alg, digest, ve)
 	}
 
-	if remaining > 0 && !informational {
-		end := len(event.Data.Bytes())
-		if ve.EfiVariableAuthorityHasUnmeasuredTrailingByte {
-			end -= 1
-		}
-		ve.TrailingMeasuredBytes = event.Data.Bytes()[len(event.Data.Bytes())-remaining : end]
-	}
+	v.checkEventDigests(ve, trailingBytes)
 }
 
 func (v *logValidator) run() (*LogValidateResult, error) {
 	for {
-		event, remaining, err := v.log.nextEventInternal()
+		event, trailingBytes, err := v.log.nextEventInternal()
 		if err != nil {
 			if err == io.EOF {
 				return &LogValidateResult{
-					EfiVariableBootDigestsContainFullVariableStruct: v.efiVarBootQuirkState == efiVarBootQuirkActive,
+					EfiBootVariableDigestsContainFullVariableStruct: v.efiBootVariableQuirkState == efiBootVariablesContainFullVariableStruct,
 					ValidatedEvents:   v.validatedEvents,
 					Spec:              v.log.Spec,
 					Algorithms:        v.log.Algorithms,
@@ -185,7 +201,7 @@ func (v *logValidator) run() (*LogValidateResult, error) {
 			}
 			return nil, err
 		}
-		v.processEvent(event, remaining)
+		v.processEvent(event, trailingBytes)
 	}
 }
 

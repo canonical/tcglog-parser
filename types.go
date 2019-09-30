@@ -4,11 +4,24 @@ import (
 	"fmt"
 )
 
+// Spec corresponds to the TCG specification that an event log conforms to.
 type Spec uint
+
+// PCRIndex corresponds to the index of a PCR on the TPM.
 type PCRIndex uint32
+
+// EventType corresponds to the type of an event in an event log.
 type EventType uint32
+
+// AlgorithmId corresponds to the algorithm of digests that appear in the log. The values are in sync with those
+// in the TPM Library Specification for the TPM_ALG_ID type.
+// See https://trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf (Table 9)
 type AlgorithmId uint16
+
+// Digest is the result of hashing some data.
 type Digest []byte
+
+// DigestMap is a map of algorithms to digests.
 type DigestMap map[AlgorithmId]Digest
 
 func (e EventType) String() string {
@@ -109,6 +122,7 @@ func (a AlgorithmId) Format(s fmt.State, f rune) {
 	}
 }
 
+// AlgorithmListId is a slice of AlgorithmId values,
 type AlgorithmIdList []AlgorithmId
 
 func (l AlgorithmIdList) Contains(a AlgorithmId) bool {
@@ -120,10 +134,11 @@ func (l AlgorithmIdList) Contains(a AlgorithmId) bool {
 	return false
 }
 
+// Event corresponds to a single event in an event log.
 type Event struct {
-	Index     uint
-	PCRIndex  PCRIndex
-	EventType EventType
-	Digests   DigestMap
-	Data      EventData
+	Index     uint      // Sequential index of event in the log
+	PCRIndex  PCRIndex  // PCR index to which this event was measured
+	EventType EventType // The type of this event
+	Digests   DigestMap // The digests corresponding to this event for the supported algorithms
+	Data      EventData // The data recorded with this event
 }

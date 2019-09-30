@@ -189,14 +189,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if result.EfiVariableBootDigestsContainFullVariableStruct {
+	if result.EfiBootVariableDigestsContainFullVariableStruct {
 		fmt.Printf("- EV_EFI_VARIABLE_BOOT events measure entire UEFI_VARIABLE_DATA structure rather " +
 			"than just the variable contents\n\n")
 	}
 
 	seenTrailingMeasuredBytes := false
 	for _, e := range result.ValidatedEvents {
-		if len(e.TrailingMeasuredBytes) == 0 {
+		if e.MeasuredTrailingBytes == 0 {
 			continue
 		}
 
@@ -206,55 +206,62 @@ func main() {
 				"that was hashed and measured:\n")
 		}
 
+		bytes := e.Event.Data.Bytes()
+		start := len(bytes) - e.MeasuredTrailingBytes - e.UnmeasuredTrailingBytes
+		end := len(bytes) - e.UnmeasuredTrailingBytes
+		bytes = bytes[start:end]
+
 		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
-			e.Event.EventType, e.TrailingMeasuredBytes, len(e.TrailingMeasuredBytes))
+			e.Event.EventType, bytes, len(bytes))
 	}
 	if seenTrailingMeasuredBytes {
-		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated digests " +
-			"for these events when the components that are being measured are upgraded or changed " +
-			"in some way.\n\n")
+		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated " +
+			"digests for these events when the components that are being measured are upgraded or " +
+			"changed in some way.\n\n")
 	}
 
-	seenEVAWithUnmeasuredTrailingByte := false
+	seenTrailingUnmeasuredBytes := false
 	for _, e := range result.ValidatedEvents {
-		if !e.EfiVariableAuthorityHasUnmeasuredTrailingByte {
+		if e.UnmeasuredTrailingBytes == 0 {
 			continue
 		}
 
-		if !seenEVAWithUnmeasuredTrailingByte {
-			seenEVAWithUnmeasuredTrailingByte = true
-			fmt.Printf("- The following events have one trailing byte at the end of their event data " +
+		if !seenTrailingUnmeasuredBytes {
+			seenTrailingUnmeasuredBytes = true
+			fmt.Printf("- The following events have trailing bytes at the end of their event data " +
 				"that was not hashed and measured:\n")
 		}
 
-		v := e.Event.Data.(*tcglog.EFIVariableEventData)
-		fmt.Printf("  - Event %d in PCR %d [ VariableName: %s, UnicodeName: \"%s\" ] (byte: 0x%x)\n",
-			e.Event.Index, e.Event.PCRIndex, &v.VariableName, v.UnicodeName,
-			v.Bytes()[len(v.Bytes())-1])
+		bytes := e.Event.Data.Bytes()
+		start := len(bytes) - e.UnmeasuredTrailingBytes
+		bytes = bytes[start:]
+
+		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
+			e.Event.EventType, bytes, len(bytes))
 	}
-	if seenEVAWithUnmeasuredTrailingByte {
+	if seenTrailingUnmeasuredBytes {
 		fmt.Printf("\n")
 	}
 
-	seenUnexpectedDigests := false
+	seenIncorrectDigests := false
 	for _, e := range result.ValidatedEvents {
-		if len(e.UnexpectedDigestValues) == 0 {
+		if len(e.IncorrectDigestValues) == 0 {
 			continue
 		}
 
-		if !seenUnexpectedDigests {
-			seenUnexpectedDigests = true
+		if !seenIncorrectDigests {
+			seenIncorrectDigests = true
 			fmt.Printf("- The following events have digests that aren't generated from the data " +
 				"recorded with them in the log:\n")
 		}
 
-		for _, v := range e.UnexpectedDigestValues {
+		for _, v := range e.IncorrectDigestValues {
 			fmt.Printf("  - Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, "+
 				"got: %x\n", e.Event.Index, e.Event.PCRIndex, e.Event.EventType, v.Algorithm,
 				v.Expected, e.Event.Digests[v.Algorithm])
 		}
 	}
-	if seenUnexpectedDigests {
+	if seenIncorrectDigests {
 		fmt.Printf("  This is unexpected for these event types. Knowledge of the format of the data " +
 			"being measured is required in order to calculate updated digests for these events " +
 			"when the components being measured are upgraded or changed in some way.\n\n")

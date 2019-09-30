@@ -46,6 +46,7 @@ func extractUTF16Buffer(stream io.ReadSeeker, nchars uint64) ([]uint16, error) {
 	return out, nil
 }
 
+// EFIGUID corresponds to the EFI_GUID type
 type EFIGUID struct {
 	A uint32
 	B uint16
@@ -58,6 +59,7 @@ func (g *EFIGUID) String() string {
 	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.A, g.B, g.C, g.D, g.E)
 }
 
+// Encode marshals g to buf in little endian format.
 func (g *EFIGUID) Encode(buf io.Writer) error {
 	if err := binary.Write(buf, binary.LittleEndian, g.A); err != nil {
 		return err
@@ -186,42 +188,42 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 	return nil
 }
 
-type StartupLocalityEventData struct {
+type startupLocalityEventData struct {
 	data     []byte
 	Locality uint8
 }
 
-func (e *StartupLocalityEventData) String() string {
+func (e *startupLocalityEventData) String() string {
 	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.Locality)
 }
 
-func (e *StartupLocalityEventData) Bytes() []byte {
+func (e *startupLocalityEventData) Bytes() []byte {
 	return e.data
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(stream io.Reader, data []byte) (*StartupLocalityEventData, error) {
+func decodeStartupLocalityEvent(stream io.Reader, data []byte) (*startupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(stream, binary.LittleEndian, &locality); err != nil {
 		return nil, err
 	}
 
-	return &StartupLocalityEventData{data: data, Locality: locality}, nil
+	return &startupLocalityEventData{data: data, Locality: locality}, nil
 }
 
-type BIMReferenceManifestEventData struct {
+type bimReferenceManifestEventData struct {
 	data     []byte
 	VendorId uint32
 	Guid     EFIGUID
 }
 
-func (e *BIMReferenceManifestEventData) String() string {
+func (e *bimReferenceManifestEventData) String() string {
 	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }",
 		e.VendorId, &e.Guid)
 }
 
-func (e *BIMReferenceManifestEventData) Bytes() []byte {
+func (e *bimReferenceManifestEventData) Bytes() []byte {
 	return e.data
 }
 
@@ -229,7 +231,7 @@ func (e *BIMReferenceManifestEventData) Bytes() []byte {
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*BIMReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*bimReferenceManifestEventData, error) {
 	var vendorId uint32
 	if err := binary.Read(stream, binary.LittleEndian, &vendorId); err != nil {
 		return nil, err
@@ -240,9 +242,10 @@ func decodeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*BIMReferen
 		return nil, err
 	}
 
-	return &BIMReferenceManifestEventData{data: data, VendorId: vendorId, Guid: *guid}, nil
+	return &bimReferenceManifestEventData{data: data, VendorId: vendorId, Guid: *guid}, nil
 }
 
+// EFIVariableEventData corresponds to the EFI_VARIABLE_DATA type.
 type EFIVariableEventData struct {
 	data         []byte
 	VariableName EFIGUID
@@ -656,11 +659,11 @@ func readDevicePathNode(stream io.Reader) *efiDevicePathNode {
 	return &efiDevicePathNode{t: t, subType: subType, data: data}
 }
 
-type EFIDevicePath struct {
+type efiDevicePath struct {
 	root *efiDevicePathNode
 }
 
-func (p *EFIDevicePath) String() string {
+func (p *efiDevicePath) String() string {
 	var builder bytes.Buffer
 	for node := p.root; node != nil; node = node.next {
 		if node != p.root {
@@ -671,14 +674,14 @@ func (p *EFIDevicePath) String() string {
 	return builder.String()
 }
 
-func readDevicePath(data []byte) *EFIDevicePath {
+func readDevicePath(data []byte) *efiDevicePath {
 	stream := bytes.NewReader(data)
 
 	var rootNode, lastNode *efiDevicePathNode
 	for {
 		node := readDevicePathNode(stream)
 		if node == nil {
-			return &EFIDevicePath{}
+			return &efiDevicePath{}
 		}
 
 		if node.t == efiDevicePathNodeEoH {
@@ -693,25 +696,29 @@ func readDevicePath(data []byte) *EFIDevicePath {
 		lastNode = node
 	}
 
-	return &EFIDevicePath{root: rootNode}
+	return &efiDevicePath{root: rootNode}
 }
 
 type EFIImageLoadEventData struct {
 	data             []byte
-	LocationInMemory uint64
-	LengthInMemory   uint64
-	LinkTimeAddress  uint64
-	Path             *EFIDevicePath
+	locationInMemory uint64
+	lengthInMemory   uint64
+	linkTimeAddress  uint64
+	path             *efiDevicePath
 }
 
 func (e *EFIImageLoadEventData) String() string {
 	return fmt.Sprintf("UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x%016x, ImageLengthInMemory: %d, "+
-		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.LocationInMemory, e.LengthInMemory,
-		e.LinkTimeAddress, e.Path)
+		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.locationInMemory, e.lengthInMemory,
+		e.linkTimeAddress, e.path)
 }
 
 func (e *EFIImageLoadEventData) Bytes() []byte {
 	return e.data
+}
+
+func (e *EFIImageLoadEventData) Path() string {
+	return e.path.String()
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
@@ -748,10 +755,10 @@ func decodeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, int, 
 	path := readDevicePath(devicePathBuf)
 
 	return &EFIImageLoadEventData{data: data,
-		LocationInMemory: locationInMemory,
-		LengthInMemory:   lengthInMemory,
-		LinkTimeAddress:  linkTimeAddress,
-		Path:             path}, bytesRead(stream), nil
+		locationInMemory: locationInMemory,
+		lengthInMemory:   lengthInMemory,
+		linkTimeAddress:  linkTimeAddress,
+		path:             path}, len(data), nil
 }
 
 func decodeEventDataEFIImageLoad(data []byte) (out EventData, n int, err error) {
@@ -762,28 +769,27 @@ func decodeEventDataEFIImageLoad(data []byte) (out EventData, n int, err error) 
 	return
 }
 
-type EFIGPTPartitionEntry struct {
-	TypeGUID   EFIGUID
-	UniqueGUID EFIGUID
-	Attrs      uint64
-	Name       string
+type efiGPTPartitionEntry struct {
+	typeGUID   EFIGUID
+	uniqueGUID EFIGUID
+	name       string
 }
 
-func (p *EFIGPTPartitionEntry) String() string {
+func (p *efiGPTPartitionEntry) String() string {
 	return fmt.Sprintf("PartitionTypeGUID: %s, UniquePartitionGUID: %s, Name: \"%s\"",
-		&p.TypeGUID, &p.UniqueGUID, p.Name)
+		&p.typeGUID, &p.uniqueGUID, p.name)
 }
 
-type EFIGPTEventData struct {
+type efiGPTEventData struct {
 	data       []byte
-	DiskGUID   EFIGUID
-	Partitions []EFIGPTPartitionEntry
+	diskGUID   EFIGUID
+	partitions []efiGPTPartitionEntry
 }
 
-func (e *EFIGPTEventData) String() string {
+func (e *efiGPTEventData) String() string {
 	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", &e.DiskGUID)
-	for i, part := range e.Partitions {
+	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", &e.diskGUID)
+	for i, part := range e.partitions {
 		if i > 0 {
 			fmt.Fprintf(&builder, ", ")
 		}
@@ -793,11 +799,11 @@ func (e *EFIGPTEventData) String() string {
 	return builder.String()
 }
 
-func (e *EFIGPTEventData) Bytes() []byte {
+func (e *efiGPTEventData) Bytes() []byte {
 	return e.data
 }
 
-func decodeEventDataEFIGPTImpl(data []byte) (*EFIGPTEventData, int, error) {
+func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 	stream := bytes.NewReader(data)
 
 	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{Header, MyLBA, AlternateLBA, FirstUsableLBA, LastUsableLBA}
@@ -833,7 +839,7 @@ func decodeEventDataEFIGPTImpl(data []byte) (*EFIGPTEventData, int, error) {
 		return nil, 0, err
 	}
 
-	eventData := &EFIGPTEventData{DiskGUID: *diskGUID, Partitions: make([]EFIGPTPartitionEntry, numberOfParts)}
+	eventData := &efiGPTEventData{diskGUID: *diskGUID, partitions: make([]efiGPTPartitionEntry, numberOfParts)}
 
 	for i := uint64(0); i < numberOfParts; i++ {
 		entryData := make([]byte, partEntrySize)
@@ -853,13 +859,8 @@ func decodeEventDataEFIGPTImpl(data []byte) (*EFIGPTEventData, int, error) {
 			return nil, 0, err
 		}
 
-		// Skip UEFI_GPT_DATA.Partitions[i].{StartingLBA, EndingLBA}
-		if _, err := entryStream.Seek(16, io.SeekCurrent); err != nil {
-			return nil, 0, err
-		}
-
-		var attrs uint64
-		if err := binary.Read(entryStream, binary.LittleEndian, &attrs); err != nil {
+		// Skip UEFI_GPT_DATA.Partitions[i].{StartingLBA, EndingLBA, Attributes}
+		if _, err := entryStream.Seek(24, io.SeekCurrent); err != nil {
 			return nil, 0, err
 		}
 
@@ -873,9 +874,8 @@ func decodeEventDataEFIGPTImpl(data []byte) (*EFIGPTEventData, int, error) {
 			name.WriteRune(r)
 		}
 
-		eventData.Partitions[i] =
-			EFIGPTPartitionEntry{TypeGUID: *typeGUID, UniqueGUID: *uniqueGUID, Attrs: attrs,
-				Name: name.String()}
+		eventData.partitions[i] =
+			efiGPTPartitionEntry{typeGUID: *typeGUID, uniqueGUID: *uniqueGUID, name: name.String()}
 	}
 
 	return eventData, bytesRead(stream), nil

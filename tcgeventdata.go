@@ -9,11 +9,14 @@ import (
 	"unsafe"
 )
 
+// EFISpecIdEventAlgorithmSize represents a digest algorithm and its length.
 type EFISpecIdEventAlgorithmSize struct {
 	AlgorithmId AlgorithmId
 	DigestSize  uint16
 }
 
+// SpecIdEventData corresponds to the event data for a Specification ID Version event
+// (TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, TCG_EfiSpecIdEvent)
 type SpecIdEventData struct {
 	data             []byte
 	Spec             Spec
@@ -22,7 +25,7 @@ type SpecIdEventData struct {
 	SpecVersionMajor uint8
 	SpecErrata       uint8
 	uintnSize        uint8
-	DigestSizes      []EFISpecIdEventAlgorithmSize
+	DigestSizes      []EFISpecIdEventAlgorithmSize // The digest algorithms contained within this log
 	VendorInfo       []byte
 }
 
@@ -140,6 +143,8 @@ var (
 	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
 )
 
+// AsciiStringEventData represents an event data buffer where the string returned by the String method is just the
+// string representation of the buffer.
 type AsciiStringEventData struct {
 	data []byte
 }

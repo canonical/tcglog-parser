@@ -8,8 +8,9 @@ import (
 	"os"
 )
 
+// LogOptions allows the behaviour of Log to be controlled.
 type LogOptions struct {
-	EnableGrub bool
+	EnableGrub bool // Enable support for interpreting events recorded by GRUB
 }
 
 func isKnownAlgorithm(alg AlgorithmId) (out bool) {
@@ -94,7 +95,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := decodeEventData(pcrIndex, eventType, event, &s.options,
+	data, trailing := decodeEventData(pcrIndex, eventType, event, &s.options,
 		isDigestOfSeparatorErrorValue(digest, AlgorithmSha1))
 
 	return &Event{
@@ -102,7 +103,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, remaining, nil
+	}, trailing, nil
 }
 
 type stream_2 struct {
@@ -195,7 +196,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, remaining := decodeEventData(pcrIndex, eventType, event, &s.options,
+	data, trailing := decodeEventData(pcrIndex, eventType, event, &s.options,
 		isDigestOfSeparatorErrorValue(digests[s.algSizes[0].AlgorithmId], s.algSizes[0].AlgorithmId))
 
 	return &Event{
@@ -203,7 +204,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		EventType: eventType,
 		Digests:   digests,
 		Data:      data,
-	}, remaining, nil
+	}, trailing, nil
 }
 
 func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
@@ -229,9 +230,10 @@ func isSpecIdEvent(event *Event) (out bool) {
 	return
 }
 
+// Log corresponds to an event log parser instance, and allows the consumer to iterate over log entries.
 type Log struct {
-	Spec         Spec
-	Algorithms   AlgorithmIdList
+	Spec         Spec            // The specification to which this log conforms
+	Algorithms   AlgorithmIdList // The digest algorithms that appear in the log
 	stream       stream
 	failed       bool
 	indexTracker map[PCRIndex]uint
@@ -295,7 +297,7 @@ func (l *Log) nextEventInternal() (*Event, int, error) {
 		return nil, 0, LogReadError{errors.New("log status inconsistent due to a previous error")}
 	}
 
-	event, remaining, err := l.stream.readNextEvent()
+	event, trailing, err := l.stream.readNextEvent()
 	if err != nil {
 		if err != io.EOF {
 			l.failed = true
@@ -315,18 +317,22 @@ func (l *Log) nextEventInternal() (*Event, int, error) {
 		fixupSpecIdEvent(event, l.Algorithms)
 	}
 
-	return event, remaining, nil
+	return event, trailing, nil
 }
 
+// NextEvent returns an Event structure that corresponds to the next event in the log. Upon successful completion,
+// the Log instance will advance to the next event. If there are no more events in the log, it will return io.EOF.
 func (l *Log) NextEvent() (event *Event, err error) {
 	event, _, err = l.nextEventInternal()
 	return
 }
 
+// NewLogFromByteReader creates a new Log instance that reads a log from the provided reader.
 func NewLogFromByteReader(reader *bytes.Reader, options LogOptions) (*Log, error) {
 	return newLogFromReader(reader, options)
 }
 
+// NewLogFromFile creates a new Log instance that reads a log from the specified file.
 func NewLogFromFile(file *os.File, options LogOptions) (*Log, error) {
 	return newLogFromReader(file, options)
 }

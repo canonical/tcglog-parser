@@ -72,7 +72,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !log.HasAlgorithm(algorithmId) {
+	if !log.Algorithms.Contains(algorithmId) {
 		fmt.Fprintf(os.Stderr,
 			"The log doesn't contain entries for the %s digest algorithm\n", algorithmId)
 		os.Exit(1)
