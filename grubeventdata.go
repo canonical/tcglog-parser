@@ -12,38 +12,39 @@ var (
 	grubCmdPrefix       = "grub_cmd: "
 )
 
-type KernelCmdlineEventData struct {
-	data    []byte
-	cmdline []byte
+type GrubStringEventType int
+
+const (
+	GrubCmd GrubStringEventType = iota
+	KernelCmdline
+)
+
+func grubEventTypeString(t GrubStringEventType) string {
+	switch t {
+	case GrubCmd:
+		return "grub_cmd"
+	case KernelCmdline:
+		return "kernel_cmdline"
+	}
+	panic("invalid value")
 }
 
-func (e *KernelCmdlineEventData) String() string {
-	return fmt.Sprintf("kernel_cmdline{ %s }", e.Cmdline())
-}
-
-func (e *KernelCmdlineEventData) Bytes() []byte {
-	return e.data
-}
-
-func (e *KernelCmdlineEventData) Cmdline() string {
-	return *(*string)(unsafe.Pointer(&e.cmdline))
-}
-
-type GrubCmdEventData struct {
+type GrubStringEventData struct {
 	data []byte
-	cmd  []byte
+	measuredData []byte
+	Type GrubStringEventType
 }
 
-func (e *GrubCmdEventData) String() string {
-	return fmt.Sprintf("grub_cmd{ %s }", e.Cmd())
+func (e *GrubStringEventData) String() string {
+	return fmt.Sprintf("%s{ %s }", grubEventTypeString(e.Type), e.MeasuredString())
 }
 
-func (e *GrubCmdEventData) Bytes() []byte {
+func (e *GrubStringEventData) Bytes() []byte {
 	return e.data
 }
 
-func (e *GrubCmdEventData) Cmd() string {
-	return *(*string)(unsafe.Pointer(&e.cmd))
+func (e *GrubStringEventData) MeasuredString() string {
+	return *(*string)(unsafe.Pointer(&e.measuredData))
 }
 
 func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int, error) {
@@ -57,11 +58,10 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 
 		switch {
 		case strings.Index(str, kernelCmdlinePrefix) == 0:
-			return &KernelCmdlineEventData{data,
-					data[len(kernelCmdlinePrefix) : len(str)-1]},
-				0, nil
+			return &GrubStringEventData{data, data[len(kernelCmdlinePrefix) : len(str)-1],
+				KernelCmdline},	0, nil
 		case strings.Index(str, grubCmdPrefix) == 0:
-			return &GrubCmdEventData{data, data[len(grubCmdPrefix) : len(str)-1]}, 0, nil
+			return &GrubStringEventData{data, data[len(grubCmdPrefix) : len(str)-1], GrubCmd}, 0, nil
 		default:
 			return nil, 0, errors.New("unexpected prefix for GRUB string")
 		}
