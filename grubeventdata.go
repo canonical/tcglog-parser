@@ -30,9 +30,9 @@ func grubEventTypeString(t GrubStringEventType) string {
 }
 
 type GrubStringEventData struct {
-	data []byte
+	data         []byte
 	measuredData []byte
-	Type GrubStringEventType
+	Type         GrubStringEventType
 }
 
 func (e *GrubStringEventData) String() string {
@@ -59,7 +59,7 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 		switch {
 		case strings.Index(str, kernelCmdlinePrefix) == 0:
 			return &GrubStringEventData{data, data[len(kernelCmdlinePrefix) : len(str)-1],
-				KernelCmdline},	0, nil
+				KernelCmdline}, 0, nil
 		case strings.Index(str, grubCmdPrefix) == 0:
 			return &GrubStringEventData{data, data[len(grubCmdPrefix) : len(str)-1], GrubCmd}, 0, nil
 		default:
