@@ -151,17 +151,15 @@ var (
 	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
 )
 
-// AsciiStringEventData represents an event data buffer where the string returned by the String method is just the
-// string representation of the buffer.
-type AsciiStringEventData struct {
+type asciiStringEventData struct {
 	data []byte
 }
 
-func (e *AsciiStringEventData) String() string {
+func (e *asciiStringEventData) String() string {
 	return *(*string)(unsafe.Pointer(&e.data))
 }
 
-func (e *AsciiStringEventData) Bytes() []byte {
+func (e *asciiStringEventData) Bytes() []byte {
 	return e.data
 }
 
@@ -218,8 +216,8 @@ func decodeEventDataNoAction(data []byte) (out EventData, trailingBytes int, err
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func decodeEventDataAction(data []byte) (*AsciiStringEventData, int, error) {
-	return &AsciiStringEventData{data: data}, 0, nil
+func decodeEventDataAction(data []byte) (*asciiStringEventData, int, error) {
+	return &asciiStringEventData{data: data}, 0, nil
 }
 
 type separatorEventData struct {

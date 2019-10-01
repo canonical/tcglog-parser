@@ -66,7 +66,7 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 			return nil, 0, errors.New("unexpected prefix for GRUB string")
 		}
 	case 9:
-		return &AsciiStringEventData{data: data}, 0, nil
+		return &asciiStringEventData{data: data}, 0, nil
 	default:
 		panic("unhandled PCR index")
 	}

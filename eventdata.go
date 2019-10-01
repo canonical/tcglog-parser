@@ -1,7 +1,6 @@
 package tcglog
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 )

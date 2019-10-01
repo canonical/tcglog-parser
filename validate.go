@@ -66,7 +66,7 @@ func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bo
 			binary.LittleEndian.PutUint32(out, separatorEventErrorValue)
 			return out, false
 		}
-	case *AsciiStringEventData:
+	case *asciiStringEventData:
 		switch event.EventType {
 		case EventTypeAction, EventTypeEFIAction:
 			return event.Data.Bytes(), true
