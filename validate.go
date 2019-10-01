@@ -212,7 +212,7 @@ func ReplayAndValidateLog(logPath string, options LogOptions) (*LogValidateResul
 		return nil, fmt.Errorf("cannot open log file: %v", err)
 	}
 
-	log, err := NewLogFromFile(file, options)
+	log, err := NewLog(file, options)
 	if err != nil {
 		return nil, err
 	}

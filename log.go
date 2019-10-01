@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 )
 
 // LogOptions allows the behaviour of Log to be controlled.
@@ -248,59 +247,6 @@ type Log struct {
 	indexTracker map[PCRIndex]uint
 }
 
-func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
-	start, err := r.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, fmt.Errorf("cannot obtain current offset in stream: %v", err)
-	}
-
-	var stream stream = &stream_1_2{r: r, options: options}
-	event, _, err := stream.readNextEvent()
-	if err != nil {
-		return nil, wrapLogReadError(err, true)
-	}
-
-	var spec Spec = SpecUnknown
-	var digestSizes []EFISpecIdEventAlgorithmSize
-	var algorithms AlgorithmIdList
-
-	switch d := event.Data.(type) {
-	case *SpecIdEventData:
-		spec = d.Spec
-		digestSizes = d.DigestSizes
-	case *BrokenEventData:
-		if _, isSpecErr := d.Error.(invalidSpecIdEventError); isSpecErr {
-			return nil, d.Error
-		}
-	}
-
-	if spec == SpecEFI_2 {
-		algorithms = make(AlgorithmIdList, 0, len(digestSizes))
-		for _, specAlgSize := range digestSizes {
-			if isKnownAlgorithm(specAlgSize.AlgorithmId) {
-				algorithms = append(algorithms, specAlgSize.AlgorithmId)
-			}
-		}
-		stream = &stream_2{r: r,
-			options:        options,
-			algSizes:       digestSizes,
-			readFirstEvent: false}
-	} else {
-		algorithms = AlgorithmIdList{AlgorithmSha1}
-	}
-
-	_, err = r.Seek(start, io.SeekStart)
-	if err != nil {
-		return nil, fmt.Errorf("cannot return to start of log: %v", err)
-	}
-
-	return &Log{Spec: spec,
-		Algorithms:   algorithms,
-		stream:       stream,
-		failed:       false,
-		indexTracker: map[PCRIndex]uint{}}, nil
-}
-
 func (l *Log) nextEventInternal() (*Event, int, error) {
 	if l.failed {
 		return nil, 0,
@@ -337,12 +283,47 @@ func (l *Log) NextEvent() (event *Event, err error) {
 	return
 }
 
-// NewLogFromByteReader creates a new Log instance that reads a log from the provided reader.
-func NewLogFromByteReader(reader *bytes.Reader, options LogOptions) (*Log, error) {
-	return newLogFromReader(reader, options)
-}
+// NewLog creates a new Log instance that reads an event log from r
+func NewLog(r io.ReaderAt, options LogOptions) (*Log, error) {
+	var stream stream = &stream_1_2{r: io.NewSectionReader(r, 0, (1 << 63) - 1), options: options}
+	event, _, err := stream.readNextEvent()
+	if err != nil {
+		return nil, wrapLogReadError(err, true)
+	}
 
-// NewLogFromFile creates a new Log instance that reads a log from the specified file.
-func NewLogFromFile(file *os.File, options LogOptions) (*Log, error) {
-	return newLogFromReader(file, options)
+	var spec Spec = SpecUnknown
+	var digestSizes []EFISpecIdEventAlgorithmSize
+	var algorithms AlgorithmIdList
+
+	switch d := event.Data.(type) {
+	case *SpecIdEventData:
+		spec = d.Spec
+		digestSizes = d.DigestSizes
+	case *BrokenEventData:
+		if _, isSpecErr := d.Error.(invalidSpecIdEventError); isSpecErr {
+			return nil, d.Error
+		}
+	}
+
+	if spec == SpecEFI_2 {
+		algorithms = make(AlgorithmIdList, 0, len(digestSizes))
+		for _, specAlgSize := range digestSizes {
+			if isKnownAlgorithm(specAlgSize.AlgorithmId) {
+				algorithms = append(algorithms, specAlgSize.AlgorithmId)
+			}
+		}
+		stream = &stream_2{r: io.NewSectionReader(r, 0, (1 << 63) - 1),
+			options:        options,
+			algSizes:       digestSizes,
+			readFirstEvent: false}
+	} else {
+		algorithms = AlgorithmIdList{AlgorithmSha1}
+		stream.(*stream_1_2).r.Seek(0, io.SeekStart)
+	}
+
+	return &Log{Spec: spec,
+		Algorithms:   algorithms,
+		stream:       stream,
+		failed:       false,
+		indexTracker: map[PCRIndex]uint{}}, nil
 }
