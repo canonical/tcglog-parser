@@ -3,6 +3,7 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 )
@@ -208,7 +209,7 @@ func (v *logValidator) run() (*LogValidateResult, error) {
 func ReplayAndValidateLog(logPath string, options LogOptions) (*LogValidateResult, error) {
 	file, err := os.Open(logPath)
 	if err != nil {
-		return nil, LogReadError{OrigError: err}
+		return nil, fmt.Errorf("cannot open log file: %v", err)
 	}
 
 	log, err := NewLogFromFile(file, options)

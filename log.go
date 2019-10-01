@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 )
@@ -53,7 +54,11 @@ func wrapLogReadError(origErr error, partial bool) error {
 		origErr = io.ErrUnexpectedEOF
 	}
 
-	return LogReadError{origErr}
+	return fmt.Errorf("error when reading from log stream (%v)", origErr)
+}
+
+func wrapPCRIndexOutOfRangeError(pcrIndex PCRIndex) error {
+	return fmt.Errorf("log entry has an out-of-range PCR index (%d)", pcrIndex)
 }
 
 type stream_1_2 struct {
@@ -70,7 +75,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 	}
 
 	if !isPCRIndexInRange(pcrIndex) {
-		return nil, 0, PCRIndexOutOfRangeError{pcrIndex}
+		return nil, 0, wrapPCRIndexOutOfRangeError(pcrIndex)
 	}
 
 	var eventType EventType
@@ -128,7 +133,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}
 
 	if !isPCRIndexInRange(pcrIndex) {
-		return nil, 0, PCRIndexOutOfRangeError{pcrIndex}
+		return nil, 0, wrapPCRIndexOutOfRangeError(pcrIndex)
 	}
 
 	var eventType EventType
@@ -159,7 +164,8 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		}
 
 		if j == len(s.algSizes) {
-			return nil, 0, UnrecognizedAlgorithmError{algorithmId}
+			return nil, 0, fmt.Errorf("crypto-agile log entry contains a digest for an unrecognized "+
+				"algorithm (%s)", algorithmId)
 		}
 
 		digest := make(Digest, digestSize)
@@ -168,14 +174,17 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		}
 
 		if _, exists := digests[algorithmId]; exists {
-			return nil, 0, DuplicateDigestValueError{algorithmId}
+			return nil, 0, fmt.Errorf("crypto-agile log entry contains more than one digest value "+
+				"for algorithm %s", algorithmId)
 		}
 		digests[algorithmId] = digest
 	}
 
 	for _, algSize := range s.algSizes {
 		if _, exists := digests[algSize.AlgorithmId]; !exists {
-			return nil, 0, MissingDigestValueError{algSize.AlgorithmId}
+			return nil, 0,
+				fmt.Errorf("crypto-agile log entry is missing a digest value for algorithm %s "+
+					"that was present in the Spec ID Event", algSize.AlgorithmId)
 		}
 	}
 
@@ -242,7 +251,7 @@ type Log struct {
 func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 	start, err := r.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot obtain current offset in stream: %v", err)
 	}
 
 	var stream stream = &stream_1_2{r: r, options: options}
@@ -260,7 +269,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 		spec = d.Spec
 		digestSizes = d.DigestSizes
 	case *BrokenEventData:
-		if _, isSpecErr := d.Error.(InvalidSpecIdEventError); isSpecErr {
+		if _, isSpecErr := d.Error.(invalidSpecIdEventError); isSpecErr {
 			return nil, d.Error
 		}
 	}
@@ -282,7 +291,7 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 
 	_, err = r.Seek(start, io.SeekStart)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot return to start of log: %v", err)
 	}
 
 	return &Log{Spec: spec,
@@ -294,7 +303,8 @@ func newLogFromReader(r io.ReadSeeker, options LogOptions) (*Log, error) {
 
 func (l *Log) nextEventInternal() (*Event, int, error) {
 	if l.failed {
-		return nil, 0, LogReadError{errors.New("log status inconsistent due to a previous error")}
+		return nil, 0,
+			errors.New("cannot read next event: log status inconsistent due to a previous error")
 	}
 
 	event, trailing, err := l.stream.readNextEvent()

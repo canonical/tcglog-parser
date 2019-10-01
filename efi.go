@@ -146,7 +146,7 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 	}
 
 	if numberOfAlgorithms < 1 {
-		return InvalidSpecIdEventError{"numberOfAlgorithms is zero"}
+		return invalidSpecIdEventError{"numberOfAlgorithms is zero"}
 	}
 
 	// TCG_EfiSpecIdEvent.digestSizes
@@ -166,7 +166,7 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 
 		knownSize, known := knownAlgorithms[algorithmId]
 		if known && knownSize != digestSize {
-			return InvalidSpecIdEventError{
+			return invalidSpecIdEventError{
 				fmt.Sprintf("digestSize for algorithmId 0x%04x doesn't match expected size "+
 					"(got: %d, expected: %d)", algorithmId, digestSize, knownSize)}
 		}
