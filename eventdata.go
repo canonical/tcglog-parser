@@ -43,10 +43,6 @@ func (e *opaqueEventData) Bytes() []byte {
 	return e.data
 }
 
-func bytesRead(stream *bytes.Reader) int {
-	return int(stream.Size()) - stream.Len()
-}
-
 func decodeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, options *LogOptions,
 	hasDigestOfSeparatorError bool) (EventData, int, error) {
 	switch {
