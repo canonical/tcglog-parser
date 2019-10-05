@@ -840,6 +840,9 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 
 		var name bytes.Buffer
 		for _, r := range utf16.Decode(nameUtf16) {
+			if r == rune(0) {
+				break
+			}
 			name.WriteRune(r)
 		}
 
