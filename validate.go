@@ -3,7 +3,6 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"os"
 )
