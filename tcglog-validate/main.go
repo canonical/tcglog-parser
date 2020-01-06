@@ -65,7 +65,7 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.Di
 	var selections tpm2.PCRSelectionList
 	for _, alg := range algorithms {
 		selections = append(selections,
-			tpm2.PCRSelection{Hash: tpm2.AlgorithmId(alg), Select: pcrIndexListToSelectionData(pcrs)})
+			tpm2.PCRSelection{Hash: tpm2.HashAlgorithmId(alg), Select: pcrIndexListToSelectionData(pcrs)})
 	}
 
 	for _, i := range pcrs {
@@ -77,11 +77,9 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.Di
 		return nil, fmt.Errorf("cannot read PCR values: %v", err)
 	}
 
-	j := 0
 	for _, s := range selections {
 		for _, i := range s.Select {
-			result[tcglog.PCRIndex(i)][tcglog.AlgorithmId(s.Hash)] = tcglog.Digest(digests[j])
-			j++
+			result[tcglog.PCRIndex(i)][tcglog.AlgorithmId(s.Hash)] = tcglog.Digest(digests[s.Hash][i])
 		}
 	}
 	return result, nil
