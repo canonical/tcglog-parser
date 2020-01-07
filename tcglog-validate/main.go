@@ -39,6 +39,7 @@ var (
 	withGrub      bool
 	noDefaultPcrs bool
 	tpmPath       string
+	logPath	      string
 	pcrs          tcglog.PCRArgList
 	algorithms    AlgorithmIdArgList
 )
@@ -47,6 +48,7 @@ func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
+	flag.StringVar(&logPath, "log-path", "", "")
 	flag.Var(&pcrs, "pcr", "Validate log entries for the specified PCR. Can be specified multiple times")
 	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified "+
 		"multiple times")
@@ -158,12 +160,15 @@ func main() {
 
 	sort.SliceStable(pcrs, func(i, j int) bool { return pcrs[i] < pcrs[j] })
 
-	if filepath.Dir(tpmPath) != "/dev" {
-		fmt.Fprintf(os.Stderr, "Expected TPM path to be a device node in /dev")
-		os.Exit(1)
+	if logPath == "" {
+		if filepath.Dir(tpmPath) != "/dev" {
+			fmt.Fprintf(os.Stderr, "Expected TPM path to be a device node in /dev")
+			os.Exit(1)
+		}
+		logPath = fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", filepath.Base(tpmPath))
+	} else {
+		tpmPath = ""
 	}
-
-	logPath := fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", filepath.Base(tpmPath))
 
 	result, err := tcglog.ReplayAndValidateLog(logPath, tcglog.LogOptions{EnableGrub: withGrub})
 	if err != nil {
@@ -179,12 +184,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Log doesn't contain entries for %s algorithm", alg)
 			os.Exit(1)
 		}
-	}
-
-	tpmPCRValues, err := readPCRs()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
-		os.Exit(1)
 	}
 
 	if result.EfiBootVariableDigestsContainFullVariableStruct {
@@ -263,6 +262,22 @@ func main() {
 		fmt.Printf("  This is unexpected for these event types. Knowledge of the format of the data " +
 			"being measured is required in order to calculate updated digests for these events " +
 			"when the components being measured are upgraded or changed in some way.\n\n")
+	}
+
+	if tpmPath == "" {
+		fmt.Printf("- Expected PCR values from log:\n")
+		for _, i := range pcrs {
+			for _, alg := range algorithms {
+				fmt.Printf("PCR %d, bank %s: %x\n", i, alg, result.ExpectedPCRValues[i][alg])
+			}
+		}
+		return
+	}
+
+	tpmPCRValues, err := readPCRs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
+		os.Exit(1)
 	}
 
 	seenLogConsistencyError := false
