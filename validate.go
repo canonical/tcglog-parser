@@ -21,17 +21,17 @@ type IncorrectDigestValue struct {
 }
 
 type ValidatedEvent struct {
-	Event                   *Event
-	MeasuredTrailingBytes   []byte
-	IncorrectDigestValues   []IncorrectDigestValue
+	Event                 *Event
+	MeasuredTrailingBytes []byte
+	IncorrectDigestValues []IncorrectDigestValue
 }
 
 type LogValidateResult struct {
-	EfiBootVariableBehaviour			EFIBootVariableBehaviour
-	ValidatedEvents                                 []*ValidatedEvent
-	Spec                                            Spec
-	Algorithms                                      AlgorithmIdList
-	ExpectedPCRValues                               map[PCRIndex]DigestMap
+	EfiBootVariableBehaviour EFIBootVariableBehaviour
+	ValidatedEvents          []*ValidatedEvent
+	Spec                     Spec
+	Algorithms               AlgorithmIdList
+	ExpectedPCRValues        map[PCRIndex]DigestMap
 }
 
 func doesEventTypeExtendPCR(t EventType) bool {
@@ -42,7 +42,7 @@ func doesEventTypeExtendPCR(t EventType) bool {
 }
 
 func performHashExtendOperation(alg AlgorithmId, initial Digest, event Digest) Digest {
-	hash := hasher(alg)
+	hash := alg.newHash()
 	hash.Write(initial)
 	hash.Write(event)
 	return hash.Sum(nil)
@@ -85,15 +85,15 @@ func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bo
 }
 
 func isExpectedDigestValue(digest Digest, alg AlgorithmId, measuredBytes []byte) (bool, []byte) {
-	expected := hashSum(measuredBytes, alg)
+	expected := alg.hash(measuredBytes)
 	return bytes.Equal(digest, expected), expected
 }
 
 type logValidator struct {
-	log                       *Log
-	expectedPCRValues         map[PCRIndex]DigestMap
-	efiBootVariableBehaviour  EFIBootVariableBehaviour
-	validatedEvents           []*ValidatedEvent
+	log                      *Log
+	expectedPCRValues        map[PCRIndex]DigestMap
+	efiBootVariableBehaviour EFIBootVariableBehaviour
+	validatedEvents          []*ValidatedEvent
 }
 
 func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
@@ -146,7 +146,7 @@ func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
 					expectedMeasuredBytes, _ = determineMeasuredBytes(e.Event, false)
 					e.IncorrectDigestValues = append(
 						e.IncorrectDigestValues,
-						IncorrectDigestValue{Algorithm: alg, Expected: hashSum(expectedMeasuredBytes, alg)})
+						IncorrectDigestValue{Algorithm: alg, Expected: alg.hash(expectedMeasuredBytes)})
 					break Loop
 				}
 			}
@@ -158,7 +158,7 @@ func (v *logValidator) processEvent(event *Event, trailingBytes int) {
 	if _, exists := v.expectedPCRValues[event.PCRIndex]; !exists {
 		v.expectedPCRValues[event.PCRIndex] = DigestMap{}
 		for _, alg := range v.log.Algorithms {
-			v.expectedPCRValues[event.PCRIndex][alg] = make(Digest, knownAlgorithms[alg])
+			v.expectedPCRValues[event.PCRIndex][alg] = make(Digest, alg.size())
 		}
 	}
 
@@ -184,10 +184,10 @@ func (v *logValidator) run() (*LogValidateResult, error) {
 			if err == io.EOF {
 				return &LogValidateResult{
 					EfiBootVariableBehaviour: v.efiBootVariableBehaviour,
-					ValidatedEvents:   v.validatedEvents,
-					Spec:              v.log.Spec,
-					Algorithms:        v.log.Algorithms,
-					ExpectedPCRValues: v.expectedPCRValues}, nil
+					ValidatedEvents:          v.validatedEvents,
+					Spec:                     v.log.Spec,
+					Algorithms:               v.log.Algorithms,
+					ExpectedPCRValues:        v.expectedPCRValues}, nil
 			}
 			return nil, err
 		}

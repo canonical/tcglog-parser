@@ -2,11 +2,7 @@ package tcglog
 
 import (
 	"bytes"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
 	"fmt"
-	"hash"
 	"strconv"
 )
 
@@ -26,27 +22,6 @@ func makeDefaultFormatter(s fmt.State, f rune) string {
 	}
 	fmt.Fprintf(&builder, "%c", f)
 	return builder.String()
-}
-
-func hasher(alg AlgorithmId) hash.Hash {
-	switch alg {
-	case AlgorithmSha1:
-		return sha1.New()
-	case AlgorithmSha256:
-		return sha256.New()
-	case AlgorithmSha384:
-		return sha512.New384()
-	case AlgorithmSha512:
-		return sha512.New()
-	default:
-		panic("Unhandled algorithm")
-	}
-}
-
-func hashSum(data []byte, alg AlgorithmId) []byte {
-	h := hasher(alg)
-	h.Write(data)
-	return h.Sum(nil)
 }
 
 type PCRArgList []PCRIndex

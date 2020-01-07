@@ -13,16 +13,11 @@ type LogOptions struct {
 	EnableGrub bool // Enable support for interpreting events recorded by GRUB
 }
 
-func isKnownAlgorithm(alg AlgorithmId) (out bool) {
-	_, out = knownAlgorithms[alg]
-	return
-}
-
 var zeroDigests = map[AlgorithmId][]byte{
-	AlgorithmSha1:   make([]byte, knownAlgorithms[AlgorithmSha1]),
-	AlgorithmSha256: make([]byte, knownAlgorithms[AlgorithmSha256]),
-	AlgorithmSha384: make([]byte, knownAlgorithms[AlgorithmSha384]),
-	AlgorithmSha512: make([]byte, knownAlgorithms[AlgorithmSha512])}
+	AlgorithmSha1:   make([]byte, AlgorithmSha1.size()),
+	AlgorithmSha256: make([]byte, AlgorithmSha256.size()),
+	AlgorithmSha384: make([]byte, AlgorithmSha384.size()),
+	AlgorithmSha512: make([]byte, AlgorithmSha512.size())}
 
 type stream interface {
 	readNextEvent() (*Event, int, error)
@@ -42,7 +37,7 @@ func isDigestOfSeparatorErrorValue(digest Digest, alg AlgorithmId) bool {
 	errorValue := make([]byte, 4)
 	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
 
-	return bytes.Compare(digest, hashSum(errorValue, alg)) == 0
+	return bytes.Compare(digest, alg.hash(errorValue)) == 0
 }
 
 func wrapLogReadError(origErr error, partial bool) error {
@@ -82,7 +77,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	digest := make(Digest, knownAlgorithms[AlgorithmSha1])
+	digest := make(Digest, AlgorithmSha1.size())
 	if _, err := s.r.Read(digest); err != nil {
 		return nil, 0, wrapLogReadError(err, true)
 	}
@@ -188,7 +183,7 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}
 
 	for alg, _ := range digests {
-		if isKnownAlgorithm(alg) {
+		if alg.supported() {
 			continue
 		}
 		delete(digests, alg)
@@ -308,7 +303,7 @@ func NewLog(r io.ReaderAt, options LogOptions) (*Log, error) {
 	if spec == SpecEFI_2 {
 		algorithms = make(AlgorithmIdList, 0, len(digestSizes))
 		for _, specAlgSize := range digestSizes {
-			if isKnownAlgorithm(specAlgSize.AlgorithmId) {
+			if specAlgSize.AlgorithmId.supported() {
 				algorithms = append(algorithms, specAlgSize.AlgorithmId)
 			}
 		}

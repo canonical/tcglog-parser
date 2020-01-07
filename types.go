@@ -1,7 +1,12 @@
 package tcglog
 
 import (
+	"crypto"
+	_ "crypto/sha1"
+	_ "crypto/sha256"
+	_ "crypto/sha512"
 	"fmt"
+	"hash"
 )
 
 // Spec corresponds to the TCG specification that an event log conforms to.
@@ -17,6 +22,39 @@ type EventType uint32
 // in the TPM Library Specification for the TPM_ALG_ID type.
 // See https://trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf (Table 9)
 type AlgorithmId uint16
+
+func (a AlgorithmId) getHash() crypto.Hash {
+	switch a {
+	case AlgorithmSha1:
+		return crypto.SHA1
+	case AlgorithmSha256:
+		return crypto.SHA256
+	case AlgorithmSha384:
+		return crypto.SHA384
+	case AlgorithmSha512:
+		return crypto.SHA512
+	default:
+		return 0
+	}
+}
+
+func (a AlgorithmId) supported() bool {
+	return a.getHash() != crypto.Hash(0)
+}
+
+func (a AlgorithmId) size() int {
+	return a.getHash().Size()
+}
+
+func (a AlgorithmId) newHash() hash.Hash {
+	return a.getHash().New()
+}
+
+func (a AlgorithmId) hash(data []byte) []byte {
+	h := a.newHash()
+	h.Write(data)
+	return h.Sum(nil)
+}
 
 // Digest is the result of hashing some data.
 type Digest []byte

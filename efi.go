@@ -164,11 +164,10 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 			return wrapSpecIdEventReadError(err)
 		}
 
-		knownSize, known := knownAlgorithms[algorithmId]
-		if known && knownSize != digestSize {
+		if algorithmId.supported() && algorithmId.size() != int(digestSize) {
 			return invalidSpecIdEventError{
 				fmt.Sprintf("digestSize for algorithmId 0x%04x doesn't match expected size "+
-					"(got: %d, expected: %d)", algorithmId, digestSize, knownSize)}
+					"(got: %d, expected: %d)", algorithmId, digestSize, algorithmId.size())}
 		}
 		eventData.DigestSizes[i] = EFISpecIdEventAlgorithmSize{algorithmId, digestSize}
 	}

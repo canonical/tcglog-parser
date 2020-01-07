@@ -65,10 +65,3 @@ const (
 const (
 	separatorEventErrorValue uint32 = 1
 )
-
-var knownAlgorithms = map[AlgorithmId]uint16{
-	AlgorithmSha1:   20,
-	AlgorithmSha256: 32,
-	AlgorithmSha384: 48,
-	AlgorithmSha512: 64,
-}
