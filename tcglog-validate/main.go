@@ -192,7 +192,7 @@ func main() {
 
 	seenTrailingMeasuredBytes := false
 	for _, e := range result.ValidatedEvents {
-		if e.MeasuredTrailingBytes == 0 {
+		if len(e.MeasuredTrailingBytes) == 0 {
 			continue
 		}
 
@@ -202,41 +202,13 @@ func main() {
 				"that was hashed and measured:\n")
 		}
 
-		bytes := e.Event.Data.Bytes()
-		start := len(bytes) - e.MeasuredTrailingBytes - e.UnmeasuredTrailingBytes
-		end := len(bytes) - e.UnmeasuredTrailingBytes
-		bytes = bytes[start:end]
-
 		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
-			e.Event.EventType, bytes, len(bytes))
+			e.Event.EventType, e.MeasuredTrailingBytes, len(e.MeasuredTrailingBytes))
 	}
 	if seenTrailingMeasuredBytes {
 		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated " +
 			"digests for these events when the components that are being measured are upgraded or " +
 			"changed in some way.\n\n")
-	}
-
-	seenTrailingUnmeasuredBytes := false
-	for _, e := range result.ValidatedEvents {
-		if e.UnmeasuredTrailingBytes == 0 {
-			continue
-		}
-
-		if !seenTrailingUnmeasuredBytes {
-			seenTrailingUnmeasuredBytes = true
-			fmt.Printf("- The following events have trailing bytes at the end of their event data " +
-				"that was not hashed and measured:\n")
-		}
-
-		bytes := e.Event.Data.Bytes()
-		start := len(bytes) - e.UnmeasuredTrailingBytes
-		bytes = bytes[start:]
-
-		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
-			e.Event.EventType, bytes, len(bytes))
-	}
-	if seenTrailingUnmeasuredBytes {
-		fmt.Printf("\n")
 	}
 
 	seenIncorrectDigests := false

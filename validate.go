@@ -22,8 +22,7 @@ type IncorrectDigestValue struct {
 
 type ValidatedEvent struct {
 	Event                   *Event
-	MeasuredTrailingBytes   int
-	UnmeasuredTrailingBytes int
+	MeasuredTrailingBytes   []byte
 	IncorrectDigestValues   []IncorrectDigestValue
 }
 
@@ -113,22 +112,21 @@ func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
 
 	Loop:
 		for {
-			t := trailingBytes
 			expectedMeasuredBytes, eventDataIsMeasured := determineMeasuredBytes(e.Event, efiBootVariableBehaviourTry == EFIBootVariableBehaviourVarDataOnly)
 			if expectedMeasuredBytes == nil {
 				return
 			}
 
 			bytes := expectedMeasuredBytes
+			measuredTrailingBytes := bytes[len(bytes)-trailingBytes : len(bytes)]
 
 			for {
 				ok, _ := isExpectedDigestValue(digest, alg, bytes)
 				switch {
 				case ok:
 					measuredBytes = bytes
-					if eventDataIsMeasured && trailingBytes > 0 {
-						e.MeasuredTrailingBytes = t
-						e.UnmeasuredTrailingBytes = trailingBytes - t
+					if eventDataIsMeasured {
+						e.MeasuredTrailingBytes = measuredTrailingBytes
 					}
 					if e.Event.EventType == EventTypeEFIVariableBoot && v.efiBootVariableBehaviour == EFIBootVariableBehaviourUnknown {
 						v.efiBootVariableBehaviour = efiBootVariableBehaviourTry
@@ -137,9 +135,9 @@ func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
 						}
 					}
 					break Loop
-				case t > 0 && len(bytes) > 1 && eventDataIsMeasured:
+				case len(measuredTrailingBytes) > 0 && eventDataIsMeasured:
 					bytes = bytes[0 : len(bytes)-1]
-					t -= 1
+					measuredTrailingBytes = measuredTrailingBytes[0 : len(measuredTrailingBytes)-1]
 				default:
 					if e.Event.EventType == EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == EFIBootVariableBehaviourUnknown {
 						efiBootVariableBehaviourTry = EFIBootVariableBehaviourVarDataOnly
