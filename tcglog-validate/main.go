@@ -186,9 +186,8 @@ func main() {
 		}
 	}
 
-	if result.EfiBootVariableDigestsContainFullVariableStruct {
-		fmt.Printf("- EV_EFI_VARIABLE_BOOT events measure entire UEFI_VARIABLE_DATA structure rather " +
-			"than just the variable contents\n\n")
+	if result.EfiBootVariableBehaviour == tcglog.EFIBootVariableBehaviourVarDataOnly {
+		fmt.Printf("- EV_EFI_VARIABLE_BOOT events only contain measurement of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
 	}
 
 	seenTrailingMeasuredBytes := false
