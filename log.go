@@ -55,6 +55,11 @@ func wrapPCRIndexOutOfRangeError(pcrIndex PCRIndex) error {
 	return fmt.Errorf("log entry has an out-of-range PCR index (%d)", pcrIndex)
 }
 
+type eventHeader_1_2 struct {
+	PCRIndex PCRIndex
+	EventType EventType
+}
+
 type stream_1_2 struct {
 	r       io.ReadSeeker
 	options LogOptions
@@ -63,18 +68,13 @@ type stream_1_2 struct {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
 func (s *stream_1_2) readNextEvent() (*Event, int, error) {
-	var pcrIndex PCRIndex
-	if err := binary.Read(s.r, binary.LittleEndian, &pcrIndex); err != nil {
+	var header eventHeader_1_2
+	if err := binary.Read(s.r, binary.LittleEndian, &header); err != nil {
 		return nil, 0, wrapLogReadError(err, false)
 	}
 
-	if !isPCRIndexInRange(pcrIndex) {
-		return nil, 0, wrapPCRIndexOutOfRangeError(pcrIndex)
-	}
-
-	var eventType EventType
-	if err := binary.Read(s.r, binary.LittleEndian, &eventType); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if !isPCRIndexInRange(header.PCRIndex) {
+		return nil, 0, wrapPCRIndexOutOfRangeError(header.PCRIndex)
 	}
 
 	digest := make(Digest, AlgorithmSha1.size())
@@ -94,15 +94,21 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, trailing := decodeEventData(pcrIndex, eventType, event, &s.options,
+	data, trailing := decodeEventData(header.PCRIndex, header.EventType, event, &s.options,
 		isDigestOfSeparatorErrorValue(digest, AlgorithmSha1))
 
 	return &Event{
-		PCRIndex:  pcrIndex,
-		EventType: eventType,
+		PCRIndex:  header.PCRIndex,
+		EventType: header.EventType,
 		Digests:   digests,
 		Data:      data,
 	}, trailing, nil
+}
+
+type eventHeader_2 struct {
+	PCRIndex PCRIndex
+	EventType EventType
+	Count uint32
 }
 
 type stream_2 struct {
@@ -121,28 +127,18 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return stream.readNextEvent()
 	}
 
-	var pcrIndex PCRIndex
-	if err := binary.Read(s.r, binary.LittleEndian, &pcrIndex); err != nil {
+	var header eventHeader_2
+	if err := binary.Read(s.r, binary.LittleEndian, &header); err != nil {
 		return nil, 0, wrapLogReadError(err, false)
 	}
 
-	if !isPCRIndexInRange(pcrIndex) {
-		return nil, 0, wrapPCRIndexOutOfRangeError(pcrIndex)
-	}
-
-	var eventType EventType
-	if err := binary.Read(s.r, binary.LittleEndian, &eventType); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
-	}
-
-	var count uint32
-	if err := binary.Read(s.r, binary.LittleEndian, &count); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if !isPCRIndexInRange(header.PCRIndex) {
+		return nil, 0, wrapPCRIndexOutOfRangeError(header.PCRIndex)
 	}
 
 	digests := make(DigestMap)
 
-	for i := uint32(0); i < count; i++ {
+	for i := uint32(0); i < header.Count; i++ {
 		var algorithmId AlgorithmId
 		if err := binary.Read(s.r, binary.LittleEndian, &algorithmId); err != nil {
 			return nil, 0, wrapLogReadError(err, true)
@@ -199,12 +195,12 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 		return nil, 0, wrapLogReadError(err, true)
 	}
 
-	data, trailing := decodeEventData(pcrIndex, eventType, event, &s.options,
+	data, trailing := decodeEventData(header.PCRIndex, header.EventType, event, &s.options,
 		isDigestOfSeparatorErrorValue(digests[s.algSizes[0].AlgorithmId], s.algSizes[0].AlgorithmId))
 
 	return &Event{
-		PCRIndex:  pcrIndex,
-		EventType: eventType,
+		PCRIndex:  header.PCRIndex,
+		EventType: header.EventType,
 		Digests:   digests,
 		Data:      data,
 	}, trailing, nil
