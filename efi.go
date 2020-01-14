@@ -642,27 +642,27 @@ func decodeDevicePath(data []byte) (string, error) {
 	}
 }
 
-type EFIImageLoadEventData struct {
+type efiImageLoadEventData struct {
 	data             []byte
 	locationInMemory uint64
 	lengthInMemory   uint64
 	linkTimeAddress  uint64
-	Path             string
+	path             string
 }
 
-func (e *EFIImageLoadEventData) String() string {
+func (e *efiImageLoadEventData) String() string {
 	return fmt.Sprintf("UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x%016x, ImageLengthInMemory: %d, "+
 		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.locationInMemory, e.lengthInMemory,
-		e.linkTimeAddress, e.Path)
+		e.linkTimeAddress, e.path)
 }
 
-func (e *EFIImageLoadEventData) Bytes() []byte {
+func (e *efiImageLoadEventData) Bytes() []byte {
 	return e.data
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
-func decodeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, error) {
+func decodeEventDataEFIImageLoadImpl(data []byte) (*efiImageLoadEventData, error) {
 	stream := bytes.NewReader(data)
 
 	var locationInMemory uint64
@@ -696,11 +696,11 @@ func decodeEventDataEFIImageLoadImpl(data []byte) (*EFIImageLoadEventData, error
 		return nil, err
 	}
 
-	return &EFIImageLoadEventData{data: data,
+	return &efiImageLoadEventData{data: data,
 		locationInMemory: locationInMemory,
 		lengthInMemory:   lengthInMemory,
 		linkTimeAddress:  linkTimeAddress,
-		Path:             path}, nil
+		path:             path}, nil
 }
 
 func decodeEventDataEFIImageLoad(data []byte) (out EventData, trailingBytes int, err error) {
