@@ -56,7 +56,7 @@ func wrapPCRIndexOutOfRangeError(pcrIndex PCRIndex) error {
 }
 
 type eventHeader_1_2 struct {
-	PCRIndex PCRIndex
+	PCRIndex  PCRIndex
 	EventType EventType
 }
 
@@ -106,9 +106,9 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 }
 
 type eventHeader_2 struct {
-	PCRIndex PCRIndex
+	PCRIndex  PCRIndex
 	EventType EventType
-	Count uint32
+	Count     uint32
 }
 
 type stream_2 struct {

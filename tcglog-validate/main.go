@@ -39,7 +39,7 @@ var (
 	withGrub      bool
 	noDefaultPcrs bool
 	tpmPath       string
-	logPath	      string
+	logPath       string
 	pcrs          tcglog.PCRArgList
 	algorithms    AlgorithmIdArgList
 )

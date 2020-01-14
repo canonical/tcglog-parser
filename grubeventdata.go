@@ -1,7 +1,6 @@
 package tcglog
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"unsafe"
@@ -47,9 +46,9 @@ func (e *GrubStringEventData) MeasuredString() string {
 	return *(*string)(unsafe.Pointer(&e.measuredData))
 }
 
-func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int, error) {
+func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int) {
 	if eventType != EventTypeIPL {
-		return nil, 0, nil
+		return nil, 0
 	}
 
 	switch pcrIndex {
@@ -59,14 +58,14 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 		switch {
 		case strings.Index(str, kernelCmdlinePrefix) == 0:
 			return &GrubStringEventData{data, data[len(kernelCmdlinePrefix) : len(str)-1],
-				KernelCmdline}, 0, nil
+				KernelCmdline}, 0
 		case strings.Index(str, grubCmdPrefix) == 0:
-			return &GrubStringEventData{data, data[len(grubCmdPrefix) : len(str)-1], GrubCmd}, 0, nil
+			return &GrubStringEventData{data, data[len(grubCmdPrefix) : len(str)-1], GrubCmd}, 0
 		default:
-			return nil, 0, errors.New("unexpected prefix for GRUB string")
+			return nil, 0
 		}
 	case 9:
-		return &asciiStringEventData{data: data}, 0, nil
+		return &asciiStringEventData{data: data}, 0
 	default:
 		panic("unhandled PCR index")
 	}

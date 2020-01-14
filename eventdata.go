@@ -46,8 +46,8 @@ func decodeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, op
 	hasDigestOfSeparatorError bool) (EventData, int, error) {
 	switch {
 	case options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9):
-		if d, n, e := decodeEventDataGRUB(pcrIndex, eventType, data); d != nil {
-			return d, n, e
+		if d, n := decodeEventDataGRUB(pcrIndex, eventType, data); d != nil {
+			return d, n, nil
 		}
 		fallthrough
 	default:
