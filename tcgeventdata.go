@@ -23,6 +23,19 @@ type EFISpecIdEventAlgorithmSize struct {
 	DigestSize  uint16
 }
 
+type NoActionEventType int
+
+const (
+	UnknownNoActionEvent NoActionEventType = iota
+	SpecId
+	StartupLocality
+	BiosIntegrityMeasurement
+)
+
+type NoActionEventData interface {
+	Type() NoActionEventType
+}
+
 // SpecIdEventData corresponds to the event data for a Specification ID Version event
 // (TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, TCG_EfiSpecIdEvent)
 type SpecIdEventData struct {
@@ -65,6 +78,10 @@ func (e *SpecIdEventData) String() string {
 
 func (e *SpecIdEventData) Bytes() []byte {
 	return e.data
+}
+
+func (e *SpecIdEventData) Type() NoActionEventType {
+	return SpecId
 }
 
 func wrapSpecIdEventReadError(origErr error) error {
@@ -163,6 +180,22 @@ func (e *asciiStringEventData) Bytes() []byte {
 	return e.data
 }
 
+type unknownNoActionEventData struct {
+	data []byte
+}
+
+func (e *unknownNoActionEventData) String() string {
+	return ""
+}
+
+func (e *unknownNoActionEventData) Bytes() []byte {
+	return e.data
+}
+
+func (e *unknownNoActionEventData) Type() NoActionEventType {
+	return UnknownNoActionEvent
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
@@ -208,7 +241,7 @@ func decodeEventDataNoAction(data []byte) (out EventData, trailingBytes int, err
 		}
 		err = e
 	default:
-		return nil, 0, nil
+		return &unknownNoActionEventData{data}, 0, nil
 	}
 
 	return

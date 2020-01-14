@@ -201,6 +201,10 @@ func (e *startupLocalityEventData) Bytes() []byte {
 	return e.data
 }
 
+func (e *startupLocalityEventData) Type() NoActionEventType {
+	return StartupLocality
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
 func decodeStartupLocalityEvent(stream io.Reader, data []byte) (*startupLocalityEventData, error) {
@@ -225,6 +229,10 @@ func (e *bimReferenceManifestEventData) String() string {
 
 func (e *bimReferenceManifestEventData) Bytes() []byte {
 	return e.data
+}
+
+func (e *bimReferenceManifestEventData) Type() NoActionEventType {
+	return BiosIntegrityMeasurement
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
