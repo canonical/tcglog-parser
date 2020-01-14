@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 var (
@@ -265,40 +266,18 @@ func (e *EFIVariableEventData) Encode(buf io.Writer) error {
 	if err := e.VariableName.Encode(buf); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, uint64(len(e.UnicodeName))); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
 		return err
 	}
 	if err := binary.Write(buf, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
 		return err
 	}
-
-	nameReader := bytes.NewReader([]byte(e.UnicodeName))
-	var unicodeNameBuilder bytes.Buffer
-	for {
-		r, _, err := nameReader.ReadRune()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		if err := binary.Write(&unicodeNameBuilder, binary.LittleEndian, r); err != nil {
-			return err
-		}
-	}
-	unicodeName := make([]rune, unicodeNameBuilder.Len()/binary.Size(rune(0)))
-	if err := binary.Read(&unicodeNameBuilder, binary.LittleEndian, &unicodeName); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, convertStringToUtf16(e.UnicodeName)); err != nil {
 		return err
 	}
-	utf16Name := utf16.Encode(unicodeName)
-	if err := binary.Write(buf, binary.LittleEndian, utf16Name); err != nil {
-		return err
-	}
-
 	if _, err := buf.Write(e.VariableData); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -327,11 +306,6 @@ func decodeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVaria
 		return nil, 0, err
 	}
 
-	var unicodeName bytes.Buffer
-	for _, r := range utf16.Decode(utf16Name) {
-		unicodeName.WriteRune(r)
-	}
-
 	variableData := make([]byte, variableDataLength)
 	if _, err := io.ReadFull(stream, variableData); err != nil {
 		return nil, 0, err
@@ -339,7 +313,7 @@ func decodeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVaria
 
 	return &EFIVariableEventData{data: data,
 		VariableName: *guid,
-		UnicodeName:  unicodeName.String(),
+		UnicodeName:  convertUtf16ToString(utf16Name),
 		VariableData: variableData}, stream.Len(), nil
 }
 

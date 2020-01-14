@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 func makeDefaultFormatter(s fmt.State, f rune) string {
@@ -59,4 +61,24 @@ func ParseAlgorithm(alg string) (AlgorithmId, error) {
 	default:
 		return 0, fmt.Errorf("Unrecognized algorithm \"%s\"", alg)
 	}
+}
+
+func convertStringToUtf16(str string) []uint16 {
+	var unicodePoints []rune
+	for len(str) > 0 {
+		r, s := utf8.DecodeRuneInString(str)
+		unicodePoints = append(unicodePoints, r)
+		str = str[s:]
+	}
+	return utf16.Encode(unicodePoints)
+}
+
+func convertUtf16ToString(u []uint16) string {
+	var utf8Str []byte
+	for _, r := range utf16.Decode(u) {
+		utf8Char := make([]byte, utf8.RuneLen(r))
+		utf8.EncodeRune(utf8Char, r)
+		utf8Str = append(utf8Str, utf8Char...)
+	}
+	return string(utf8Str)
 }
