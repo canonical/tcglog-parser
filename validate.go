@@ -79,7 +79,7 @@ func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bo
 	case *efiGPTEventData:
 		return event.Data.Bytes(), true
 	case *GrubStringEventData:
-		return d.measuredData, false
+		return []byte(d.Str), false
 	}
 
 	return nil, false

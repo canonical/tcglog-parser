@@ -2,8 +2,8 @@ package tcglog
 
 import (
 	"fmt"
+	"io"
 	"strings"
-	"unsafe"
 )
 
 var (
@@ -30,20 +30,23 @@ func grubEventTypeString(t GrubStringEventType) string {
 
 type GrubStringEventData struct {
 	data         []byte
-	measuredData []byte
 	Type         GrubStringEventType
+	Str	     string
 }
 
 func (e *GrubStringEventData) String() string {
-	return fmt.Sprintf("%s{ %s }", grubEventTypeString(e.Type), e.MeasuredString())
+	return fmt.Sprintf("%s{ %s }", grubEventTypeString(e.Type), e.Str)
 }
 
 func (e *GrubStringEventData) Bytes() []byte {
 	return e.data
 }
 
-func (e *GrubStringEventData) MeasuredString() string {
-	return *(*string)(unsafe.Pointer(&e.measuredData))
+func (e *GrubStringEventData) Encode(buf io.Writer) error {
+	if _, err := io.WriteString(buf, e.Str); err != nil {
+		return err
+	}
+	return nil
 }
 
 func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int) {
@@ -53,14 +56,12 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 
 	switch pcrIndex {
 	case 8:
-		str := *(*string)(unsafe.Pointer(&data))
-
+		str := string(data)
 		switch {
-		case strings.Index(str, kernelCmdlinePrefix) == 0:
-			return &GrubStringEventData{data, data[len(kernelCmdlinePrefix) : len(str)-1],
-				KernelCmdline}, 0
-		case strings.Index(str, grubCmdPrefix) == 0:
-			return &GrubStringEventData{data, data[len(grubCmdPrefix) : len(str)-1], GrubCmd}, 0
+		case strings.HasPrefix(str, kernelCmdlinePrefix):
+			return &GrubStringEventData{data, KernelCmdline, strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}, 0
+		case strings.HasPrefix(str, grubCmdPrefix):
+			return &GrubStringEventData{data, GrubCmd, strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}, 0
 		default:
 			return nil, 0
 		}
