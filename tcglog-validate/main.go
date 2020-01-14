@@ -192,7 +192,7 @@ func main() {
 
 	seenTrailingMeasuredBytes := false
 	for _, e := range result.ValidatedEvents {
-		if len(e.MeasuredTrailingBytes) == 0 {
+		if e.MeasuredTrailingBytesCount == 0 {
 			continue
 		}
 
@@ -203,7 +203,8 @@ func main() {
 		}
 
 		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Event.Index, e.Event.PCRIndex,
-			e.Event.EventType, e.MeasuredTrailingBytes, len(e.MeasuredTrailingBytes))
+			e.Event.EventType, e.MeasuredBytes[len(e.MeasuredBytes)-e.MeasuredTrailingBytesCount:len(e.MeasuredBytes)],
+			e.MeasuredTrailingBytesCount)
 	}
 	if seenTrailingMeasuredBytes {
 		fmt.Printf("  This trailing bytes should be taken in to account when calculating updated " +

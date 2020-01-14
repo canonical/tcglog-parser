@@ -21,9 +21,10 @@ type IncorrectDigestValue struct {
 }
 
 type ValidatedEvent struct {
-	Event                 *Event
-	MeasuredTrailingBytes []byte
-	IncorrectDigestValues []IncorrectDigestValue
+	Event                      *Event
+	MeasuredBytes              []byte
+	MeasuredTrailingBytesCount int
+	IncorrectDigestValues      []IncorrectDigestValue
 }
 
 type LogValidateResult struct {
@@ -54,11 +55,11 @@ func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bo
 		switch event.EventType {
 		case EventTypeEventTag, EventTypeSCRTMVersion, EventTypePlatformConfigFlags,
 			EventTypeTableOfDevices, EventTypeNonhostInfo, EventTypeOmitBootDeviceEvents:
-			return event.Data.Bytes(), true
+			return event.Data.Bytes(), false
 		}
 	case *separatorEventData:
 		if !d.isError {
-			return event.Data.Bytes(), true
+			return event.Data.Bytes(), false
 		} else {
 			out := make([]byte, 4)
 			binary.LittleEndian.PutUint32(out, separatorEventErrorValue)
@@ -67,7 +68,7 @@ func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bo
 	case *asciiStringEventData:
 		switch event.EventType {
 		case EventTypeAction, EventTypeEFIAction:
-			return event.Data.Bytes(), true
+			return event.Data.Bytes(), false
 		}
 	case *EFIVariableEventData:
 		if event.EventType == EventTypeEFIVariableBoot && efiBootVariableQuirk {
@@ -97,11 +98,10 @@ type logValidator struct {
 }
 
 func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
-	var measuredBytes []byte
-
 	for alg, digest := range e.Event.Digests {
-		if len(measuredBytes) > 0 {
-			if ok, expected := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
+		if len(e.MeasuredBytes) > 0 {
+			// We've already determined the bytes measured for this event for a previous digest
+			if ok, expected := isExpectedDigestValue(digest, alg, e.MeasuredBytes); !ok {
 				e.IncorrectDigestValues = append(e.IncorrectDigestValues,
 					IncorrectDigestValue{Algorithm: alg, Expected: expected})
 			}
@@ -112,38 +112,49 @@ func (v *logValidator) checkEventDigests(e *ValidatedEvent, trailingBytes int) {
 
 	Loop:
 		for {
-			expectedMeasuredBytes, eventDataIsMeasured := determineMeasuredBytes(e.Event, efiBootVariableBehaviourTry == EFIBootVariableBehaviourVarDataOnly)
-			if expectedMeasuredBytes == nil {
+			// Determine what we expect to be measured
+			provisionalMeasuredBytes, checkTrailingBytes := determineMeasuredBytes(e.Event, efiBootVariableBehaviourTry == EFIBootVariableBehaviourVarDataOnly)
+			if provisionalMeasuredBytes == nil {
 				return
 			}
 
-			bytes := expectedMeasuredBytes
-			measuredTrailingBytes := bytes[len(bytes)-trailingBytes : len(bytes)]
+			var provisionalMeasuredTrailingBytes int
+			if checkTrailingBytes {
+				provisionalMeasuredTrailingBytes = trailingBytes
+			}
 
 			for {
-				ok, _ := isExpectedDigestValue(digest, alg, bytes)
+				// Determine whether the digest is consistent with the current provisional measured bytes
+				ok, _ := isExpectedDigestValue(digest, alg, provisionalMeasuredBytes)
 				switch {
 				case ok:
-					measuredBytes = bytes
-					if eventDataIsMeasured {
-						e.MeasuredTrailingBytes = measuredTrailingBytes
-					}
+					// All good
+					e.MeasuredBytes = provisionalMeasuredBytes
+					e.MeasuredTrailingBytesCount = provisionalMeasuredTrailingBytes
 					if e.Event.EventType == EventTypeEFIVariableBoot && v.efiBootVariableBehaviour == EFIBootVariableBehaviourUnknown {
+						// This is the first EV_EFI_VARIABLE_BOOT event, so record the measurement behaviour.
 						v.efiBootVariableBehaviour = efiBootVariableBehaviourTry
 						if efiBootVariableBehaviourTry == EFIBootVariableBehaviourUnknown {
 							v.efiBootVariableBehaviour = EFIBootVariableBehaviourFull
 						}
 					}
 					break Loop
-				case len(measuredTrailingBytes) > 0 && eventDataIsMeasured:
-					bytes = bytes[0 : len(bytes)-1]
-					measuredTrailingBytes = measuredTrailingBytes[0 : len(measuredTrailingBytes)-1]
+				case provisionalMeasuredTrailingBytes > 0:
+					// Invalid digest, the event data decoder determined there were trailing bytes, and we were expecting the measured
+					// bytes to match the event data. Test if any of the trailing bytes only appear in the event data by truncating
+					// the provisional measured bytes one byte at a time and re-testing.
+					provisionalMeasuredBytes = provisionalMeasuredBytes[0 : len(provisionalMeasuredBytes)-1]
+					provisionalMeasuredTrailingBytes -= 1
 				default:
+					// Invalid digest
 					if e.Event.EventType == EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == EFIBootVariableBehaviourUnknown {
+						// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
+						// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data.
 						efiBootVariableBehaviourTry = EFIBootVariableBehaviourVarDataOnly
 						continue Loop
 					}
-					expectedMeasuredBytes, _ = determineMeasuredBytes(e.Event, false)
+					// Record the expected digest on the event
+					expectedMeasuredBytes, _ := determineMeasuredBytes(e.Event, false)
 					e.IncorrectDigestValues = append(
 						e.IncorrectDigestValues,
 						IncorrectDigestValue{Algorithm: alg, Expected: alg.hash(expectedMeasuredBytes)})
