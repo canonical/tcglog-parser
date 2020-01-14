@@ -80,6 +80,12 @@ func determineMeasuredBytes(event *Event, efiBootVariableQuirk bool) ([]byte, bo
 		return event.Data.Bytes(), true
 	case *GrubStringEventData:
 		return []byte(d.Str), false
+	case *SystemdEFIStubEventData:
+		// The event data is a UTF-16 string terminated with a single zero byte, but the measured
+		// data is a UTF-16 string with a UTF-16 null terminator. Add an extra zero byte here
+		c := make([]byte, len(d.data)+1)
+		copy(c, d.data)
+		return c, false
 	}
 
 	return nil, false

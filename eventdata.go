@@ -50,6 +50,13 @@ func decodeEventDataImpl(pcrIndex PCRIndex, eventType EventType, data []byte, op
 			return d, n, nil
 		}
 		fallthrough
+	case options.EnableSystemdEFIStub && pcrIndex == options.SystemdEFIStubPCR && eventType == EventTypeIPL:
+		if d, n, e := decodeEventDataSystemdEFIStub(data); d != nil {
+			return d, n, nil
+		} else if e != nil {
+			return nil, 0, e
+		}
+		fallthrough
 	default:
 		return decodeEventDataTCG(eventType, data, hasDigestOfSeparatorError)
 	}

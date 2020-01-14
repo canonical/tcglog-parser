@@ -37,6 +37,8 @@ func (l *AlgorithmIdArgList) Set(value string) error {
 
 var (
 	withGrub      bool
+	withSdEfiStub bool
+	sdEfiStubPcr  int
 	noDefaultPcrs bool
 	tpmPath       string
 	logPath       string
@@ -46,6 +48,8 @@ var (
 
 func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
+	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
+	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.StringVar(&logPath, "log-path", "", "")
@@ -170,7 +174,7 @@ func main() {
 		tpmPath = ""
 	}
 
-	result, err := tcglog.ReplayAndValidateLog(logPath, tcglog.LogOptions{EnableGrub: withGrub})
+	result, err := tcglog.ReplayAndValidateLog(logPath, tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to replay and validate log file: %v\n", err)
 		os.Exit(1)

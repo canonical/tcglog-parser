@@ -11,16 +11,20 @@ import (
 )
 
 var (
-	alg      string
-	verbose  bool
-	withGrub bool
-	pcrs     tcglog.PCRArgList
+	alg           string
+	verbose       bool
+	withGrub      bool
+	withSdEfiStub bool
+	sdEfiStubPcr  int
+	pcrs          tcglog.PCRArgList
 )
 
 func init() {
 	flag.StringVar(&alg, "alg", "sha1", "Name of the hash algorithm to display")
 	flag.BoolVar(&verbose, "verbose", false, "Display details of event data")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
+	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
+	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
 	flag.Var(&pcrs, "pcr", "Display events associated with the specified PCR. Can be specified multiple times")
 }
 
@@ -66,7 +70,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log, err := tcglog.NewLog(file, tcglog.LogOptions{EnableGrub: withGrub})
+	log, err := tcglog.NewLog(file, tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log file: %v\n", err)
 		os.Exit(1)

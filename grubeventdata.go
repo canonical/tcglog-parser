@@ -29,9 +29,9 @@ func grubEventTypeString(t GrubStringEventType) string {
 }
 
 type GrubStringEventData struct {
-	data         []byte
-	Type         GrubStringEventType
-	Str	     string
+	data []byte
+	Type GrubStringEventType
+	Str  string
 }
 
 func (e *GrubStringEventData) String() string {
