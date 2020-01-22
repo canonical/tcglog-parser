@@ -42,7 +42,7 @@ func (e *GrubStringEventData) Bytes() []byte {
 	return e.data
 }
 
-func (e *GrubStringEventData) Encode(buf io.Writer) error {
+func (e *GrubStringEventData) EncodeMeasuredBytes(buf io.Writer) error {
 	if _, err := io.WriteString(buf, e.Str); err != nil {
 		return err
 	}

@@ -37,7 +37,7 @@ func TestEFIVariableEventDataEncode(t *testing.T) {
 	} {
 		t.Run(data.desc, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := data.in.Encode(&buf); err != nil {
+			if err := data.in.EncodeMeasuredBytes(&buf); err != nil {
 				t.Fatalf("Encode failed: %v", err)
 			}
 			if !bytes.Equal(buf.Bytes(), data.out) {

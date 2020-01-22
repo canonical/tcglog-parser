@@ -20,7 +20,7 @@ func (e *SystemdEFIStubEventData) Bytes() []byte {
 	return e.data
 }
 
-func (e *SystemdEFIStubEventData) Encode(buf io.Writer) error {
+func (e *SystemdEFIStubEventData) EncodeMeasuredBytes(buf io.Writer) error {
 	return binary.Write(buf, binary.LittleEndian, append(convertStringToUtf16(e.Str), 0))
 }
 

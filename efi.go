@@ -270,7 +270,7 @@ func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
 }
 
-func (e *EFIVariableEventData) Encode(buf io.Writer) error {
+func (e *EFIVariableEventData) EncodeMeasuredBytes(buf io.Writer) error {
 	if err := e.VariableName.Encode(buf); err != nil {
 		return err
 	}
