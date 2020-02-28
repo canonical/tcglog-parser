@@ -49,60 +49,21 @@ func extractUTF16Buffer(stream io.ReadSeeker, nchars uint64) ([]uint16, error) {
 
 // EFIGUID corresponds to the EFI_GUID type
 type EFIGUID struct {
-	A uint32
-	B uint16
-	C uint16
-	D uint16
-	E [6]uint8
+	Data1 uint32
+	Data2 uint16
+	Data3 uint16
+	Data4 [8]uint8
 }
 
 func (g *EFIGUID) String() string {
-	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.A, g.B, g.C, g.D, g.E)
+	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, binary.BigEndian.Uint16(g.Data4[0:2]), g.Data4[2:])
 }
 
-// Encode marshals g to buf in little endian format.
-func (g *EFIGUID) Encode(buf io.Writer) error {
-	if err := binary.Write(buf, binary.LittleEndian, g.A); err != nil {
-		return err
-	}
-	if err := binary.Write(buf, binary.LittleEndian, g.B); err != nil {
-		return err
-	}
-	if err := binary.Write(buf, binary.LittleEndian, g.C); err != nil {
-		return err
-	}
-	if err := binary.Write(buf, binary.BigEndian, g.D); err != nil {
-		return err
-	}
-	if _, err := buf.Write(g.E[:]); err != nil {
-		return err
-	}
-	return nil
-}
-
-func decodeEFIGUID(stream io.Reader) (*EFIGUID, error) {
-	var out EFIGUID
-	if err := binary.Read(stream, binary.LittleEndian, &out.A); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(stream, binary.LittleEndian, &out.B); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(stream, binary.LittleEndian, &out.C); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(stream, binary.BigEndian, &out.D); err != nil {
-		return nil, err
-	}
-	if _, err := io.ReadFull(stream, out.E[:]); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-func decodeEFIGUIDFromArray(data [16]byte) (*EFIGUID, error) {
-	stream := bytes.NewReader(data[:])
-	return decodeEFIGUID(stream)
+func makeEFIGUID(a uint32, b, c, d uint16, e [6]uint8) *EFIGUID {
+	guid := &EFIGUID{Data1: a, Data2: b, Data3: c}
+	binary.BigEndian.PutUint16(guid.Data4[0:2], d)
+	copy(guid.Data4[2:], e[:])
+	return guid
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
@@ -220,17 +181,15 @@ func (e *bimReferenceManifestEventData) Type() NoActionEventType {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
 func decodeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*bimReferenceManifestEventData, error) {
-	var vendorId uint32
-	if err := binary.Read(stream, binary.LittleEndian, &vendorId); err != nil {
+	var d struct{
+		VendorId uint32
+		Guid EFIGUID
+	}
+	if err := binary.Read(stream, binary.LittleEndian, &d); err != nil {
 		return nil, err
 	}
 
-	guid, err := decodeEFIGUID(stream)
-	if err != nil {
-		return nil, err
-	}
-
-	return &bimReferenceManifestEventData{data: data, VendorId: vendorId, Guid: *guid}, nil
+	return &bimReferenceManifestEventData{data: data, VendorId: d.VendorId, Guid: d.Guid}, nil
 }
 
 // EFIVariableEventData corresponds to the EFI_VARIABLE_DATA type.
@@ -251,7 +210,7 @@ func (e *EFIVariableEventData) Bytes() []byte {
 }
 
 func (e *EFIVariableEventData) EncodeMeasuredBytes(buf io.Writer) error {
-	if err := e.VariableName.Encode(buf); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, e.VariableName); err != nil {
 		return err
 	}
 	if err := binary.Write(buf, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
@@ -274,8 +233,8 @@ func (e *EFIVariableEventData) EncodeMeasuredBytes(buf io.Writer) error {
 func decodeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVariableEventData, int, error) {
 	stream := bytes.NewReader(data)
 
-	guid, err := decodeEFIGUID(stream)
-	if err != nil {
+	var guid EFIGUID
+	if err := binary.Read(stream, binary.LittleEndian, &guid); err != nil {
 		return nil, 0, err
 	}
 
@@ -300,7 +259,7 @@ func decodeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVaria
 	}
 
 	return &EFIVariableEventData{data: data,
-		VariableName: *guid,
+		VariableName: guid,
 		UnicodeName:  convertUtf16ToString(utf16Name),
 		VariableData: variableData}, stream.Len(), nil
 }
@@ -359,8 +318,8 @@ const (
 func firmwareDevicePathNodeToString(subType uint8, data []byte) (string, error) {
 	stream := bytes.NewReader(data)
 
-	name, err := decodeEFIGUID(stream)
-	if err != nil {
+	var name EFIGUID
+	if err := binary.Read(stream, binary.LittleEndian, &name); err != nil {
 		return "", err
 	}
 
@@ -374,7 +333,7 @@ func firmwareDevicePathNodeToString(subType uint8, data []byte) (string, error) 
 		return "", fmt.Errorf("invalid sub type for firmware device path node: %d", subType)
 	}
 
-	fmt.Fprintf(&builder, "(%s)", name)
+	fmt.Fprintf(&builder, "(%s)", &name)
 	return builder.String(), nil
 }
 
@@ -473,11 +432,12 @@ func hardDriveDevicePathNodeToString(data []byte) (string, error) {
 	case 0x01:
 		fmt.Fprintf(&builder, "\\HD(%d,MBR,0x%08x,", partNumber, binary.LittleEndian.Uint32(sig[:]))
 	case 0x02:
-		guid, err := decodeEFIGUIDFromArray(sig)
-		if err != nil {
+		r := bytes.NewReader(sig[:])
+		var guid EFIGUID
+		if err := binary.Read(r, binary.LittleEndian, &guid); err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&builder, "\\HD(%d,GPT,%s,", partNumber, guid)
+		fmt.Fprintf(&builder, "\\HD(%d,GPT,%s,", partNumber, &guid)
 	default:
 		fmt.Fprintf(&builder, "\\HD(%d,%d,0,", partNumber, sigType)
 	}
@@ -742,8 +702,8 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 	}
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader.DiskGUID
-	diskGUID, err := decodeEFIGUID(stream)
-	if err != nil {
+	var diskGUID EFIGUID
+	if err := binary.Read(stream, binary.LittleEndian, &diskGUID); err != nil {
 		return nil, 0, err
 	}
 
@@ -769,7 +729,7 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 		return nil, 0, err
 	}
 
-	eventData := &efiGPTEventData{diskGUID: *diskGUID, partitions: make([]efiGPTPartitionEntry, numberOfParts)}
+	eventData := &efiGPTEventData{diskGUID: diskGUID, partitions: make([]efiGPTPartitionEntry, numberOfParts)}
 
 	for i := uint64(0); i < numberOfParts; i++ {
 		entryData := make([]byte, partEntrySize)
@@ -779,13 +739,13 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 
 		entryStream := bytes.NewReader(entryData)
 
-		typeGUID, err := decodeEFIGUID(entryStream)
-		if err != nil {
+		var typeGUID EFIGUID
+		if err := binary.Read(entryStream, binary.LittleEndian, &typeGUID); err != nil {
 			return nil, 0, err
 		}
 
-		uniqueGUID, err := decodeEFIGUID(entryStream)
-		if err != nil {
+		var uniqueGUID EFIGUID
+		if err := binary.Read(entryStream, binary.LittleEndian, &uniqueGUID); err != nil {
 			return nil, 0, err
 		}
 
@@ -807,8 +767,7 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 			name.WriteRune(r)
 		}
 
-		eventData.partitions[i] =
-			efiGPTPartitionEntry{typeGUID: *typeGUID, uniqueGUID: *uniqueGUID, name: name.String()}
+		eventData.partitions[i] = efiGPTPartitionEntry{typeGUID: typeGUID, uniqueGUID: uniqueGUID, name: name.String()}
 	}
 
 	return eventData, stream.Len(), nil

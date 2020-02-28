@@ -127,7 +127,13 @@ type specIdEventCommon struct {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
 func decodeSpecIdEvent(stream io.Reader, data []byte, helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
-	var common specIdEventCommon
+	var common struct{
+		PlatformClass uint32
+		SpecVersionMinor uint8
+		SpecVersionMajor uint8
+		SpecErrata uint8
+		UintnSize uint8
+	}
 	if err := binary.Read(stream, binary.LittleEndian, &common); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
 	}
