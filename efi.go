@@ -59,7 +59,7 @@ func (g *EFIGUID) String() string {
 	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, binary.BigEndian.Uint16(g.Data4[0:2]), g.Data4[2:])
 }
 
-func makeEFIGUID(a uint32, b, c, d uint16, e [6]uint8) *EFIGUID {
+func NewEFIGUID(a uint32, b, c, d uint16, e [6]uint8) *EFIGUID {
 	guid := &EFIGUID{Data1: a, Data2: b, Data3: c}
 	binary.BigEndian.PutUint16(guid.Data4[0:2], d)
 	copy(guid.Data4[2:], e[:])
