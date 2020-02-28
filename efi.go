@@ -110,11 +110,6 @@ func decodeEFIGUIDFromArray(data [16]byte) (*EFIGUID, error) {
 func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecEFI_1_2
 
-	// TCG_EfiSpecIdEventStruct.uintnSize
-	if err := binary.Read(stream, binary.LittleEndian, &eventData.uintnSize); err != nil {
-		return wrapSpecIdEventReadError(err)
-	}
-
 	// TCG_EfiSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
@@ -135,11 +130,6 @@ func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) erro
 func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecEFI_2
 
-	// TCG_EfiSpecIdEvent.uintnSize
-	if err := binary.Read(stream, binary.LittleEndian, &eventData.uintnSize); err != nil {
-		return wrapSpecIdEventReadError(err)
-	}
-
 	// TCG_EfiSpecIdEvent.numberOfAlgorithms
 	var numberOfAlgorithms uint32
 	if err := binary.Read(stream, binary.LittleEndian, &numberOfAlgorithms); err != nil {
@@ -152,25 +142,15 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 
 	// TCG_EfiSpecIdEvent.digestSizes
 	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
-	for i := uint32(0); i < numberOfAlgorithms; i++ {
-		// TCG_EfiSpecIdEvent.digestSizes[i].algorithmId
-		var algorithmId AlgorithmId
-		if err := binary.Read(stream, binary.LittleEndian, &algorithmId); err != nil {
-			return wrapSpecIdEventReadError(err)
-		}
-
-		// TCG_EfiSpecIdEvent.digestSizes[i].digestSize
-		var digestSize uint16
-		if err := binary.Read(stream, binary.LittleEndian, &digestSize); err != nil {
-			return wrapSpecIdEventReadError(err)
-		}
-
-		if algorithmId.supported() && algorithmId.size() != int(digestSize) {
+	if err := binary.Read(stream, binary.LittleEndian, &eventData.DigestSizes); err != nil {
+		return wrapSpecIdEventReadError(err)
+	}
+	for _, d := range eventData.DigestSizes {
+		if d.AlgorithmId.supported() && d.AlgorithmId.size() != int(d.DigestSize) {
 			return invalidSpecIdEventError{
 				fmt.Sprintf("digestSize for algorithmId 0x%04x doesn't match expected size "+
-					"(got: %d, expected: %d)", algorithmId, digestSize, algorithmId.size())}
+					"(got: %d, expected: %d)", d.AlgorithmId, d.DigestSize, d.AlgorithmId.size())}
 		}
-		eventData.DigestSizes[i] = EFISpecIdEventAlgorithmSize{algorithmId, digestSize}
 	}
 
 	// TCG_EfiSpecIdEvent.vendorInfoSize

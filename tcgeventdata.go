@@ -45,7 +45,7 @@ type SpecIdEventData struct {
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
 	SpecErrata       uint8
-	uintnSize        uint8
+	UintnSize        uint8
 	DigestSizes      []EFISpecIdEventAlgorithmSize // The digest algorithms contained within this log
 	VendorInfo       []byte
 }
@@ -97,12 +97,6 @@ func wrapSpecIdEventReadError(origErr error) error {
 func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecPCClient
 
-	// TCG_PCClientSpecIdEventStruct.reserved
-	var reserved uint8
-	if err := binary.Read(stream, binary.LittleEndian, &reserved); err != nil {
-		return wrapSpecIdEventReadError(err)
-	}
-
 	// TCG_PCClientSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
@@ -118,44 +112,33 @@ func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) erro
 	return nil
 }
 
+type specIdEventCommon struct {
+	PlatformClass uint32
+	SpecVersionMinor uint8
+	SpecVersionMajor uint8
+	SpecErrata uint8
+	UintnSize uint8
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func decodeSpecIdEvent(stream io.Reader, data []byte,
-	helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
-	// platformClass field
-	var platformClass uint32
-	if err := binary.Read(stream, binary.LittleEndian, &platformClass); err != nil {
-		return nil, wrapSpecIdEventReadError(err)
-	}
-
-	// specVersionMinor field
-	var specVersionMinor uint8
-	if err := binary.Read(stream, binary.LittleEndian, &specVersionMinor); err != nil {
-		return nil, wrapSpecIdEventReadError(err)
-	}
-
-	// specVersionMajor field
-	var specVersionMajor uint8
-	if err := binary.Read(stream, binary.LittleEndian, &specVersionMajor); err != nil {
-		return nil, wrapSpecIdEventReadError(err)
-	}
-
-	// specErrata field
-	var specErrata uint8
-	if err := binary.Read(stream, binary.LittleEndian, &specErrata); err != nil {
+func decodeSpecIdEvent(stream io.Reader, data []byte, helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
+	var common specIdEventCommon
+	if err := binary.Read(stream, binary.LittleEndian, &common); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
 	}
 
 	eventData := &SpecIdEventData{
 		data:             data,
-		PlatformClass:    platformClass,
-		SpecVersionMinor: specVersionMinor,
-		SpecVersionMajor: specVersionMajor,
-		SpecErrata:       specErrata}
+		PlatformClass:    common.PlatformClass,
+		SpecVersionMinor: common.SpecVersionMinor,
+		SpecVersionMajor: common.SpecVersionMajor,
+		SpecErrata:       common.SpecErrata,
+		UintnSize:	  common.UintnSize}
 
 	if err := helper(stream, eventData); err != nil {
 		return nil, err
