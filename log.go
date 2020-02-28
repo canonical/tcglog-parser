@@ -277,13 +277,12 @@ func (l *Log) NextEvent() (event *Event, err error) {
 }
 
 // NewLog creates a new Log instance that reads an event log from r
-func NewLog(r io.ReadSeeker, options LogOptions) (*Log, error) {
-	var stream stream = &stream_1_2{r: r, options: options}
+func NewLog(r io.ReaderAt, options LogOptions) (*Log, error) {
+	var stream stream = &stream_1_2{r: io.NewSectionReader(r, 0, (1<<63)-1), options: options}
 	event, _, err := stream.readNextEvent()
 	if err != nil {
 		return nil, wrapLogReadError(err, true)
 	}
-	r.Seek(0, io.SeekStart)
 
 	var spec Spec = SpecUnknown
 	var digestSizes []EFISpecIdEventAlgorithmSize
@@ -306,13 +305,13 @@ func NewLog(r io.ReadSeeker, options LogOptions) (*Log, error) {
 				algorithms = append(algorithms, specAlgSize.AlgorithmId)
 			}
 		}
-		stream = &stream_2{
-			r: r,
+		stream = &stream_2{r: io.NewSectionReader(r, 0, (1<<63)-1),
 			options:        options,
 			algSizes:       digestSizes,
 			readFirstEvent: false}
 	} else {
 		algorithms = AlgorithmIdList{AlgorithmSha1}
+		stream.(*stream_1_2).r.Seek(0, io.SeekStart)
 	}
 
 	return &Log{Spec: spec,
