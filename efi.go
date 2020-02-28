@@ -103,7 +103,7 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 
 	// TCG_EfiSpecIdEvent.digestSizes
 	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
-	if err := binary.Read(stream, binary.LittleEndian, &eventData.DigestSizes); err != nil {
+	if err := binary.Read(stream, binary.LittleEndian, eventData.DigestSizes); err != nil {
 		return wrapSpecIdEventReadError(err)
 	}
 	for _, d := range eventData.DigestSizes {
