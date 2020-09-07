@@ -96,14 +96,11 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 		return nil, xerrors.Errorf("cannot read event data: %w", err)
 	}
 
-	data, _ := decodeEventData(header.PCRIndex, header.EventType, event, p.options,
-		isDigestOfSeparatorErrorValue(digest, AlgorithmSha1))
-
 	return &Event{
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
-		Data:      data,
+		Data:      decodeEventData(header.PCRIndex, header.EventType, digests, event, p.options),
 	}, nil
 }
 
@@ -189,14 +186,11 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 		return nil, xerrors.Errorf("cannot read event data: %w", err)
 	}
 
-	data, _ := decodeEventData(header.PCRIndex, header.EventType, event, p.options,
-		isDigestOfSeparatorErrorValue(digests[p.algSizes[0].AlgorithmId], p.algSizes[0].AlgorithmId))
-
 	return &Event{
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
-		Data:      data,
+		Data:      decodeEventData(header.PCRIndex, header.EventType, digests, event, p.options),
 	}, nil
 }
 

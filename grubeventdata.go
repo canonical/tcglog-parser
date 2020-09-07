@@ -49,9 +49,9 @@ func (e *GrubStringEventData) EncodeMeasuredBytes(buf io.Writer) error {
 	return nil
 }
 
-func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (EventData, int) {
+func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
 	if eventType != EventTypeIPL {
-		return nil, 0
+		return nil
 	}
 
 	switch pcrIndex {
@@ -59,14 +59,14 @@ func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) (E
 		str := string(data)
 		switch {
 		case strings.HasPrefix(str, kernelCmdlinePrefix):
-			return &GrubStringEventData{data, KernelCmdline, strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}, 0
+			return &GrubStringEventData{data, KernelCmdline, strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}
 		case strings.HasPrefix(str, grubCmdPrefix):
-			return &GrubStringEventData{data, GrubCmd, strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}, 0
+			return &GrubStringEventData{data, GrubCmd, strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}
 		default:
-			return nil, 0
+			return nil
 		}
 	case 9:
-		return &asciiStringEventData{data: data}, 0
+		return &asciiStringEventData{data: data}
 	default:
 		panic("unhandled PCR index")
 	}

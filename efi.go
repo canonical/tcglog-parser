@@ -3,10 +3,13 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"golang.org/x/xerrors"
 )
 
 var (
@@ -18,23 +21,23 @@ var (
 // UEFI_VARIABLE_DATA specifies the number of *characters* for a UTF-16 sequence rather than the size of
 // the buffer. Extract a UTF-16 sequence of the correct length, given a buffer and the number of characters.
 // The returned buffer can be passed to utf16.Decode.
-func extractUTF16Buffer(stream io.ReadSeeker, nchars uint64) ([]uint16, error) {
+func extractUTF16Buffer(r io.ReadSeeker, nchars uint64) ([]uint16, error) {
 	var out []uint16
 
 	for i := nchars; i > 0; i-- {
 		var c uint16
-		if err := binary.Read(stream, binary.LittleEndian, &c); err != nil {
+		if err := binary.Read(r, binary.LittleEndian, &c); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
 		if c >= surr1 && c < surr2 {
-			if err := binary.Read(stream, binary.LittleEndian, &c); err != nil {
+			if err := binary.Read(r, binary.LittleEndian, &c); err != nil {
 				return nil, err
 			}
 			if c < surr2 || c >= surr3 {
 				// Invalid surrogate sequence. utf16.Decode doesn't consume this
 				// byte when inserting the replacement char
-				if _, err := stream.Seek(-1, io.SeekCurrent); err != nil {
+				if _, err := r.Seek(-1, io.SeekCurrent); err != nil {
 					return nil, err
 				}
 				continue
@@ -48,39 +51,41 @@ func extractUTF16Buffer(stream io.ReadSeeker, nchars uint64) ([]uint16, error) {
 }
 
 // EFIGUID corresponds to the EFI_GUID type
-type EFIGUID struct {
-	Data1 uint32
-	Data2 uint16
-	Data3 uint16
-	Data4 [8]uint8
+type EFIGUID [16]uint8
+
+func (guid EFIGUID) String() string {
+	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}",
+		binary.LittleEndian.Uint32(guid[0:4]),
+		binary.LittleEndian.Uint16(guid[4:6]),
+		binary.LittleEndian.Uint16(guid[6:8]),
+		binary.BigEndian.Uint16(guid[8:10]),
+		guid[10:16])
 }
 
-func (g *EFIGUID) String() string {
-	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}", g.Data1, g.Data2, g.Data3, binary.BigEndian.Uint16(g.Data4[0:2]), g.Data4[2:])
-}
-
-func NewEFIGUID(a uint32, b, c, d uint16, e [6]uint8) *EFIGUID {
-	guid := &EFIGUID{Data1: a, Data2: b, Data3: c}
-	binary.BigEndian.PutUint16(guid.Data4[0:2], d)
-	copy(guid.Data4[2:], e[:])
-	return guid
+func MakeEFIGUID(a uint32, b, c, d uint16, e [6]uint8) (out EFIGUID) {
+	binary.LittleEndian.PutUint32(out[0:4], a)
+	binary.LittleEndian.PutUint16(out[4:6], b)
+	binary.LittleEndian.PutUint16(out[6:8], c)
+	binary.BigEndian.PutUint16(out[8:10], d)
+	copy(out[10:], e[:])
+	return
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
+func parseEFI_1_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecEFI_1_2
 
 	// TCG_EfiSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
-		return wrapSpecIdEventReadError(err)
+	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
+		return xerrors.Errorf("cannot read vendor info size: %w", err)
 	}
 
 	// TCG_EfiSpecIdEventStruct.vendorInfo
 	eventData.VendorInfo = make([]byte, vendorInfoSize)
-	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
-		return wrapSpecIdEventReadError(err)
+	if _, err := io.ReadFull(r, eventData.VendorInfo); err != nil {
+		return xerrors.Errorf("cannot read vendor info: %w", err)
 	}
 
 	return nil
@@ -88,42 +93,40 @@ func parseEFI_1_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) erro
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error {
+func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
 	eventData.Spec = SpecEFI_2
 
 	// TCG_EfiSpecIdEvent.numberOfAlgorithms
 	var numberOfAlgorithms uint32
-	if err := binary.Read(stream, binary.LittleEndian, &numberOfAlgorithms); err != nil {
-		return wrapSpecIdEventReadError(err)
+	if err := binary.Read(r, binary.LittleEndian, &numberOfAlgorithms); err != nil {
+		return xerrors.Errorf("cannot read number of digest algorithms: %w", err)
 	}
 
 	if numberOfAlgorithms < 1 {
-		return invalidSpecIdEventError{"numberOfAlgorithms is zero"}
+		return errors.New("numberOfAlgorithms is zero")
 	}
 
 	// TCG_EfiSpecIdEvent.digestSizes
 	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
-	if err := binary.Read(stream, binary.LittleEndian, eventData.DigestSizes); err != nil {
-		return wrapSpecIdEventReadError(err)
+	if err := binary.Read(r, binary.LittleEndian, eventData.DigestSizes); err != nil {
+		return xerrors.Errorf("cannot read digest algorithm sizes: %w", err)
 	}
 	for _, d := range eventData.DigestSizes {
 		if d.AlgorithmId.supported() && d.AlgorithmId.size() != int(d.DigestSize) {
-			return invalidSpecIdEventError{
-				fmt.Sprintf("digestSize for algorithmId 0x%04x doesn't match expected size "+
-					"(got: %d, expected: %d)", d.AlgorithmId, d.DigestSize, d.AlgorithmId.size())}
+			return fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
 		}
 	}
 
 	// TCG_EfiSpecIdEvent.vendorInfoSize
 	var vendorInfoSize uint8
-	if err := binary.Read(stream, binary.LittleEndian, &vendorInfoSize); err != nil {
-		return wrapSpecIdEventReadError(err)
+	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
+		return xerrors.Errorf("cannot read vendor info size: %w", err)
 	}
 
 	// TCG_EfiSpecIdEvent.vendorInfo
 	eventData.VendorInfo = make([]byte, vendorInfoSize)
-	if _, err := io.ReadFull(stream, eventData.VendorInfo); err != nil {
-		return wrapSpecIdEventReadError(err)
+	if _, err := io.ReadFull(r, eventData.VendorInfo); err != nil {
+		return xerrors.Errorf("cannot read vendor info: %w", err)
 	}
 
 	return nil
@@ -131,11 +134,11 @@ func parseEFI_2_SpecIdEvent(stream io.Reader, eventData *SpecIdEventData) error 
 
 type startupLocalityEventData struct {
 	data     []byte
-	Locality uint8
+	locality uint8
 }
 
 func (e *startupLocalityEventData) String() string {
-	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.Locality)
+	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.locality)
 }
 
 func (e *startupLocalityEventData) Bytes() []byte {
@@ -148,24 +151,23 @@ func (e *startupLocalityEventData) Type() NoActionEventType {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(stream io.Reader, data []byte) (*startupLocalityEventData, error) {
+func decodeStartupLocalityEvent(r io.Reader, data []byte) (*startupLocalityEventData, error) {
 	var locality uint8
-	if err := binary.Read(stream, binary.LittleEndian, &locality); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
 		return nil, err
 	}
 
-	return &startupLocalityEventData{data: data, Locality: locality}, nil
+	return &startupLocalityEventData{data: data, locality: locality}, nil
 }
 
 type bimReferenceManifestEventData struct {
 	data     []byte
-	VendorId uint32
-	Guid     EFIGUID
+	vendorId uint32
+	guid     EFIGUID
 }
 
 func (e *bimReferenceManifestEventData) String() string {
-	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }",
-		e.VendorId, &e.Guid)
+	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.vendorId, &e.guid)
 }
 
 func (e *bimReferenceManifestEventData) Bytes() []byte {
@@ -180,16 +182,16 @@ func (e *bimReferenceManifestEventData) Type() NoActionEventType {
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*bimReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(r io.Reader, data []byte) (*bimReferenceManifestEventData, error) {
 	var d struct {
 		VendorId uint32
 		Guid     EFIGUID
 	}
-	if err := binary.Read(stream, binary.LittleEndian, &d); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &d); err != nil {
 		return nil, err
 	}
 
-	return &bimReferenceManifestEventData{data: data, VendorId: d.VendorId, Guid: d.Guid}, nil
+	return &bimReferenceManifestEventData{data: data, vendorId: d.VendorId, guid: d.Guid}, nil
 }
 
 // EFIVariableEventData corresponds to the EFI_VARIABLE_DATA type.
@@ -201,75 +203,65 @@ type EFIVariableEventData struct {
 }
 
 func (e *EFIVariableEventData) String() string {
-	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\" }",
-		e.VariableName.String(), e.UnicodeName)
+	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\" }", e.VariableName, e.UnicodeName)
 }
 
 func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
 }
 
-func (e *EFIVariableEventData) EncodeMeasuredBytes(buf io.Writer) error {
-	if err := binary.Write(buf, binary.LittleEndian, e.VariableName); err != nil {
-		return err
+func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
+	if _, err := w.Write(e.VariableName[:]); err != nil {
+		return xerrors.Errorf("cannot write variable name: %w", err)
 	}
-	if err := binary.Write(buf, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
-		return err
+	if err := binary.Write(w, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
+		return xerrors.Errorf("cannot write unicode name length: %w", err)
 	}
-	if err := binary.Write(buf, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
-		return err
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
+		return xerrors.Errorf("cannot write variable data length: %w", err)
 	}
-	if err := binary.Write(buf, binary.LittleEndian, convertStringToUtf16(e.UnicodeName)); err != nil {
-		return err
+	if err := binary.Write(w, binary.LittleEndian, convertStringToUtf16(e.UnicodeName)); err != nil {
+		return xerrors.Errorf("cannot write unicode name: %w", err)
 	}
-	if _, err := buf.Write(e.VariableData); err != nil {
-		return err
+	if _, err := w.Write(e.VariableData); err != nil {
+		return xerrors.Errorf("cannot write variable data: %w", err)
 	}
 	return nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
-func decodeEventDataEFIVariableImpl(data []byte, eventType EventType) (*EFIVariableEventData, int, error) {
-	stream := bytes.NewReader(data)
+func decodeEventDataEFIVariable(data []byte, eventType EventType) (EventData, error) {
+	r := bytes.NewReader(data)
 
-	var guid EFIGUID
-	if err := binary.Read(stream, binary.LittleEndian, &guid); err != nil {
-		return nil, 0, err
+	d := &EFIVariableEventData{data: data}
+
+	if _, err := io.ReadFull(r, d.VariableName[:]); err != nil {
+		return nil, xerrors.Errorf("cannot read variable name: %w", err)
 	}
 
 	var unicodeNameLength uint64
-	if err := binary.Read(stream, binary.LittleEndian, &unicodeNameLength); err != nil {
-		return nil, 0, err
+	if err := binary.Read(r, binary.LittleEndian, &unicodeNameLength); err != nil {
+		return nil, xerrors.Errorf("cannot read unicode name length: %w", err)
 	}
 
 	var variableDataLength uint64
-	if err := binary.Read(stream, binary.LittleEndian, &variableDataLength); err != nil {
-		return nil, 0, err
+	if err := binary.Read(r, binary.LittleEndian, &variableDataLength); err != nil {
+		return nil, xerrors.Errorf("cannot read variable data length: %w", err)
 	}
 
-	utf16Name, err := extractUTF16Buffer(stream, unicodeNameLength)
+	utf16Name, err := extractUTF16Buffer(r, unicodeNameLength)
 	if err != nil {
-		return nil, 0, err
+		return nil, xerrors.Errorf("cannot extract unicode name buffer: %w", err)
+	}
+	d.UnicodeName = convertUtf16ToString(utf16Name)
+
+	d.VariableData = make([]byte, variableDataLength)
+	if _, err := io.ReadFull(r, d.VariableData); err != nil {
+		return nil, xerrors.Errorf("cannot read variable data: %w", err)
 	}
 
-	variableData := make([]byte, variableDataLength)
-	if _, err := io.ReadFull(stream, variableData); err != nil {
-		return nil, 0, err
-	}
-
-	return &EFIVariableEventData{data: data,
-		VariableName: guid,
-		UnicodeName:  convertUtf16ToString(utf16Name),
-		VariableData: variableData}, stream.Len(), nil
-}
-
-func decodeEventDataEFIVariable(data []byte, eventType EventType) (out EventData, trailingBytes int, err error) {
-	d, trailingBytes, err := decodeEventDataEFIVariableImpl(data, eventType)
-	if d != nil {
-		out = d
-	}
-	return
+	return d, nil
 }
 
 type efiDevicePathNodeType uint8
@@ -316,11 +308,11 @@ const (
 )
 
 func firmwareDevicePathNodeToString(subType uint8, data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
 	var name EFIGUID
-	if err := binary.Read(stream, binary.LittleEndian, &name); err != nil {
-		return "", err
+	if _, err := io.ReadFull(r, name[:]); err != nil {
+		return "", xerrors.Errorf("cannot read name: %w", err)
 	}
 
 	var builder bytes.Buffer
@@ -333,21 +325,21 @@ func firmwareDevicePathNodeToString(subType uint8, data []byte) (string, error) 
 		return "", fmt.Errorf("invalid sub type for firmware device path node: %d", subType)
 	}
 
-	fmt.Fprintf(&builder, "(%s)", &name)
+	fmt.Fprintf(&builder, "(%s)", name)
 	return builder.String(), nil
 }
 
 func acpiDevicePathNodeToString(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
 	var hid uint32
-	if err := binary.Read(stream, binary.LittleEndian, &hid); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &hid); err != nil {
+		return "", xerrors.Errorf("cannot read HID: %w", err)
 	}
 
 	var uid uint32
-	if err := binary.Read(stream, binary.LittleEndian, &uid); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &uid); err != nil {
+		return "", xerrors.Errorf("cannot read UID: %w", err)
 	}
 
 	if hid&0xffff == 0x41d0 {
@@ -367,63 +359,63 @@ func acpiDevicePathNodeToString(data []byte) (string, error) {
 }
 
 func pciDevicePathNodeToString(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
 	var function uint8
-	if err := binary.Read(stream, binary.LittleEndian, &function); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &function); err != nil {
+		return "", xerrors.Errorf("cannot read function: %w", err)
 	}
 
 	var device uint8
-	if err := binary.Read(stream, binary.LittleEndian, &device); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &device); err != nil {
+		return "", xerrors.Errorf("cannot read device: %w", err)
 	}
 
 	return fmt.Sprintf("\\Pci(0x%x,0x%x)", device, function), nil
 }
 
 func luDevicePathNodeToString(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
 	var lun uint8
-	if err := binary.Read(stream, binary.LittleEndian, &lun); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &lun); err != nil {
+		return "", xerrors.Errorf("cannot read LUN: %w", err)
 	}
 
 	return fmt.Sprintf("\\Unit(0x%x)", lun), nil
 }
 
 func hardDriveDevicePathNodeToString(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
 	var partNumber uint32
-	if err := binary.Read(stream, binary.LittleEndian, &partNumber); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &partNumber); err != nil {
+		return "", xerrors.Errorf("cannot read partition number: %w", err)
 	}
 
 	var partStart uint64
-	if err := binary.Read(stream, binary.LittleEndian, &partStart); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &partStart); err != nil {
+		return "", xerrors.Errorf("cannot read partition start: %w", err)
 	}
 
 	var partSize uint64
-	if err := binary.Read(stream, binary.LittleEndian, &partSize); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &partSize); err != nil {
+		return "", xerrors.Errorf("cannot read partition size: %w", err)
 	}
 
-	var sig [16]byte
-	if _, err := io.ReadFull(stream, sig[:]); err != nil {
-		return "", err
+	var sig EFIGUID
+	if _, err := io.ReadFull(r, sig[:]); err != nil {
+		return "", xerrors.Errorf("cannot read signature: %w", err)
 	}
 
 	var partFormat uint8
-	if err := binary.Read(stream, binary.LittleEndian, &partFormat); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &partFormat); err != nil {
+		return "", xerrors.Errorf("cannot read partition format: %w", err)
 	}
 
 	var sigType uint8
-	if err := binary.Read(stream, binary.LittleEndian, &sigType); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &sigType); err != nil {
+		return "", xerrors.Errorf("cannot read signature type: %w", err)
 	}
 
 	var builder bytes.Buffer
@@ -432,12 +424,7 @@ func hardDriveDevicePathNodeToString(data []byte) (string, error) {
 	case 0x01:
 		fmt.Fprintf(&builder, "\\HD(%d,MBR,0x%08x,", partNumber, binary.LittleEndian.Uint32(sig[:]))
 	case 0x02:
-		r := bytes.NewReader(sig[:])
-		var guid EFIGUID
-		if err := binary.Read(r, binary.LittleEndian, &guid); err != nil {
-			return "", err
-		}
-		fmt.Fprintf(&builder, "\\HD(%d,GPT,%s,", partNumber, &guid)
+		fmt.Fprintf(&builder, "\\HD(%d,GPT,%s,", partNumber, sig)
 	default:
 		fmt.Fprintf(&builder, "\\HD(%d,%d,0,", partNumber, sigType)
 	}
@@ -447,21 +434,21 @@ func hardDriveDevicePathNodeToString(data []byte) (string, error) {
 }
 
 func sataDevicePathNodeToString(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
 	var hbaPortNumber uint16
-	if err := binary.Read(stream, binary.LittleEndian, &hbaPortNumber); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &hbaPortNumber); err != nil {
+		return "", xerrors.Errorf("cannot read HBA port number: %w", err)
 	}
 
 	var portMultiplierPortNumber uint16
-	if err := binary.Read(stream, binary.LittleEndian, &portMultiplierPortNumber); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &portMultiplierPortNumber); err != nil {
+		return "", xerrors.Errorf("cannot read port multiplier port number: %w", err)
 	}
 
 	var lun uint16
-	if err := binary.Read(stream, binary.LittleEndian, &lun); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &lun); err != nil {
+		return "", xerrors.Errorf("cannot read LUN: %w", err)
 	}
 
 	return fmt.Sprintf("\\Sata(0x%x,0x%x,0x%x)", hbaPortNumber, portMultiplierPortNumber, lun), nil
@@ -469,8 +456,8 @@ func sataDevicePathNodeToString(data []byte) (string, error) {
 
 func filePathDevicePathNodeToString(data []byte) string {
 	u16 := make([]uint16, len(data)/2)
-	stream := bytes.NewReader(data)
-	binary.Read(stream, binary.LittleEndian, &u16)
+	r := bytes.NewReader(data)
+	binary.Read(r, binary.LittleEndian, &u16)
 
 	var buf bytes.Buffer
 	for _, r := range utf16.Decode(u16) {
@@ -480,29 +467,29 @@ func filePathDevicePathNodeToString(data []byte) string {
 }
 
 func relOffsetRangePathNodeToString(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 
-	if _, err := stream.Seek(4, io.SeekCurrent); err != nil {
+	if _, err := r.Seek(4, io.SeekCurrent); err != nil {
 		return "", err
 	}
 
 	var start uint64
-	if err := binary.Read(stream, binary.LittleEndian, &start); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &start); err != nil {
+		return "", xerrors.Errorf("cannot read start: %w", err)
 	}
 
 	var end uint64
-	if err := binary.Read(stream, binary.LittleEndian, &end); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &end); err != nil {
+		return "", xerrors.Errorf("cannot read end: %w", err)
 	}
 
 	return fmt.Sprintf("\\Offset(0x%x,0x%x)", start, end), nil
 }
 
-func decodeDevicePathNode(stream io.Reader) (string, error) {
+func decodeDevicePathNode(r io.Reader) (string, error) {
 	var t efiDevicePathNodeType
-	if err := binary.Read(stream, binary.LittleEndian, &t); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &t); err != nil {
+		return "", xerrors.Errorf("cannot read type: %w", err)
 	}
 
 	if t == efiDevicePathNodeEoH {
@@ -510,54 +497,80 @@ func decodeDevicePathNode(stream io.Reader) (string, error) {
 	}
 
 	var subType uint8
-	if err := binary.Read(stream, binary.LittleEndian, &subType); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &subType); err != nil {
+		return "", xerrors.Errorf("cannot read sub-type: %w", err)
 	}
 
 	var length uint16
-	if err := binary.Read(stream, binary.LittleEndian, &length); err != nil {
-		return "", err
+	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
+		return "", xerrors.Errorf("cannot read length: %w", err)
 	}
 
 	if length < 4 {
-		return "", fmt.Errorf("unexpected device path node length (got %d, expected >= 4)", length)
+		return "", errors.New("unexpected length")
 	}
 
 	data := make([]byte, length-4)
-	if _, err := io.ReadFull(stream, data); err != nil {
-		return "", err
+	if _, err := io.ReadFull(r, data); err != nil {
+		return "", xerrors.Errorf("cannot read data: %w", err)
 	}
 
 	switch t {
 	case efiDevicePathNodeMedia:
 		switch subType {
-		case efiMediaDevicePathNodeFvFile:
-			fallthrough
-		case efiMediaDevicePathNodeFv:
-			return firmwareDevicePathNodeToString(subType, data)
+		case efiMediaDevicePathNodeFvFile, efiMediaDevicePathNodeFv:
+			s, err := firmwareDevicePathNodeToString(subType, data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode Fv or FvFile node: %w", err)
+			}
+			return s, nil
 		case efiMediaDevicePathNodeHardDrive:
-			return hardDriveDevicePathNodeToString(data)
+			s, err := hardDriveDevicePathNodeToString(data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode HD node: %w", err)
+			}
+			return s, nil
 		case efiMediaDevicePathNodeFilePath:
 			return filePathDevicePathNodeToString(data), nil
 		case efiMediaDevicePathNodeRelOffsetRange:
-			return relOffsetRangePathNodeToString(data)
+			s, err := relOffsetRangePathNodeToString(data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode Offset node: %w", err)
+			}
+			return s, nil
 		}
 	case efiDevicePathNodeACPI:
 		switch subType {
 		case efiACPIDevicePathNodeNormal:
-			return acpiDevicePathNodeToString(data)
+			s, err := acpiDevicePathNodeToString(data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode Acpi node: %w", err)
+			}
+			return s, nil
 		}
 	case efiDevicePathNodeHardware:
 		switch subType {
 		case efiHardwareDevicePathNodePCI:
-			return pciDevicePathNodeToString(data)
+			s, err := pciDevicePathNodeToString(data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode Pci node: %w", err)
+			}
+			return s, nil
 		}
 	case efiDevicePathNodeMsg:
 		switch subType {
 		case efiMsgDevicePathNodeLU:
-			return luDevicePathNodeToString(data)
+			s, err := luDevicePathNodeToString(data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode Unit node: %w", err)
+			}
+			return s, nil
 		case efiMsgDevicePathNodeSATA:
-			return sataDevicePathNodeToString(data)
+			s, err := sataDevicePathNodeToString(data)
+			if err != nil {
+				return "", xerrors.Errorf("cannot decode Sata node: %w", err)
+			}
+			return s, nil
 		}
 
 	}
@@ -575,13 +588,13 @@ func decodeDevicePathNode(stream io.Reader) (string, error) {
 }
 
 func decodeDevicePath(data []byte) (string, error) {
-	stream := bytes.NewReader(data)
+	r := bytes.NewReader(data)
 	var builder bytes.Buffer
 
-	for {
-		node, err := decodeDevicePathNode(stream)
+	for i := 0; ; i++ {
+		node, err := decodeDevicePathNode(r)
 		if err != nil {
-			return "", err
+			return "", xerrors.Errorf("cannot decode node %d: %w", i, err)
 		}
 		if node == "" {
 			return builder.String(), nil
@@ -610,38 +623,38 @@ func (e *efiImageLoadEventData) Bytes() []byte {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
-func decodeEventDataEFIImageLoadImpl(data []byte) (*efiImageLoadEventData, error) {
-	stream := bytes.NewReader(data)
+func decodeEventDataEFIImageLoad(data []byte) (*efiImageLoadEventData, error) {
+	r := bytes.NewReader(data)
 
 	var locationInMemory uint64
-	if err := binary.Read(stream, binary.LittleEndian, &locationInMemory); err != nil {
-		return nil, err
+	if err := binary.Read(r, binary.LittleEndian, &locationInMemory); err != nil {
+		return nil, xerrors.Errorf("cannot read location in memory: %w", err)
 	}
 
 	var lengthInMemory uint64
-	if err := binary.Read(stream, binary.LittleEndian, &lengthInMemory); err != nil {
-		return nil, err
+	if err := binary.Read(r, binary.LittleEndian, &lengthInMemory); err != nil {
+		return nil, xerrors.Errorf("cannot read length in memory: %w", err)
 	}
 
 	var linkTimeAddress uint64
-	if err := binary.Read(stream, binary.LittleEndian, &linkTimeAddress); err != nil {
-		return nil, err
+	if err := binary.Read(r, binary.LittleEndian, &linkTimeAddress); err != nil {
+		return nil, xerrors.Errorf("cannot read link time address: %w", err)
 	}
 
 	var devicePathLength uint64
-	if err := binary.Read(stream, binary.LittleEndian, &devicePathLength); err != nil {
-		return nil, err
+	if err := binary.Read(r, binary.LittleEndian, &devicePathLength); err != nil {
+		return nil, xerrors.Errorf("cannot read device path length: %w", err)
 	}
 
 	devicePathBuf := make([]byte, devicePathLength)
 
-	if _, err := io.ReadFull(stream, devicePathBuf); err != nil {
-		return nil, err
+	if _, err := io.ReadFull(r, devicePathBuf); err != nil {
+		return nil, xerrors.Errorf("cannot read device path: %w", err)
 	}
 
 	path, err := decodeDevicePath(devicePathBuf)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.Errorf("cannot decode device path: %w", err)
 	}
 
 	return &efiImageLoadEventData{data: data,
@@ -651,14 +664,6 @@ func decodeEventDataEFIImageLoadImpl(data []byte) (*efiImageLoadEventData, error
 		path:             path}, nil
 }
 
-func decodeEventDataEFIImageLoad(data []byte) (out EventData, trailingBytes int, err error) {
-	d, err := decodeEventDataEFIImageLoadImpl(data)
-	if d != nil {
-		out = d
-	}
-	return
-}
-
 type efiGPTPartitionEntry struct {
 	typeGUID   EFIGUID
 	uniqueGUID EFIGUID
@@ -666,24 +671,23 @@ type efiGPTPartitionEntry struct {
 }
 
 func (p *efiGPTPartitionEntry) String() string {
-	return fmt.Sprintf("PartitionTypeGUID: %s, UniquePartitionGUID: %s, Name: \"%s\"",
-		&p.typeGUID, &p.uniqueGUID, p.name)
+	return fmt.Sprintf("PartitionTypeGUID: %s, UniquePartitionGUID: %s, Name: \"%s\"", p.typeGUID, p.uniqueGUID, p.name)
 }
 
 type efiGPTEventData struct {
 	data       []byte
 	diskGUID   EFIGUID
-	partitions []efiGPTPartitionEntry
+	partitions []*efiGPTPartitionEntry
 }
 
 func (e *efiGPTEventData) String() string {
 	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", &e.diskGUID)
+	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", e.diskGUID)
 	for i, part := range e.partitions {
 		if i > 0 {
 			fmt.Fprintf(&builder, ", ")
 		}
-		fmt.Fprintf(&builder, "{ %s }", &part)
+		fmt.Fprintf(&builder, "{ %s }", part)
 	}
 	fmt.Fprintf(&builder, "] }")
 	return builder.String()
@@ -693,70 +697,68 @@ func (e *efiGPTEventData) Bytes() []byte {
 	return e.data
 }
 
-func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
-	stream := bytes.NewReader(data)
+func decodeEventDataEFIGPT(data []byte) (*efiGPTEventData, error) {
+	r := bytes.NewReader(data)
 
 	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{Header, MyLBA, AlternateLBA, FirstUsableLBA, LastUsableLBA}
-	if _, err := stream.Seek(56, io.SeekCurrent); err != nil {
-		return nil, 0, err
+	if _, err := r.Seek(56, io.SeekCurrent); err != nil {
+		return nil, err
 	}
 
+	d := &efiGPTEventData{data: data}
+
 	// UEFI_GPT_DATA.UEFIPartitionHeader.DiskGUID
-	var diskGUID EFIGUID
-	if err := binary.Read(stream, binary.LittleEndian, &diskGUID); err != nil {
-		return nil, 0, err
+	if _, err := io.ReadFull(r, d.diskGUID[:]); err != nil {
+		return nil, xerrors.Errorf("cannot read disk GUID: %w", err)
 	}
 
 	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{PartitionEntryLBA, NumberOfPartitionEntries}
-	if _, err := stream.Seek(12, io.SeekCurrent); err != nil {
-		return nil, 0, err
+	if _, err := r.Seek(12, io.SeekCurrent); err != nil {
+		return nil, err
 	}
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader.SizeOfPartitionEntry
 	var partEntrySize uint32
-	if err := binary.Read(stream, binary.LittleEndian, &partEntrySize); err != nil {
-		return nil, 0, err
+	if err := binary.Read(r, binary.LittleEndian, &partEntrySize); err != nil {
+		return nil, xerrors.Errorf("cannot read SizeOfPartitionEntry: %w", err)
 	}
 
 	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.PartitionEntryArrayCRC32
-	if _, err := stream.Seek(4, io.SeekCurrent); err != nil {
-		return nil, 0, err
+	if _, err := r.Seek(4, io.SeekCurrent); err != nil {
+		return nil, err
 	}
 
 	// UEFI_GPT_DATA.NumberOfPartitions
 	var numberOfParts uint64
-	if err := binary.Read(stream, binary.LittleEndian, &numberOfParts); err != nil {
-		return nil, 0, err
+	if err := binary.Read(r, binary.LittleEndian, &numberOfParts); err != nil {
+		return nil, xerrors.Errorf("cannot read number of partitions: %w", err)
 	}
-
-	eventData := &efiGPTEventData{diskGUID: diskGUID, partitions: make([]efiGPTPartitionEntry, numberOfParts)}
 
 	for i := uint64(0); i < numberOfParts; i++ {
 		entryData := make([]byte, partEntrySize)
-		if _, err := io.ReadFull(stream, entryData); err != nil {
-			return nil, 0, err
+		if _, err := io.ReadFull(r, entryData); err != nil {
+			return nil, xerrors.Errorf("cannot read partition entry data: %w", err)
 		}
 
-		entryStream := bytes.NewReader(entryData)
+		er := bytes.NewReader(entryData)
+		e := &efiGPTPartitionEntry{}
 
-		var typeGUID EFIGUID
-		if err := binary.Read(entryStream, binary.LittleEndian, &typeGUID); err != nil {
-			return nil, 0, err
+		if _, err := io.ReadFull(er, e.typeGUID[:]); err != nil {
+			return nil, xerrors.Errorf("cannot read partition type GUID: %w", err)
 		}
 
-		var uniqueGUID EFIGUID
-		if err := binary.Read(entryStream, binary.LittleEndian, &uniqueGUID); err != nil {
-			return nil, 0, err
+		if _, err := io.ReadFull(er, e.uniqueGUID[:]); err != nil {
+			return nil, xerrors.Errorf("cannot read partition unique GUID: %w", err)
 		}
 
 		// Skip UEFI_GPT_DATA.Partitions[i].{StartingLBA, EndingLBA, Attributes}
-		if _, err := entryStream.Seek(24, io.SeekCurrent); err != nil {
-			return nil, 0, err
+		if _, err := er.Seek(24, io.SeekCurrent); err != nil {
+			return nil, err
 		}
 
-		nameUtf16 := make([]uint16, entryStream.Len()/2)
-		if err := binary.Read(entryStream, binary.LittleEndian, &nameUtf16); err != nil {
-			return nil, 0, err
+		nameUtf16 := make([]uint16, er.Len()/2)
+		if err := binary.Read(er, binary.LittleEndian, &nameUtf16); err != nil {
+			return nil, xerrors.Errorf("cannot read partition name: %w", err)
 		}
 
 		var name bytes.Buffer
@@ -766,17 +768,10 @@ func decodeEventDataEFIGPTImpl(data []byte) (*efiGPTEventData, int, error) {
 			}
 			name.WriteRune(r)
 		}
+		e.name = name.String()
 
-		eventData.partitions[i] = efiGPTPartitionEntry{typeGUID: typeGUID, uniqueGUID: uniqueGUID, name: name.String()}
+		d.partitions = append(d.partitions, e)
 	}
 
-	return eventData, stream.Len(), nil
-}
-
-func decodeEventDataEFIGPT(data []byte) (out EventData, trailingBytes int, err error) {
-	d, trailingBytes, err := decodeEventDataEFIGPTImpl(data)
-	if d != nil {
-		out = d
-	}
-	return
+	return d, nil
 }

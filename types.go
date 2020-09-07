@@ -129,7 +129,7 @@ func (e EventType) String() string {
 
 func (e EventType) Format(s fmt.State, f rune) {
 	switch f {
-	case 's':
+	case 's', 'v':
 		fmt.Fprintf(s, "%s", e.String())
 	default:
 		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint32(e))
@@ -153,7 +153,7 @@ func (a AlgorithmId) String() string {
 
 func (a AlgorithmId) Format(s fmt.State, f rune) {
 	switch f {
-	case 's':
+	case 's', 'v':
 		fmt.Fprintf(s, "%s", a.String())
 	default:
 		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint16(a))
