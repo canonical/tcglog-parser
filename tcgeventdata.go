@@ -113,11 +113,11 @@ func parsePCClientSpecIdEvent(stream io.Reader, eventData *SpecIdEventData) erro
 }
 
 type specIdEventCommon struct {
-	PlatformClass uint32
+	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
-	SpecErrata uint8
-	UintnSize uint8
+	SpecErrata       uint8
+	UintnSize        uint8
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -127,12 +127,12 @@ type specIdEventCommon struct {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
 func decodeSpecIdEvent(stream io.Reader, data []byte, helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
-	var common struct{
-		PlatformClass uint32
+	var common struct {
+		PlatformClass    uint32
 		SpecVersionMinor uint8
 		SpecVersionMajor uint8
-		SpecErrata uint8
-		UintnSize uint8
+		SpecErrata       uint8
+		UintnSize        uint8
 	}
 	if err := binary.Read(stream, binary.LittleEndian, &common); err != nil {
 		return nil, wrapSpecIdEventReadError(err)
@@ -144,7 +144,7 @@ func decodeSpecIdEvent(stream io.Reader, data []byte, helper func(io.Reader, *Sp
 		SpecVersionMinor: common.SpecVersionMinor,
 		SpecVersionMajor: common.SpecVersionMajor,
 		SpecErrata:       common.SpecErrata,
-		UintnSize:	  common.UintnSize}
+		UintnSize:        common.UintnSize}
 
 	if err := helper(stream, eventData); err != nil {
 		return nil, err

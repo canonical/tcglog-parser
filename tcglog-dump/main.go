@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/chrisccoulson/tcglog-parser"
@@ -70,7 +69,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log, err := tcglog.NewLog(file, tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
+	log, err := tcglog.ParseLog(file, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log file: %v\n", err)
 		os.Exit(1)
@@ -82,17 +81,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	for {
-		event, err := log.NextEvent()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-
-			fmt.Fprintf(os.Stderr, "Encountered an error when reading the next log event: %v\n", err)
-			os.Exit(1)
-		}
-
+	for _, event := range log.Events {
 		if !shouldDisplayEvent(event) {
 			continue
 		}
@@ -105,9 +94,6 @@ func main() {
 				fmt.Fprintf(&builder, " [ %s ]", data)
 			}
 
-		}
-		if err != nil {
-			fmt.Fprintf(&builder, " (WARNING: %s)", err)
 		}
 		fmt.Println(builder.String())
 	}

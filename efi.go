@@ -181,9 +181,9 @@ func (e *bimReferenceManifestEventData) Type() NoActionEventType {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
 func decodeBIMReferenceManifestEvent(stream io.Reader, data []byte) (*bimReferenceManifestEventData, error) {
-	var d struct{
+	var d struct {
 		VendorId uint32
-		Guid EFIGUID
+		Guid     EFIGUID
 	}
 	if err := binary.Read(stream, binary.LittleEndian, &d); err != nil {
 		return nil, err

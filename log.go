@@ -3,9 +3,10 @@ package tcglog
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
+
+	"golang.org/x/xerrors"
 )
 
 // LogOptions allows the behaviour of Log to be controlled.
@@ -21,8 +22,8 @@ var zeroDigests = map[AlgorithmId][]byte{
 	AlgorithmSha384: make([]byte, AlgorithmSha384.size()),
 	AlgorithmSha512: make([]byte, AlgorithmSha512.size())}
 
-type stream interface {
-	readNextEvent() (*Event, int, error)
+type parser interface {
+	readNextEvent() (*Event, error)
 }
 
 func isPCRIndexInRange(index PCRIndex) bool {
@@ -53,50 +54,49 @@ func wrapLogReadError(origErr error, partial bool) error {
 	return fmt.Errorf("error when reading from log stream (%v)", origErr)
 }
 
-func wrapPCRIndexOutOfRangeError(pcrIndex PCRIndex) error {
-	return fmt.Errorf("log entry has an out-of-range PCR index (%d)", pcrIndex)
-}
-
 type eventHeader_1_2 struct {
 	PCRIndex  PCRIndex
 	EventType EventType
 }
 
-type stream_1_2 struct {
-	r       io.ReadSeeker
-	options LogOptions
+type parser_1_2 struct {
+	r       io.Reader
+	options *LogOptions
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
-func (s *stream_1_2) readNextEvent() (*Event, int, error) {
+func (p *parser_1_2) readNextEvent() (*Event, error) {
 	var header eventHeader_1_2
-	if err := binary.Read(s.r, binary.LittleEndian, &header); err != nil {
-		return nil, 0, wrapLogReadError(err, false)
+	if err := binary.Read(p.r, binary.LittleEndian, &header); err != nil {
+		if err == io.EOF {
+			return nil, err
+		}
+		return nil, xerrors.Errorf("cannot read event header: %w", err)
 	}
 
 	if !isPCRIndexInRange(header.PCRIndex) {
-		return nil, 0, wrapPCRIndexOutOfRangeError(header.PCRIndex)
+		return nil, fmt.Errorf("log entry has an out-of-range PCR index (%d)", header.PCRIndex)
 	}
 
 	digest := make(Digest, AlgorithmSha1.size())
-	if _, err := s.r.Read(digest); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if _, err := p.r.Read(digest); err != nil {
+		return nil, xerrors.Errorf("cannot read SHA-1 digest: %w", err)
 	}
 	digests := make(DigestMap)
 	digests[AlgorithmSha1] = digest
 
 	var eventSize uint32
-	if err := binary.Read(s.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
+		return nil, xerrors.Errorf("cannot read event size: %w", err)
 	}
 
 	event := make([]byte, eventSize)
-	if _, err := io.ReadFull(s.r, event); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if _, err := io.ReadFull(p.r, event); err != nil {
+		return nil, xerrors.Errorf("cannot read event data: %w", err)
 	}
 
-	data, trailing := decodeEventData(header.PCRIndex, header.EventType, event, &s.options,
+	data, _ := decodeEventData(header.PCRIndex, header.EventType, event, p.options,
 		isDigestOfSeparatorErrorValue(digest, AlgorithmSha1))
 
 	return &Event{
@@ -104,7 +104,7 @@ func (s *stream_1_2) readNextEvent() (*Event, int, error) {
 		EventType: header.EventType,
 		Digests:   digests,
 		Data:      data,
-	}, trailing, nil
+	}, nil
 }
 
 type eventHeader_2 struct {
@@ -113,70 +113,62 @@ type eventHeader_2 struct {
 	Count     uint32
 }
 
-type stream_2 struct {
-	r              io.ReadSeeker
-	options        LogOptions
-	algSizes       []EFISpecIdEventAlgorithmSize
-	readFirstEvent bool
+type parser_2 struct {
+	r        io.Reader
+	options  *LogOptions
+	algSizes []EFISpecIdEventAlgorithmSize
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.2.2 "TCG_PCR_EVENT2 Structure")
-func (s *stream_2) readNextEvent() (*Event, int, error) {
-	if !s.readFirstEvent {
-		s.readFirstEvent = true
-		stream := stream_1_2{r: s.r}
-		return stream.readNextEvent()
-	}
-
+func (p *parser_2) readNextEvent() (*Event, error) {
 	var header eventHeader_2
-	if err := binary.Read(s.r, binary.LittleEndian, &header); err != nil {
-		return nil, 0, wrapLogReadError(err, false)
+	if err := binary.Read(p.r, binary.LittleEndian, &header); err != nil {
+		if err == io.EOF {
+			return nil, err
+		}
+		return nil, xerrors.Errorf("cannot read event header: %w", err)
 	}
 
 	if !isPCRIndexInRange(header.PCRIndex) {
-		return nil, 0, wrapPCRIndexOutOfRangeError(header.PCRIndex)
+		return nil, fmt.Errorf("log entry has an out-of-range PCR index (%d)", header.PCRIndex)
 	}
 
 	digests := make(DigestMap)
 
 	for i := uint32(0); i < header.Count; i++ {
 		var algorithmId AlgorithmId
-		if err := binary.Read(s.r, binary.LittleEndian, &algorithmId); err != nil {
-			return nil, 0, wrapLogReadError(err, true)
+		if err := binary.Read(p.r, binary.LittleEndian, &algorithmId); err != nil {
+			return nil, xerrors.Errorf("cannot read algorithm ID: %w", err)
 		}
 
 		var digestSize uint16
 		var j int
-		for j = 0; j < len(s.algSizes); j++ {
-			if s.algSizes[j].AlgorithmId == algorithmId {
-				digestSize = s.algSizes[j].DigestSize
+		for j = 0; j < len(p.algSizes); j++ {
+			if p.algSizes[j].AlgorithmId == algorithmId {
+				digestSize = p.algSizes[j].DigestSize
 				break
 			}
 		}
 
-		if j == len(s.algSizes) {
-			return nil, 0, fmt.Errorf("crypto-agile log entry contains a digest for an unrecognized "+
-				"algorithm (%s)", algorithmId)
+		if j == len(p.algSizes) {
+			return nil, fmt.Errorf("event contains a digest for an unrecognized algorithm (%v)", algorithmId)
 		}
 
 		digest := make(Digest, digestSize)
-		if _, err := io.ReadFull(s.r, digest); err != nil {
-			return nil, 0, wrapLogReadError(err, true)
+		if _, err := io.ReadFull(p.r, digest); err != nil {
+			return nil, xerrors.Errorf("cannot read digest for algorithm %v: %w", algorithmId, err)
 		}
 
 		if _, exists := digests[algorithmId]; exists {
-			return nil, 0, fmt.Errorf("crypto-agile log entry contains more than one digest value "+
-				"for algorithm %s", algorithmId)
+			return nil, fmt.Errorf("event contains more than one digest value for algorithm %v", algorithmId)
 		}
 		digests[algorithmId] = digest
 	}
 
-	for _, algSize := range s.algSizes {
-		if _, exists := digests[algSize.AlgorithmId]; !exists {
-			return nil, 0,
-				fmt.Errorf("crypto-agile log entry is missing a digest value for algorithm %s "+
-					"that was present in the Spec ID Event", algSize.AlgorithmId)
+	for _, s := range p.algSizes {
+		if _, exists := digests[s.AlgorithmId]; !exists {
+			return nil, fmt.Errorf("event is missing a digest value for algorithm %v", s.AlgorithmId)
 		}
 	}
 
@@ -188,24 +180,24 @@ func (s *stream_2) readNextEvent() (*Event, int, error) {
 	}
 
 	var eventSize uint32
-	if err := binary.Read(s.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
+		return nil, xerrors.Errorf("cannot read event size: %w", err)
 	}
 
 	event := make([]byte, eventSize)
-	if _, err := io.ReadFull(s.r, event); err != nil {
-		return nil, 0, wrapLogReadError(err, true)
+	if _, err := io.ReadFull(p.r, event); err != nil {
+		return nil, xerrors.Errorf("cannot read event data: %w", err)
 	}
 
-	data, trailing := decodeEventData(header.PCRIndex, header.EventType, event, &s.options,
-		isDigestOfSeparatorErrorValue(digests[s.algSizes[0].AlgorithmId], s.algSizes[0].AlgorithmId))
+	data, _ := decodeEventData(header.PCRIndex, header.EventType, event, p.options,
+		isDigestOfSeparatorErrorValue(digests[p.algSizes[0].AlgorithmId], p.algSizes[0].AlgorithmId))
 
 	return &Event{
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
 		Data:      data,
-	}, trailing, nil
+	}, nil
 }
 
 func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
@@ -231,92 +223,73 @@ func isSpecIdEvent(event *Event) (out bool) {
 	return
 }
 
-// Log corresponds to an event log parser instance, and allows the consumer to iterate over log entries.
+// Log corresponds to a parsed event log.
 type Log struct {
-	Spec         Spec            // The specification to which this log conforms
-	Algorithms   AlgorithmIdList // The digest algorithms that appear in the log
-	stream       stream
-	failed       bool
-	indexTracker map[PCRIndex]uint
+	Spec       Spec            // The specification to which this log conforms
+	Algorithms AlgorithmIdList // The digest algorithms that appear in the log
+	Events     []*Event        // The list of events in the log
 }
 
-func (l *Log) nextEventInternal() (*Event, int, error) {
-	if l.failed {
-		return nil, 0,
-			errors.New("cannot read next event: log status inconsistent due to a previous error")
-	}
-
-	event, trailing, err := l.stream.readNextEvent()
+// ParseLog parses an event log read from r, using the supplied options. If an error occurs during parsing, this may return an
+// incomplete list of events with the error.
+func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
+	var parser parser = &parser_1_2{r: r, options: options}
+	event, err := parser.readNextEvent()
 	if err != nil {
-		if err != io.EOF {
-			l.failed = true
-		}
-		return nil, 0, err
-	}
-
-	if i, exists := l.indexTracker[event.PCRIndex]; exists {
-		event.Index = i
-		l.indexTracker[event.PCRIndex] = i + 1
-	} else {
-		event.Index = 0
-		l.indexTracker[event.PCRIndex] = 1
-	}
-
-	if isSpecIdEvent(event) {
-		fixupSpecIdEvent(event, l.Algorithms)
-	}
-
-	return event, trailing, nil
-}
-
-// NextEvent returns an Event structure that corresponds to the next event in the log. Upon successful completion,
-// the Log instance will advance to the next event. If there are no more events in the log, it will return io.EOF.
-func (l *Log) NextEvent() (event *Event, err error) {
-	event, _, err = l.nextEventInternal()
-	return
-}
-
-// NewLog creates a new Log instance that reads an event log from r
-func NewLog(r io.ReaderAt, options LogOptions) (*Log, error) {
-	var stream stream = &stream_1_2{r: io.NewSectionReader(r, 0, (1<<63)-1), options: options}
-	event, _, err := stream.readNextEvent()
-	if err != nil {
-		return nil, wrapLogReadError(err, true)
+		return nil, err
 	}
 
 	var spec Spec = SpecUnknown
 	var digestSizes []EFISpecIdEventAlgorithmSize
-	var algorithms AlgorithmIdList
 
 	switch d := event.Data.(type) {
 	case *SpecIdEventData:
 		spec = d.Spec
 		digestSizes = d.DigestSizes
-	case *BrokenEventData:
-		if _, isSpecErr := d.Error.(invalidSpecIdEventError); isSpecErr {
-			return nil, d.Error
-		}
 	}
+
+	var algorithms AlgorithmIdList
 
 	if spec == SpecEFI_2 {
-		algorithms = make(AlgorithmIdList, 0, len(digestSizes))
-		for _, specAlgSize := range digestSizes {
-			if specAlgSize.AlgorithmId.supported() {
-				algorithms = append(algorithms, specAlgSize.AlgorithmId)
+		for _, s := range digestSizes {
+			if s.AlgorithmId.supported() {
+				algorithms = append(algorithms, s.AlgorithmId)
 			}
 		}
-		stream = &stream_2{r: io.NewSectionReader(r, 0, (1<<63)-1),
-			options:        options,
-			algSizes:       digestSizes,
-			readFirstEvent: false}
+		parser = &parser_2{r: r,
+			options:  options,
+			algSizes: digestSizes}
 	} else {
 		algorithms = AlgorithmIdList{AlgorithmSha1}
-		stream.(*stream_1_2).r.Seek(0, io.SeekStart)
 	}
 
-	return &Log{Spec: spec,
-		Algorithms:   algorithms,
-		stream:       stream,
-		failed:       false,
-		indexTracker: map[PCRIndex]uint{}}, nil
+	indexTracker := make(map[PCRIndex]uint)
+	populateEventIndex := func(event *Event) {
+		var index uint
+		if i, ok := indexTracker[event.PCRIndex]; ok {
+			index = i
+		}
+		event.Index = index
+		indexTracker[event.PCRIndex] = index + 1
+	}
+
+	populateEventIndex(event)
+	if isSpecIdEvent(event) {
+		fixupSpecIdEvent(event, algorithms)
+	}
+
+	log := &Log{Spec: spec, Algorithms: algorithms, Events: []*Event{event}}
+
+	for {
+		event, err := parser.readNextEvent()
+		switch {
+		case err == io.EOF:
+			return log, nil
+		case err != nil:
+			return log, err
+		default:
+			populateEventIndex(event)
+			log.Events = append(log.Events, event)
+		}
+	}
 }
