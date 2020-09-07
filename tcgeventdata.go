@@ -29,15 +29,17 @@ type EFISpecIdEventAlgorithmSize struct {
 	DigestSize  uint16
 }
 
+// NoActionEventType corresponds to the type of a EV_NO_ACTION event.
 type NoActionEventType int
 
 const (
-	UnknownNoActionEvent NoActionEventType = iota
-	SpecId
-	StartupLocality
-	BiosIntegrityMeasurement
+	UnknownNoActionEvent     NoActionEventType = iota // Unknown EV_NO_ACTION event type
+	SpecId                                            // "Spec ID Event00", "Spec ID Event02" or "Spec ID Event03" event type
+	StartupLocality                                   // "StartupLocality" event type
+	BiosIntegrityMeasurement                          // "SP800-155 Event" event type
 )
 
+// NoActionEventData provides a mechanism to determine the type of a EV_NO_ACTION event from the decoded EventData.
 type NoActionEventData interface {
 	Type() NoActionEventType
 }
@@ -238,9 +240,10 @@ func decodeEventDataAction(data []byte) *asciiStringEventData {
 	return &asciiStringEventData{data: data}
 }
 
+// SeparatorEventData corresponds to the event data associated with a EV_SEPARATOR event.
 type SeparatorEventData struct {
 	data    []byte
-	IsError bool
+	IsError bool // The event indicates an error condition
 }
 
 func (e *SeparatorEventData) String() string {

@@ -62,6 +62,7 @@ func (guid EFIGUID) String() string {
 		guid[10:16])
 }
 
+// MakeEFIGUID makes a new EFIGUID from the supplied arguments.
 func MakeEFIGUID(a uint32, b, c, d uint16, e [6]uint8) (out EFIGUID) {
 	binary.LittleEndian.PutUint32(out[0:4], a)
 	binary.LittleEndian.PutUint16(out[4:6], b)

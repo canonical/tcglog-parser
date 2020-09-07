@@ -11,10 +11,14 @@ var (
 	grubCmdPrefix       = "grub_cmd: "
 )
 
+// GrubStringEventType indicates the type of data measured by GRUB in to a log by GRUB.
 type GrubStringEventType int
 
 const (
+	// GrubCmd indicates that the data measured by GRUB is associated with a GRUB command.
 	GrubCmd GrubStringEventType = iota
+
+	// KernelCmdline indicates that the data measured by GRUB is associated with a kernel commandline.
 	KernelCmdline
 )
 
@@ -28,6 +32,7 @@ func grubEventTypeString(t GrubStringEventType) string {
 	panic("invalid value")
 }
 
+// GrubStringEventData represents the data associated with an event measured by GRUB.
 type GrubStringEventData struct {
 	data []byte
 	Type GrubStringEventType

@@ -7,6 +7,7 @@ import (
 	"io"
 )
 
+// SystemdEFIStubEventData represents the data associated with an event measured by the systemd EFI stub linux loader.
 type SystemdEFIStubEventData struct {
 	data []byte
 	Str  string

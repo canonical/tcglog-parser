@@ -4,8 +4,10 @@ import (
 	"fmt"
 )
 
-// EventData is an interface that represents all event data types that appear in a log. Most implementations of
-// this are private to this module.
+// EventData is an interface that represents all event data types that appear in a log. Some implementations of this are exported
+// so that event data contents can be inspected programatically.
+//
+// If an error is encountered when decoding the data associated with an event, the event data will implement the error interface.
 type EventData interface {
 	fmt.Stringer
 	Bytes() []byte // The raw event data bytes
