@@ -12,22 +12,28 @@ type EventData interface {
 	Bytes() []byte  // The raw event data bytes
 }
 
-// BrokenEventData corresponds to an event data buffer that could not be parsed correctly, for the reason
-// described by Error.
-type BrokenEventData struct {
-	data  []byte
-	Error error
+type invalidEventData struct {
+	data []byte
+	err  error
 }
 
-func (e *BrokenEventData) String() string {
-	if e.Error == io.ErrUnexpectedEOF {
+func (e *invalidEventData) String() string {
+	if e.err == io.ErrUnexpectedEOF {
 		return "Invalid event data: event data smaller than expected"
 	}
-	return fmt.Sprintf("Invalid event data: %v", e.Error)
+	return fmt.Sprintf("Invalid event data: %v", e.err)
 }
 
-func (e *BrokenEventData) Bytes() []byte {
+func (e *invalidEventData) Bytes() []byte {
 	return e.data
+}
+
+func (e *invalidEventData) Error() string {
+	return e.err.Error()
+}
+
+func (e *invalidEventData) Unwrap() error {
+	return e.err
 }
 
 type opaqueEventData struct {
@@ -71,7 +77,7 @@ func decodeEventData(pcrIndex PCRIndex, eventType EventType, data []byte, option
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return &BrokenEventData{data: data, Error: err}, 0
+		return &invalidEventData{data: data, err: err}, 0
 	}
 
 	if event != nil {
