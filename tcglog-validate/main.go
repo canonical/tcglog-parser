@@ -13,6 +13,7 @@ import (
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
 	"github.com/chrisccoulson/tcglog-parser"
+	"github.com/chrisccoulson/tcglog-parser/internal"
 )
 
 var (
@@ -22,13 +23,13 @@ var (
 	noDefaultPcrs bool
 	tpmPath       string
 	logPath       string
-	pcrs          tcglog.PCRArgList
-	algorithms    AlgorithmIdArgList
+	pcrs          internal.PCRArgList
+	algorithms    algorithmIdArgList
 )
 
-type AlgorithmIdArgList tcglog.AlgorithmIdList
+type algorithmIdArgList tcglog.AlgorithmIdList
 
-func (l *AlgorithmIdArgList) String() string {
+func (l *algorithmIdArgList) String() string {
 	var builder bytes.Buffer
 	for i, alg := range *l {
 		if i > 0 {
@@ -39,8 +40,8 @@ func (l *AlgorithmIdArgList) String() string {
 	return builder.String()
 }
 
-func (l *AlgorithmIdArgList) Set(value string) error {
-	algorithmId, err := tcglog.ParseAlgorithm(value)
+func (l *algorithmIdArgList) Set(value string) error {
+	algorithmId, err := internal.ParseAlgorithm(value)
 	if err != nil {
 		return err
 	}
@@ -370,7 +371,7 @@ func main() {
 	v.run(log)
 
 	if len(algorithms) == 0 {
-		algorithms = AlgorithmIdArgList(log.Algorithms)
+		algorithms = algorithmIdArgList(log.Algorithms)
 	}
 	for _, alg := range algorithms {
 		if !log.Algorithms.Contains(alg) {

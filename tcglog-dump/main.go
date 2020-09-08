@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/chrisccoulson/tcglog-parser"
+	"github.com/chrisccoulson/tcglog-parser/internal"
 )
 
 var (
@@ -15,7 +16,7 @@ var (
 	withGrub      bool
 	withSdEfiStub bool
 	sdEfiStubPcr  int
-	pcrs          tcglog.PCRArgList
+	pcrs          internal.PCRArgList
 )
 
 func init() {
@@ -44,7 +45,7 @@ func shouldDisplayEvent(event *tcglog.Event) bool {
 func main() {
 	flag.Parse()
 
-	algorithmId, err := tcglog.ParseAlgorithm(alg)
+	algorithmId, err := internal.ParseAlgorithm(alg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

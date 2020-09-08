@@ -3,7 +3,6 @@ package tcglog
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -24,43 +23,6 @@ func makeDefaultFormatter(s fmt.State, f rune) string {
 	}
 	fmt.Fprintf(&builder, "%c", f)
 	return builder.String()
-}
-
-type PCRArgList []PCRIndex
-
-func (l *PCRArgList) String() string {
-	var builder bytes.Buffer
-	for i, pcr := range *l {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		fmt.Fprintf(&builder, "%d", pcr)
-	}
-	return builder.String()
-}
-
-func (l *PCRArgList) Set(value string) error {
-	v, err := strconv.ParseUint(value, 10, 32)
-	if err != nil {
-		return err
-	}
-	*l = append(*l, PCRIndex(v))
-	return nil
-}
-
-func ParseAlgorithm(alg string) (AlgorithmId, error) {
-	switch alg {
-	case "sha1":
-		return AlgorithmSha1, nil
-	case "sha256":
-		return AlgorithmSha256, nil
-	case "sha384":
-		return AlgorithmSha384, nil
-	case "sha512":
-		return AlgorithmSha512, nil
-	default:
-		return 0, fmt.Errorf("Unrecognized algorithm \"%s\"", alg)
-	}
 }
 
 func convertStringToUtf16(str string) []uint16 {
