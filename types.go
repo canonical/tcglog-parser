@@ -6,7 +6,6 @@ import (
 	_ "crypto/sha256"
 	_ "crypto/sha512"
 	"fmt"
-	"hash"
 )
 
 // Spec corresponds to the TCG specification that an event log conforms to.
@@ -46,12 +45,8 @@ func (a AlgorithmId) size() int {
 	return a.getHash().Size()
 }
 
-func (a AlgorithmId) newHash() hash.Hash {
-	return a.getHash().New()
-}
-
 func (a AlgorithmId) hash(data []byte) []byte {
-	h := a.newHash()
+	h := a.getHash().New()
 	h.Write(data)
 	return h.Sum(nil)
 }
