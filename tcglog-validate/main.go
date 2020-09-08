@@ -1,3 +1,7 @@
+// Copyright 2019 Canonical Ltd.
+// Licensed under the LGPLv3 with static-linking exception.
+// See LICENCE file for details.
+
 package main
 
 import (
@@ -12,8 +16,8 @@ import (
 
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
-	"github.com/chrisccoulson/tcglog-parser"
-	"github.com/chrisccoulson/tcglog-parser/internal"
+	"github.com/canonical/tcglog-parser"
+	"github.com/canonical/tcglog-parser/internal"
 )
 
 var (

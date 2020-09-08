@@ -4,7 +4,6 @@ This repository contains a go library for parsing TCG event logs. Also included 
 
 ## Relevant specifications
 
-The library parses data in a format that is defined by the following specifications:
 * [TCG PC Client Platform Firmware Profile Specification](https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf)
 * [TCG EFI Platform Specification For TPM Family 1.1 or 1.2](https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf)
 * [TCG PC Client Specific Implementation Specification for Conventional BIOS](https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf)
