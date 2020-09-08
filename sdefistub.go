@@ -22,6 +22,9 @@ func (e *SystemdEFIStubEventData) Bytes() []byte {
 }
 
 func (e *SystemdEFIStubEventData) EncodeMeasuredBytes(buf io.Writer) error {
+	// Both GRUB's chainloader and systemd's EFI bootloader include a UTF-16 NULL terminator at the end of LoadOptions and
+	// set LoadOptionsSize to StrLen(LoadOptions)+1. The EFI stub loader measures LoadOptionsSize number of bytes, meaning that
+	// the 2 NULL bytes are measured. Include those here.
 	return binary.Write(buf, binary.LittleEndian, append(convertStringToUtf16(e.Str), 0))
 }
 
