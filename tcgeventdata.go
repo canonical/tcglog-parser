@@ -157,6 +157,8 @@ var (
 	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
 )
 
+// asciiStringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides a hint
+// as to what was measured as opposed to representing what was measured).
 type asciiStringEventData struct {
 	data []byte
 }
@@ -169,6 +171,7 @@ func (e *asciiStringEventData) Bytes() []byte {
 	return e.data
 }
 
+// unknownNoActionEventData is the event data for a EV_NO_ACTION event with an unrecognized type.
 type unknownNoActionEventData struct {
 	data []byte
 }

@@ -133,6 +133,7 @@ func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
 	return nil
 }
 
+// startupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
 type startupLocalityEventData struct {
 	data     []byte
 	locality uint8
@@ -211,6 +212,7 @@ func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
 }
 
+// EncodeMeasuredBytes encodes this data in to the form in which it is measured by firmware or other bootloaders.
 func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
 	if _, err := w.Write(e.VariableName[:]); err != nil {
 		return xerrors.Errorf("cannot write variable name: %w", err)
