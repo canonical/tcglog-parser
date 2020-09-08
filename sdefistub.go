@@ -21,9 +21,9 @@ func (e *SystemdEFIStubEventData) Bytes() []byte {
 	return e.data
 }
 
-// EncodeMeasured bytes encodes this data to the corresponding measurement that would be performed by the systemd EFI stub linux
-// loader for the specified kernel commandline. Note that it assumes that the calling bootloader includes a UTF-16 NULL terminator
-// at the end of LoadOptions, and sets LoadOptionsSize to StrLen(LoadOptions)+1
+// EncodeMeasured bytes encodes this data to the form that would be hashed and measured by the systemd EFI stub linux loader for the
+// specified kernel commandline. Note that it assumes that the calling bootloader includes a UTF-16 NULL terminator at the end of
+// LoadOptions, and sets LoadOptionsSize to StrLen(LoadOptions)+1
 func (e *SystemdEFIStubEventData) EncodeMeasuredBytes(w io.Writer) error {
 	// Both GRUB's chainloader and systemd's EFI bootloader include a UTF-16 NULL terminator at the end of LoadOptions and
 	// set LoadOptionsSize to StrLen(LoadOptions)+1. The EFI stub loader measures LoadOptionsSize number of bytes, meaning that

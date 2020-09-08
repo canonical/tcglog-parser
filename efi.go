@@ -135,8 +135,9 @@ func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
 
 // startupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
 type startupLocalityEventData struct {
-	data     []byte
-	locality uint8
+	data      []byte
+	signature string
+	locality  uint8
 }
 
 func (e *startupLocalityEventData) String() string {
@@ -151,21 +152,26 @@ func (e *startupLocalityEventData) Type() NoActionEventType {
 	return StartupLocality
 }
 
+func (e *startupLocalityEventData) Signature() string {
+	return e.signature
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(r io.Reader, data []byte) (*startupLocalityEventData, error) {
+func decodeStartupLocalityEvent(r io.Reader, signature string, data []byte) (*startupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
 		return nil, err
 	}
 
-	return &startupLocalityEventData{data: data, locality: locality}, nil
+	return &startupLocalityEventData{data: data, signature: signature, locality: locality}, nil
 }
 
 type bimReferenceManifestEventData struct {
-	data     []byte
-	vendorId uint32
-	guid     EFIGUID
+	data      []byte
+	signature string
+	vendorId  uint32
+	guid      EFIGUID
 }
 
 func (e *bimReferenceManifestEventData) String() string {
@@ -180,11 +186,15 @@ func (e *bimReferenceManifestEventData) Type() NoActionEventType {
 	return BiosIntegrityMeasurement
 }
 
+func (e *bimReferenceManifestEventData) Signature() string {
+	return e.signature
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(r io.Reader, data []byte) (*bimReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte) (*bimReferenceManifestEventData, error) {
 	var d struct {
 		VendorId uint32
 		Guid     EFIGUID
@@ -193,15 +203,20 @@ func decodeBIMReferenceManifestEvent(r io.Reader, data []byte) (*bimReferenceMan
 		return nil, err
 	}
 
-	return &bimReferenceManifestEventData{data: data, vendorId: d.VendorId, guid: d.Guid}, nil
+	return &bimReferenceManifestEventData{data: data, signature: signature, vendorId: d.VendorId, guid: d.Guid}, nil
 }
 
-// EFIVariableEventData corresponds to the EFI_VARIABLE_DATA type.
-type EFIVariableEventData struct {
-	data         []byte
+// EFIVariableData corresponds to the EFI_VARIABLE_DATA type.
+type EFIVariableData struct {
 	VariableName EFIGUID
 	UnicodeName  string
 	VariableData []byte
+}
+
+// EFIVariableEventData is the event data associated with the measurement of an EFI variable.
+type EFIVariableEventData struct {
+	data []byte
+	EFIVariableData
 }
 
 func (e *EFIVariableEventData) String() string {
@@ -212,7 +227,7 @@ func (e *EFIVariableEventData) Bytes() []byte {
 	return e.data
 }
 
-// EncodeMeasuredBytes encodes this data in to the form in which it is measured by firmware or other bootloaders.
+// EncodeMeasuredBytes encodes this data in to the form in which it is hashed and measured by firmware or other bootloaders.
 func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
 	if _, err := w.Write(e.VariableName[:]); err != nil {
 		return xerrors.Errorf("cannot write variable name: %w", err)

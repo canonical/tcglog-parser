@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/xerrors"
@@ -43,12 +44,11 @@ const (
 // NoActionEventData provides a mechanism to determine the type of a EV_NO_ACTION event from the decoded EventData.
 type NoActionEventData interface {
 	Type() NoActionEventType
+	Spec() string
 }
 
-// SpecIdEventData corresponds to the event data for a Specification ID Version event
-// (TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, TCG_EfiSpecIdEvent)
-type SpecIdEventData struct {
-	data             []byte
+// SpecIdEvent corresponds to the TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, and TCG_EfiSpecIdEvent types.
+type SpecIdEvent struct {
 	Spec             Spec
 	PlatformClass    uint32
 	SpecVersionMinor uint8
@@ -57,6 +57,13 @@ type SpecIdEventData struct {
 	UintnSize        uint8
 	DigestSizes      []EFISpecIdEventAlgorithmSize // The digest algorithms contained within this log
 	VendorInfo       []byte
+}
+
+// SpecIdEventData is the event data for a Specification ID Version EV_NO_ACTION event.
+type SpecIdEventData struct {
+	data      []byte
+	signature string
+	SpecIdEvent
 }
 
 func (e *SpecIdEventData) String() string {
@@ -93,6 +100,10 @@ func (e *SpecIdEventData) Type() NoActionEventType {
 	return SpecId
 }
 
+func (e *SpecIdEventData) Signature() string {
+	return e.signature
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
 func parsePCClientSpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
@@ -127,7 +138,7 @@ type specIdEventCommon struct {
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func decodeSpecIdEvent(r io.Reader, data []byte, helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
+func decodeSpecIdEvent(r io.Reader, signature string, data []byte, helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
 	var common struct {
 		PlatformClass    uint32
 		SpecVersionMinor uint8
@@ -140,12 +151,14 @@ func decodeSpecIdEvent(r io.Reader, data []byte, helper func(io.Reader, *SpecIdE
 	}
 
 	eventData := &SpecIdEventData{
-		data:             data,
-		PlatformClass:    common.PlatformClass,
-		SpecVersionMinor: common.SpecVersionMinor,
-		SpecVersionMajor: common.SpecVersionMajor,
-		SpecErrata:       common.SpecErrata,
-		UintnSize:        common.UintnSize}
+		data:      data,
+		signature: signature,
+		SpecIdEvent: SpecIdEvent{
+			PlatformClass:    common.PlatformClass,
+			SpecVersionMinor: common.SpecVersionMinor,
+			SpecVersionMajor: common.SpecVersionMajor,
+			SpecErrata:       common.SpecErrata,
+			UintnSize:        common.UintnSize}}
 
 	if err := helper(r, eventData); err != nil {
 		return nil, invalidSpecIdEventError{err}
@@ -174,7 +187,8 @@ func (e *asciiStringEventData) Bytes() []byte {
 
 // unknownNoActionEventData is the event data for a EV_NO_ACTION event with an unrecognized type.
 type unknownNoActionEventData struct {
-	data []byte
+	data      []byte
+	signature string
 }
 
 func (e *unknownNoActionEventData) String() string {
@@ -189,6 +203,10 @@ func (e *unknownNoActionEventData) Type() NoActionEventType {
 	return UnknownNoActionEvent
 }
 
+func (e *unknownNoActionEventData) Signature() string {
+	return e.signature
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
@@ -197,44 +215,45 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 	r := bytes.NewReader(data)
 
 	// Signature field
-	signature := make([]byte, 16)
-	if _, err := io.ReadFull(r, signature); err != nil {
+	var sig [16]byte
+	if _, err := io.ReadFull(r, sig[:]); err != nil {
 		return nil, xerrors.Errorf("cannot read signature: %w", err)
 	}
+	signature := strings.TrimRight(string(sig[:]), "\x00")
 
-	switch *(*string)(unsafe.Pointer(&signature)) {
-	case "Spec ID Event00\x00":
-		out, err := decodeSpecIdEvent(r, data, parsePCClientSpecIdEvent)
+	switch signature {
+	case "Spec ID Event00":
+		out, err := decodeSpecIdEvent(r, signature, data, parsePCClientSpecIdEvent)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event00 data: %w", err)
 		}
 		return out, nil
-	case "Spec ID Event02\x00":
-		out, err := decodeSpecIdEvent(r, data, parseEFI_1_2_SpecIdEvent)
+	case "Spec ID Event02":
+		out, err := decodeSpecIdEvent(r, signature, data, parseEFI_1_2_SpecIdEvent)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event02 data: %w", err)
 		}
 		return out, nil
-	case "Spec ID Event03\x00":
-		out, err := decodeSpecIdEvent(r, data, parseEFI_2_SpecIdEvent)
+	case "Spec ID Event03":
+		out, err := decodeSpecIdEvent(r, signature, data, parseEFI_2_SpecIdEvent)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event03 data: %w", err)
 		}
 		return out, nil
-	case "SP800-155 Event\x00":
-		out, err := decodeBIMReferenceManifestEvent(r, data)
+	case "SP800-155 Event":
+		out, err := decodeBIMReferenceManifestEvent(r, signature, data)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode SP800-155 Event data: %w", err)
 		}
 		return out, nil
-	case "StartupLocality\x00":
-		out, err := decodeStartupLocalityEvent(r, data)
+	case "StartupLocality":
+		out, err := decodeStartupLocalityEvent(r, signature, data)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode StartupLocality data: %w", err)
 		}
 		return out, nil
 	default:
-		return &unknownNoActionEventData{data}, nil
+		return &unknownNoActionEventData{data: data, signature: signature}, nil
 	}
 }
 
