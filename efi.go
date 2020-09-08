@@ -13,6 +13,8 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/canonical/go-efilib"
+
 	"golang.org/x/xerrors"
 )
 
@@ -52,28 +54,6 @@ func extractUTF16Buffer(r io.ReadSeeker, nchars uint64) ([]uint16, error) {
 	}
 
 	return out, nil
-}
-
-// EFIGUID corresponds to the EFI_GUID type
-type EFIGUID [16]uint8
-
-func (guid EFIGUID) String() string {
-	return fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}",
-		binary.LittleEndian.Uint32(guid[0:4]),
-		binary.LittleEndian.Uint16(guid[4:6]),
-		binary.LittleEndian.Uint16(guid[6:8]),
-		binary.BigEndian.Uint16(guid[8:10]),
-		guid[10:16])
-}
-
-// MakeEFIGUID makes a new EFIGUID from the supplied arguments.
-func MakeEFIGUID(a uint32, b, c, d uint16, e [6]uint8) (out EFIGUID) {
-	binary.LittleEndian.PutUint32(out[0:4], a)
-	binary.LittleEndian.PutUint16(out[4:6], b)
-	binary.LittleEndian.PutUint16(out[6:8], c)
-	binary.BigEndian.PutUint16(out[8:10], d)
-	copy(out[10:], e[:])
-	return
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
@@ -175,7 +155,7 @@ type bimReferenceManifestEventData struct {
 	data      []byte
 	signature string
 	vendorId  uint32
-	guid      EFIGUID
+	guid      efi.GUID
 }
 
 func (e *bimReferenceManifestEventData) String() string {
@@ -201,7 +181,7 @@ func (e *bimReferenceManifestEventData) Signature() string {
 func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte) (*bimReferenceManifestEventData, error) {
 	var d struct {
 		VendorId uint32
-		Guid     EFIGUID
+		Guid     efi.GUID
 	}
 	if err := binary.Read(r, binary.LittleEndian, &d); err != nil {
 		return nil, err
@@ -215,9 +195,9 @@ func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte)
 type EFIVariableData struct {
 	data          []byte
 	consumedBytes int
-	VariableName EFIGUID
-	UnicodeName  string
-	VariableData []byte
+	VariableName  efi.GUID
+	UnicodeName   string
+	VariableData  []byte
 }
 
 func (e *EFIVariableData) String() string {
@@ -263,9 +243,11 @@ func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableD
 
 	d := &EFIVariableData{data: data}
 
-	if _, err := io.ReadFull(r, d.VariableName[:]); err != nil {
+	variableName, err := efi.ReadGUID(r)
+	if err != nil {
 		return nil, xerrors.Errorf("cannot read variable name: %w", err)
 	}
+	d.VariableName = variableName
 
 	var unicodeNameLength uint64
 	if err := binary.Read(r, binary.LittleEndian, &unicodeNameLength); err != nil {
@@ -339,8 +321,8 @@ const (
 func firmwareDevicePathNodeToString(subType uint8, data []byte) (string, error) {
 	r := bytes.NewReader(data)
 
-	var name EFIGUID
-	if _, err := io.ReadFull(r, name[:]); err != nil {
+	name, err := efi.ReadGUID(r)
+	if err != nil {
 		return "", xerrors.Errorf("cannot read name: %w", err)
 	}
 
@@ -432,8 +414,8 @@ func hardDriveDevicePathNodeToString(data []byte) (string, error) {
 		return "", xerrors.Errorf("cannot read partition size: %w", err)
 	}
 
-	var sig EFIGUID
-	if _, err := io.ReadFull(r, sig[:]); err != nil {
+	sig, err := efi.ReadGUID(r)
+	if err != nil {
 		return "", xerrors.Errorf("cannot read signature: %w", err)
 	}
 
@@ -694,8 +676,8 @@ func decodeEventDataEFIImageLoad(data []byte) (*efiImageLoadEventData, error) {
 }
 
 type efiGPTPartitionEntry struct {
-	typeGUID   EFIGUID
-	uniqueGUID EFIGUID
+	typeGUID   efi.GUID
+	uniqueGUID efi.GUID
 	name       string
 }
 
@@ -705,7 +687,7 @@ func (p *efiGPTPartitionEntry) String() string {
 
 type efiGPTEventData struct {
 	data       []byte
-	diskGUID   EFIGUID
+	diskGUID   efi.GUID
 	partitions []*efiGPTPartitionEntry
 }
 
@@ -737,9 +719,11 @@ func decodeEventDataEFIGPT(data []byte) (*efiGPTEventData, error) {
 	d := &efiGPTEventData{data: data}
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader.DiskGUID
-	if _, err := io.ReadFull(r, d.diskGUID[:]); err != nil {
+	diskGUID, err := efi.ReadGUID(r)
+	if err != nil {
 		return nil, xerrors.Errorf("cannot read disk GUID: %w", err)
 	}
+	d.diskGUID = diskGUID
 
 	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{PartitionEntryLBA, NumberOfPartitionEntries}
 	if _, err := r.Seek(12, io.SeekCurrent); err != nil {
@@ -772,13 +756,17 @@ func decodeEventDataEFIGPT(data []byte) (*efiGPTEventData, error) {
 		er := bytes.NewReader(entryData)
 		e := &efiGPTPartitionEntry{}
 
-		if _, err := io.ReadFull(er, e.typeGUID[:]); err != nil {
+		typeGUID, err := efi.ReadGUID(er)
+		if err != nil {
 			return nil, xerrors.Errorf("cannot read partition type GUID: %w", err)
 		}
+		e.typeGUID = typeGUID
 
-		if _, err := io.ReadFull(er, e.uniqueGUID[:]); err != nil {
+		uniqueGUID, err := efi.ReadGUID(er)
+		if err != nil {
 			return nil, xerrors.Errorf("cannot read partition unique GUID: %w", err)
 		}
+		e.uniqueGUID = uniqueGUID
 
 		// Skip UEFI_GPT_DATA.Partitions[i].{StartingLBA, EndingLBA, Attributes}
 		if _, err := er.Seek(24, io.SeekCurrent); err != nil {
