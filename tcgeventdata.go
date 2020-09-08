@@ -260,6 +260,11 @@ func (e *SeparatorEventData) Bytes() []byte {
 	return e.data
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
+//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//   "Procedure for Pre-OS to OS-Present Transition")
 func decodeEventDataSeparator(digests DigestMap, data []byte) *SeparatorEventData {
 	errorValue := make([]byte, 4)
 	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
