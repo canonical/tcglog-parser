@@ -31,6 +31,8 @@ func (e *SystemdEFIStubEventData) EncodeMeasuredBytes(w io.Writer) error {
 	return binary.Write(w, binary.LittleEndian, append(convertStringToUtf16(e.Str), 0))
 }
 
+func (e *SystemdEFIStubEventData) TrailingBytes() []byte { return nil }
+
 func decodeEventDataSystemdEFIStub(eventType EventType, data []byte) EventData {
 	if eventType != EventTypeIPL {
 		return nil

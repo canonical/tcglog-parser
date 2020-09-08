@@ -15,12 +15,6 @@ type LogOptions struct {
 	SystemdEFIStubPCR    PCRIndex // Specify the PCR that systemd's EFI linux loader stub measures to
 }
 
-var zeroDigests = map[AlgorithmId][]byte{
-	AlgorithmSha1:   make([]byte, AlgorithmSha1.size()),
-	AlgorithmSha256: make([]byte, AlgorithmSha256.size()),
-	AlgorithmSha384: make([]byte, AlgorithmSha384.size()),
-	AlgorithmSha512: make([]byte, AlgorithmSha512.size())}
-
 type parser interface {
 	readNextEvent() (*Event, error)
 }
@@ -55,7 +49,7 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 		return nil, fmt.Errorf("log entry has an out-of-range PCR index (%d)", header.PCRIndex)
 	}
 
-	digest := make(Digest, AlgorithmSha1.size())
+	digest := make(Digest, AlgorithmSha1.Size())
 	if _, err := p.r.Read(digest); err != nil {
 		return nil, xerrors.Errorf("cannot read SHA-1 digest: %w", err)
 	}
@@ -184,7 +178,7 @@ func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
 			continue
 		}
 
-		event.Digests[alg] = zeroDigests[alg]
+		event.Digests[alg] = make(Digest, alg.Size())
 	}
 }
 

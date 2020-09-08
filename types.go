@@ -22,7 +22,7 @@ type EventType uint32
 // See https://trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf (Table 9)
 type AlgorithmId uint16
 
-func (a AlgorithmId) getHash() crypto.Hash {
+func (a AlgorithmId) GetHash() crypto.Hash {
 	switch a {
 	case AlgorithmSha1:
 		return crypto.SHA1
@@ -38,15 +38,15 @@ func (a AlgorithmId) getHash() crypto.Hash {
 }
 
 func (a AlgorithmId) supported() bool {
-	return a.getHash() != crypto.Hash(0)
+	return a.GetHash() != crypto.Hash(0)
 }
 
-func (a AlgorithmId) size() int {
-	return a.getHash().Size()
+func (a AlgorithmId) Size() int {
+	return a.GetHash().Size()
 }
 
 func (a AlgorithmId) hash(data []byte) []byte {
-	h := a.getHash().New()
+	h := a.GetHash().New()
 	h.Write(data)
 	return h.Sum(nil)
 }

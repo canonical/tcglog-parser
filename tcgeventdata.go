@@ -287,7 +287,7 @@ func (e *SeparatorEventData) Bytes() []byte {
 //   "Procedure for Pre-OS to OS-Present Transition")
 func decodeEventDataSeparator(digests DigestMap, data []byte) *SeparatorEventData {
 	errorValue := make([]byte, 4)
-	binary.LittleEndian.PutUint32(errorValue, separatorEventErrorValue)
+	binary.LittleEndian.PutUint32(errorValue, SeparatorEventErrorValue)
 
 	var isError bool
 	for alg, digest := range digests {

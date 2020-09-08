@@ -63,5 +63,5 @@ const (
 )
 
 const (
-	separatorEventErrorValue uint32 = 1
+	SeparatorEventErrorValue uint32 = 1
 )

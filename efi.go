@@ -113,7 +113,7 @@ func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
 		return xerrors.Errorf("cannot read digest algorithm sizes: %w", err)
 	}
 	for _, d := range eventData.DigestSizes {
-		if d.AlgorithmId.supported() && d.AlgorithmId.size() != int(d.DigestSize) {
+		if d.AlgorithmId.supported() && d.AlgorithmId.Size() != int(d.DigestSize) {
 			return fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
 		}
 	}
@@ -215,7 +215,8 @@ type EFIVariableData struct {
 
 // EFIVariableEventData is the event data associated with the measurement of an EFI variable.
 type EFIVariableEventData struct {
-	data []byte
+	data          []byte
+	consumedBytes int
 	EFIVariableData
 }
 
@@ -247,9 +248,13 @@ func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
 	return nil
 }
 
+func (e *EFIVariableEventData) TrailingBytes() []byte {
+	return e.data[e.consumedBytes:]
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
-func decodeEventDataEFIVariable(data []byte, eventType EventType) (EventData, error) {
+func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableEventData, error) {
 	r := bytes.NewReader(data)
 
 	d := &EFIVariableEventData{data: data}
@@ -278,6 +283,8 @@ func decodeEventDataEFIVariable(data []byte, eventType EventType) (EventData, er
 	if _, err := io.ReadFull(r, d.VariableData); err != nil {
 		return nil, xerrors.Errorf("cannot read variable data: %w", err)
 	}
+
+	d.consumedBytes = int(r.Size()) - r.Len()
 
 	return d, nil
 }
