@@ -675,26 +675,17 @@ func decodeEventDataEFIImageLoad(data []byte) (*efiImageLoadEventData, error) {
 		path:             path}, nil
 }
 
-type efiGPTPartitionEntry struct {
-	typeGUID   efi.GUID
-	uniqueGUID efi.GUID
-	name       string
-}
-
-func (p *efiGPTPartitionEntry) String() string {
-	return fmt.Sprintf("PartitionTypeGUID: %s, UniquePartitionGUID: %s, Name: \"%s\"", p.typeGUID, p.uniqueGUID, p.name)
-}
-
-type efiGPTEventData struct {
+// EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT events.
+type EFIGPTData struct {
 	data       []byte
-	diskGUID   efi.GUID
-	partitions []*efiGPTPartitionEntry
+	Hdr        efi.PartitionTableHeader
+	Partitions []efi.PartitionEntryRaw
 }
 
-func (e *efiGPTEventData) String() string {
+func (e *EFIGPTData) String() string {
 	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", e.diskGUID)
-	for i, part := range e.partitions {
+	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", e.Hdr.DiskGUID)
+	for i, part := range e.Partitions {
 		if i > 0 {
 			fmt.Fprintf(&builder, ", ")
 		}
@@ -704,42 +695,21 @@ func (e *efiGPTEventData) String() string {
 	return builder.String()
 }
 
-func (e *efiGPTEventData) Bytes() []byte {
+func (e *EFIGPTData) Bytes() []byte {
 	return e.data
 }
 
-func decodeEventDataEFIGPT(data []byte) (*efiGPTEventData, error) {
+func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 	r := bytes.NewReader(data)
 
-	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{Header, MyLBA, AlternateLBA, FirstUsableLBA, LastUsableLBA}
-	if _, err := r.Seek(56, io.SeekCurrent); err != nil {
-		return nil, err
-	}
+	d := &EFIGPTData{data: data}
 
-	d := &efiGPTEventData{data: data}
-
-	// UEFI_GPT_DATA.UEFIPartitionHeader.DiskGUID
-	diskGUID, err := efi.ReadGUID(r)
+	// UEFI_GPT_DATA.UEFIPartitionHeader
+	hdr, err := efi.ReadPartitionTableHeader(r)
 	if err != nil {
-		return nil, xerrors.Errorf("cannot read disk GUID: %w", err)
+		return nil, xerrors.Errorf("cannot read partition table header: %w", err)
 	}
-	d.diskGUID = diskGUID
-
-	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.{PartitionEntryLBA, NumberOfPartitionEntries}
-	if _, err := r.Seek(12, io.SeekCurrent); err != nil {
-		return nil, err
-	}
-
-	// UEFI_GPT_DATA.UEFIPartitionHeader.SizeOfPartitionEntry
-	var partEntrySize uint32
-	if err := binary.Read(r, binary.LittleEndian, &partEntrySize); err != nil {
-		return nil, xerrors.Errorf("cannot read SizeOfPartitionEntry: %w", err)
-	}
-
-	// Skip UEFI_GPT_DATA.UEFIPartitionHeader.PartitionEntryArrayCRC32
-	if _, err := r.Seek(4, io.SeekCurrent); err != nil {
-		return nil, err
-	}
+	d.Hdr = *hdr
 
 	// UEFI_GPT_DATA.NumberOfPartitions
 	var numberOfParts uint64
@@ -747,47 +717,13 @@ func decodeEventDataEFIGPT(data []byte) (*efiGPTEventData, error) {
 		return nil, xerrors.Errorf("cannot read number of partitions: %w", err)
 	}
 
+	// UEFI_GPT_DATA.Partitions
 	for i := uint64(0); i < numberOfParts; i++ {
-		entryData := make([]byte, partEntrySize)
-		if _, err := io.ReadFull(r, entryData); err != nil {
-			return nil, xerrors.Errorf("cannot read partition entry data: %w", err)
-		}
-
-		er := bytes.NewReader(entryData)
-		e := &efiGPTPartitionEntry{}
-
-		typeGUID, err := efi.ReadGUID(er)
+		entryRaw, err := efi.ReadPartitionEntry(r, hdr.SizeOfPartitionEntry)
 		if err != nil {
-			return nil, xerrors.Errorf("cannot read partition type GUID: %w", err)
+			return nil, xerrors.Errorf("cannot read partition entry: %w", err)
 		}
-		e.typeGUID = typeGUID
-
-		uniqueGUID, err := efi.ReadGUID(er)
-		if err != nil {
-			return nil, xerrors.Errorf("cannot read partition unique GUID: %w", err)
-		}
-		e.uniqueGUID = uniqueGUID
-
-		// Skip UEFI_GPT_DATA.Partitions[i].{StartingLBA, EndingLBA, Attributes}
-		if _, err := er.Seek(24, io.SeekCurrent); err != nil {
-			return nil, err
-		}
-
-		nameUtf16 := make([]uint16, er.Len()/2)
-		if err := binary.Read(er, binary.LittleEndian, &nameUtf16); err != nil {
-			return nil, xerrors.Errorf("cannot read partition name: %w", err)
-		}
-
-		var name bytes.Buffer
-		for _, r := range utf16.Decode(nameUtf16) {
-			if r == rune(0) {
-				break
-			}
-			name.WriteRune(r)
-		}
-		e.name = name.String()
-
-		d.partitions = append(d.partitions, e)
+		d.Partitions = append(d.Partitions, entryRaw)
 	}
 
 	return d, nil
