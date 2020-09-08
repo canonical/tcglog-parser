@@ -9,15 +9,15 @@ import (
 	"testing"
 )
 
-func TestEFIVariableEventDataEncode(t *testing.T) {
+func TestEFIVariableDataEncode(t *testing.T) {
 	for _, data := range []struct {
 		desc string
-		in   EFIVariableEventData
+		in   EFIVariableData
 		out  []byte
 	}{
 		{
 			desc: "db",
-			in: EFIVariableEventData{
+			in: EFIVariableData{
 				VariableName: EFIGUID{0xd719b2cb, 0x3d3a, 0x4596, 0xa3bc,
 					[...]uint8{0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f}},
 				UnicodeName:  "db",
@@ -28,7 +28,7 @@ func TestEFIVariableEventDataEncode(t *testing.T) {
 		},
 		{
 			desc: "dbx",
-			in: EFIVariableEventData{
+			in: EFIVariableData{
 				VariableName: EFIGUID{0xd719b2cb, 0x3d3a, 0x4596, 0xa3bc,
 					[...]uint8{0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f}},
 				UnicodeName:  "dbx",

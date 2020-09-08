@@ -78,7 +78,7 @@ func MakeEFIGUID(a uint32, b, c, d uint16, e [6]uint8) (out EFIGUID) {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
+func parseEFI_1_2_SpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
 	eventData.Spec = SpecEFI_1_2
 
 	// TCG_EfiSpecIdEventStruct.vendorInfoSize
@@ -98,7 +98,7 @@ func parseEFI_1_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
+func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
 	eventData.Spec = SpecEFI_2
 
 	// TCG_EfiSpecIdEvent.numberOfAlgorithms
@@ -210,30 +210,26 @@ func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte)
 	return &bimReferenceManifestEventData{data: data, signature: signature, vendorId: d.VendorId, guid: d.Guid}, nil
 }
 
-// EFIVariableData corresponds to the EFI_VARIABLE_DATA type.
+// EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
+// EFI variable.
 type EFIVariableData struct {
+	data          []byte
+	consumedBytes int
 	VariableName EFIGUID
 	UnicodeName  string
 	VariableData []byte
 }
 
-// EFIVariableEventData is the event data associated with the measurement of an EFI variable.
-type EFIVariableEventData struct {
-	data          []byte
-	consumedBytes int
-	EFIVariableData
-}
-
-func (e *EFIVariableEventData) String() string {
+func (e *EFIVariableData) String() string {
 	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\" }", e.VariableName, e.UnicodeName)
 }
 
-func (e *EFIVariableEventData) Bytes() []byte {
+func (e *EFIVariableData) Bytes() []byte {
 	return e.data
 }
 
 // EncodeMeasuredBytes encodes this data in to the form in which it is hashed and measured by firmware or other bootloaders.
-func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
+func (e *EFIVariableData) EncodeMeasuredBytes(w io.Writer) error {
 	if _, err := w.Write(e.VariableName[:]); err != nil {
 		return xerrors.Errorf("cannot write variable name: %w", err)
 	}
@@ -256,16 +252,16 @@ func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
 // for the event. See https://github.com/rhboot/shim/commit/7e4d3f1c8c730a5d3f40729cb285b5d8c7b241af and
 // https://github.com/rhboot/shim/commit/8a27a4809a6a2b40fb6a4049071bf96d6ad71b50 for the types of bugs that might cause this. Note
 // that trailing bytes that are measured must be taken in to account when using EncodeMeasuredBytes.
-func (e *EFIVariableEventData) TrailingBytes() []byte {
+func (e *EFIVariableData) TrailingBytes() []byte {
 	return e.data[e.consumedBytes:]
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
-func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableEventData, error) {
+func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableData, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIVariableEventData{data: data}
+	d := &EFIVariableData{data: data}
 
 	if _, err := io.ReadFull(r, d.VariableName[:]); err != nil {
 		return nil, xerrors.Errorf("cannot read variable name: %w", err)

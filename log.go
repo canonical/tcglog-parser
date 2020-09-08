@@ -169,7 +169,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 }
 
 func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
-	if event.Data.(*SpecIdEventData).Spec != SpecEFI_2 {
+	if event.Data.(*SpecIdEvent).Spec != SpecEFI_2 {
 		return
 	}
 
@@ -187,7 +187,7 @@ func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
 }
 
 func isSpecIdEvent(event *Event) (out bool) {
-	_, out = event.Data.(*SpecIdEventData)
+	_, out = event.Data.(*SpecIdEvent)
 	return
 }
 
@@ -211,7 +211,7 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 	var digestSizes []EFISpecIdEventAlgorithmSize
 
 	switch d := event.Data.(type) {
-	case *SpecIdEventData:
+	case *SpecIdEvent:
 		spec = d.Spec
 		digestSizes = d.DigestSizes
 	}

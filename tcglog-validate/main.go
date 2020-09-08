@@ -188,7 +188,7 @@ func determineMeasuredBytes(event *tcglog.Event, efiBootVariableQuirk bool) []by
 		return event.Data.Bytes()
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
 		if event.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
-			return event.Data.(*tcglog.EFIVariableEventData).VariableData
+			return event.Data.(*tcglog.EFIVariableData).VariableData
 		}
 		return event.Data.Bytes()
 	case tcglog.EventTypeEFIGPTEvent:

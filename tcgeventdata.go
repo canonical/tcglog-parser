@@ -51,8 +51,11 @@ type NoActionEventData interface {
 	Spec() string
 }
 
-// SpecIdEvent corresponds to the TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, and TCG_EfiSpecIdEvent types.
+// SpecIdEvent corresponds to the TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, and TCG_EfiSpecIdEvent types and is the
+// event data for a Specification ID Version EV_NO_ACTION event.
 type SpecIdEvent struct {
+	data      []byte
+	signature string
 	Spec             Spec
 	PlatformClass    uint32
 	SpecVersionMinor uint8
@@ -63,14 +66,7 @@ type SpecIdEvent struct {
 	VendorInfo       []byte
 }
 
-// SpecIdEventData is the event data for a Specification ID Version EV_NO_ACTION event.
-type SpecIdEventData struct {
-	data      []byte
-	signature string
-	SpecIdEvent
-}
-
-func (e *SpecIdEventData) String() string {
+func (e *SpecIdEvent) String() string {
 	var builder bytes.Buffer
 	switch e.Spec {
 	case SpecPCClient:
@@ -96,21 +92,21 @@ func (e *SpecIdEventData) String() string {
 	return builder.String()
 }
 
-func (e *SpecIdEventData) Bytes() []byte {
+func (e *SpecIdEvent) Bytes() []byte {
 	return e.data
 }
 
-func (e *SpecIdEventData) Type() NoActionEventType {
+func (e *SpecIdEvent) Type() NoActionEventType {
 	return SpecId
 }
 
-func (e *SpecIdEventData) Signature() string {
+func (e *SpecIdEvent) Signature() string {
 	return e.signature
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
-func parsePCClientSpecIdEvent(r io.Reader, eventData *SpecIdEventData) error {
+func parsePCClientSpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
 	eventData.Spec = SpecPCClient
 
 	// TCG_PCClientSpecIdEventStruct.vendorInfoSize
@@ -142,7 +138,7 @@ type specIdEventCommon struct {
 //  (section 7.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func decodeSpecIdEvent(r io.Reader, signature string, data []byte, helper func(io.Reader, *SpecIdEventData) error) (*SpecIdEventData, error) {
+func decodeSpecIdEvent(r io.Reader, signature string, data []byte, helper func(io.Reader, *SpecIdEvent) error) (*SpecIdEvent, error) {
 	var common struct {
 		PlatformClass    uint32
 		SpecVersionMinor uint8
@@ -154,15 +150,14 @@ func decodeSpecIdEvent(r io.Reader, signature string, data []byte, helper func(i
 		return nil, invalidSpecIdEventError{xerrors.Errorf("cannot read common fields: %w", err)}
 	}
 
-	eventData := &SpecIdEventData{
+	eventData := &SpecIdEvent{
 		data:      data,
 		signature: signature,
-		SpecIdEvent: SpecIdEvent{
-			PlatformClass:    common.PlatformClass,
-			SpecVersionMinor: common.SpecVersionMinor,
-			SpecVersionMajor: common.SpecVersionMajor,
-			SpecErrata:       common.SpecErrata,
-			UintnSize:        common.UintnSize}}
+		PlatformClass:    common.PlatformClass,
+		SpecVersionMinor: common.SpecVersionMinor,
+		SpecVersionMajor: common.SpecVersionMajor,
+		SpecErrata:       common.SpecErrata,
+		UintnSize:        common.UintnSize}
 
 	if err := helper(r, eventData); err != nil {
 		return nil, invalidSpecIdEventError{err}
