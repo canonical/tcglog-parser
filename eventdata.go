@@ -2,16 +2,28 @@ package tcglog
 
 import (
 	"fmt"
+	"io"
 )
 
-// EventData is an interface that represents all event data types that appear in a log. Some implementations of this are exported
-// so that event data contents can be inspected programatically.
+// EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
+// contents can be inspected programatically.
 //
 // If an error is encountered when decoding the data associated with an event, the event data will implement the error interface
 // which can be used for obtaining information about the decoding error.
 type EventData interface {
 	fmt.Stringer
 	Bytes() []byte // The raw event data bytes
+}
+
+// MeasuredEventData is implemented by event data types that provide all of the data necessary to construct or precompute a
+// measurement. Some event data types are "informational" in the sense that they don't contain all of the information necessary
+// to precompute a measurement, but may provide enough information to gather the data required to precompute a measurement (eg,
+// the data associated with EV_EFI_BOOT_SERVICES_APPLICATION events). This package doesn't currently support pre-computing
+// measurements for all data types where that should be possible (eg, EV_EFI_GPT_EVENT is an omission).
+type MeasuredEventData interface {
+	// EncodeMeasuredBytes encodes the event data to a form that can be hashed in order to compute a measurement associated
+	// with this data.
+	EncodeMeasuredBytes(io.Writer) error
 }
 
 // invalidEventData corresponds to an event data blob that failed to decode correctly.

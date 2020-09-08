@@ -23,7 +23,8 @@ func (e invalidSpecIdEventError) Unwrap() error {
 	return e.err
 }
 
-// EFISpecIdEventAlgorithmSize represents a digest algorithm and its length.
+// EFISpecIdEventAlgorithmSize represents a digest algorithm and its length and corresponds to the
+// TCG_EfiSpecIdEventAlgorithmSize type.
 type EFISpecIdEventAlgorithmSize struct {
 	AlgorithmId AlgorithmId
 	DigestSize  uint16
@@ -243,7 +244,7 @@ func decodeEventDataAction(data []byte) *asciiStringEventData {
 	return &asciiStringEventData{data: data}
 }
 
-// SeparatorEventData corresponds to the event data associated with a EV_SEPARATOR event.
+// SeparatorEventData is the event data associated with a EV_SEPARATOR event.
 type SeparatorEventData struct {
 	data    []byte
 	IsError bool // The event indicates an error condition
