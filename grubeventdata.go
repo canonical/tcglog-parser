@@ -55,8 +55,6 @@ func (e *GrubStringEventData) EncodeMeasuredBytes(buf io.Writer) error {
 	return nil
 }
 
-func (e *GrubStringEventData) TrailingBytes() []byte { return nil }
-
 func decodeEventDataGRUB(pcrIndex PCRIndex, eventType EventType, data []byte) EventData {
 	if eventType != EventTypeIPL {
 		return nil

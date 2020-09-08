@@ -270,7 +270,7 @@ func (v *logValidator) processEvent(log *tcglog.Log, event *tcglog.Event) {
 			}
 
 			var provisionalMeasuredTrailingBytes []byte
-			if m, ok := ve.Data.(tcglog.MeasuredEventData); ok {
+			if m, ok := ve.Data.(interface{ TrailingBytes() []byte }); ok {
 				provisionalMeasuredTrailingBytes = m.TrailingBytes()
 			}
 

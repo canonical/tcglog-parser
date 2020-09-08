@@ -248,6 +248,10 @@ func (e *EFIVariableEventData) EncodeMeasuredBytes(w io.Writer) error {
 	return nil
 }
 
+// TrailingBytes returns any trailing bytes that were not used during decoding. This indicates a bug in the software responsible
+// for the event. See https://github.com/rhboot/shim/commit/7e4d3f1c8c730a5d3f40729cb285b5d8c7b241af and
+// https://github.com/rhboot/shim/commit/8a27a4809a6a2b40fb6a4049071bf96d6ad71b50 for the types of bugs that might cause this. Note
+// that trailing bytes that are measured must be taken in to account when using EncodeMeasuredBytes.
 func (e *EFIVariableEventData) TrailingBytes() []byte {
 	return e.data[e.consumedBytes:]
 }
