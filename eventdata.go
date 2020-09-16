@@ -69,7 +69,7 @@ func decodeEventData(pcrIndex PCRIndex, eventType EventType, digests DigestMap, 
 
 	}
 
-	out, err := decodeEventDataTCG(eventType, digests, data)
+	out, err := decodeEventDataTCG(pcrIndex, eventType, digests, data)
 	if err != nil {
 		return &invalidEventData{data: data, err: err}
 	}

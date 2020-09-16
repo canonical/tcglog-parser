@@ -262,6 +262,10 @@ func decodeEventDataAction(data []byte) *asciiStringEventData {
 	return &asciiStringEventData{data: data}
 }
 
+func decodeEventDataHostPlatformSpecificCompactHash(data []byte) *asciiStringEventData {
+	return &asciiStringEventData{data: data}
+}
+
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.
 type SeparatorEventData struct {
 	data    []byte
@@ -300,7 +304,7 @@ func decodeEventDataSeparator(digests DigestMap, data []byte) *SeparatorEventDat
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func decodeEventDataTCG(eventType EventType, digests DigestMap, data []byte) (out EventData, err error) {
+func decodeEventDataTCG(pcrIndex PCRIndex, eventType EventType, digests DigestMap, data []byte) (out EventData, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		out, err = decodeEventDataNoAction(data)
@@ -308,6 +312,10 @@ func decodeEventDataTCG(eventType EventType, digests DigestMap, data []byte) (ou
 		return decodeEventDataSeparator(digests, data), nil
 	case EventTypeAction, EventTypeEFIAction:
 		return decodeEventDataAction(data), nil
+	case EventTypeCompactHash:
+		if pcrIndex == 6 {
+			return decodeEventDataHostPlatformSpecificCompactHash(data), nil
+		}
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
 		out, err = decodeEventDataEFIVariable(data, eventType)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
