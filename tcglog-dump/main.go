@@ -14,6 +14,7 @@ import (
 
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
+	"github.com/chrisccoulson/go-efilib"
 )
 
 var (
@@ -21,6 +22,7 @@ var (
 	verbose        bool
 	hexDump        bool
 	varDataHexDump bool
+	eslDump        bool
 	withGrub       bool
 	withSdEfiStub  bool
 	sdEfiStubPcr   int
@@ -34,6 +36,7 @@ func init() {
 	flag.BoolVar(&hexDump, "hexdump", false, "Display hexdump of event data")
 	flag.BoolVar(&hexDump, "x", false, "Display hexdump of event data (shorthand)")
 	flag.BoolVar(&varDataHexDump, "vardatahexdump", false, "Display hexdump of EFI variable data")
+	flag.BoolVar(&eslDump, "esldump", false, "Display a dump of EFI signature lists")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
@@ -109,13 +112,23 @@ func main() {
 		}
 
 		if hexDump {
-			fmt.Fprintf(&builder, "\n  Event data:\n  %s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n  ", -1))
+			fmt.Fprintf(&builder, "\n\tEvent data:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
 		}
 
 		if varDataHexDump {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				fmt.Fprintf(&builder, "\n  EFI variable data:\n  %s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n  ", -1))
+				fmt.Fprintf(&builder, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
+			}
+		}
+
+		if eslDump && (event.EventType == tcglog.EventTypeEFIVariableDriverConfig || event.EventType == tcglog.EventTypeEFIVariableAuthority) {
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
+			if ok {
+				db, err := efi.DecodeSignatureDatabase(bytes.NewReader(varData.VariableData))
+				if err == nil {
+					fmt.Fprintf(&builder, "\n\tSignature database contents:%s", strings.Replace(db.String(), "\n", "\n\t", -1))
+				}
 			}
 		}
 
