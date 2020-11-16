@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
@@ -17,14 +18,16 @@ import (
 )
 
 var (
-	alg            string
-	verbose        bool
-	hexDump        bool
-	varDataHexDump bool
-	withGrub       bool
-	withSdEfiStub  bool
-	sdEfiStubPcr   int
-	pcrs           internal.PCRArgList
+	alg                  string
+	verbose              bool
+	hexDump              bool
+	varDataHexDump       bool
+	extractDataPrefix    string
+	extractVarDataPrefix string
+	withGrub             bool
+	withSdEfiStub        bool
+	sdEfiStubPcr         int
+	pcrs                 internal.PCRArgList
 )
 
 func init() {
@@ -34,6 +37,8 @@ func init() {
 	flag.BoolVar(&hexDump, "hexdump", false, "Display hexdump of event data")
 	flag.BoolVar(&hexDump, "x", false, "Display hexdump of event data (shorthand)")
 	flag.BoolVar(&varDataHexDump, "vardatahexdump", false, "Display hexdump of EFI variable data")
+	flag.StringVar(&extractDataPrefix, "extract-data", "", "Extract event data to individual files named with the specified prefix (format: <prefix>-<pcr>-<num>")
+	flag.StringVar(&extractVarDataPrefix, "extract-vardata", "", "Extract EFI variable data to individual files named with the specified prefix (format: <prefix>-<pcr>-<num>")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
@@ -120,5 +125,16 @@ func main() {
 		}
 
 		fmt.Println(builder.String())
+
+		if extractDataPrefix != "" {
+			ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractDataPrefix, event.PCRIndex, event.Index), event.Data.Bytes(), 0644)
+		}
+
+		if extractVarDataPrefix != "" {
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
+			if ok {
+				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractVarDataPrefix, event.PCRIndex, event.Index), varData.VariableData, 0644)
+			}
+		}
 	}
 }
