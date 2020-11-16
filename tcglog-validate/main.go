@@ -60,7 +60,7 @@ func init() {
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.StringVar(&logPath, "log-path", "", "")
-	flag.Var(&pcrs, "pcr", "Validate log entries for the specified PCR. Can be specified multiple times")
+	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
 	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified multiple times")
 }
 

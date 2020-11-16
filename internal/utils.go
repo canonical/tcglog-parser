@@ -7,8 +7,8 @@ package internal
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 
+	"github.com/bsiegert/ranges"
 	"github.com/canonical/tcglog-parser"
 )
 
@@ -26,11 +26,13 @@ func (l *PCRArgList) String() string {
 }
 
 func (l *PCRArgList) Set(value string) error {
-	v, err := strconv.ParseUint(value, 10, 32)
+	i, err := ranges.Parse(value)
 	if err != nil {
 		return err
 	}
-	*l = append(*l, tcglog.PCRIndex(v))
+	for _, p := range i {
+		*l = append(*l, tcglog.PCRIndex(p))
+	}
 	return nil
 }
 

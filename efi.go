@@ -215,9 +215,9 @@ func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte)
 type EFIVariableData struct {
 	data          []byte
 	consumedBytes int
-	VariableName EFIGUID
-	UnicodeName  string
-	VariableData []byte
+	VariableName  EFIGUID
+	UnicodeName   string
+	VariableData  []byte
 }
 
 func (e *EFIVariableData) String() string {

@@ -54,8 +54,8 @@ type NoActionEventData interface {
 // SpecIdEvent corresponds to the TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, and TCG_EfiSpecIdEvent types and is the
 // event data for a Specification ID Version EV_NO_ACTION event.
 type SpecIdEvent struct {
-	data      []byte
-	signature string
+	data             []byte
+	signature        string
 	Spec             Spec
 	PlatformClass    uint32
 	SpecVersionMinor uint8
@@ -151,8 +151,8 @@ func decodeSpecIdEvent(r io.Reader, signature string, data []byte, helper func(i
 	}
 
 	eventData := &SpecIdEvent{
-		data:      data,
-		signature: signature,
+		data:             data,
+		signature:        signature,
 		PlatformClass:    common.PlatformClass,
 		SpecVersionMinor: common.SpecVersionMinor,
 		SpecVersionMajor: common.SpecVersionMajor,
