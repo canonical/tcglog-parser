@@ -17,13 +17,14 @@ import (
 )
 
 var (
-	alg           string
-	verbose       bool
-	hexDump       bool
-	withGrub      bool
-	withSdEfiStub bool
-	sdEfiStubPcr  int
-	pcrs          internal.PCRArgList
+	alg            string
+	verbose        bool
+	hexDump        bool
+	varDataHexDump bool
+	withGrub       bool
+	withSdEfiStub  bool
+	sdEfiStubPcr   int
+	pcrs           internal.PCRArgList
 )
 
 func init() {
@@ -32,6 +33,7 @@ func init() {
 	flag.BoolVar(&verbose, "v", false, "Display details of event data (shorthand)")
 	flag.BoolVar(&hexDump, "hexdump", false, "Display hexdump of event data")
 	flag.BoolVar(&hexDump, "x", false, "Display hexdump of event data (shorthand)")
+	flag.BoolVar(&varDataHexDump, "vardatahexdump", false, "Display hexdump of EFI variable data")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
@@ -108,6 +110,13 @@ func main() {
 
 		if hexDump {
 			fmt.Fprintf(&builder, "\n  Event data:\n  %s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n  ", -1))
+		}
+
+		if varDataHexDump {
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
+			if ok {
+				fmt.Fprintf(&builder, "\n  EFI variable data:\n  %s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n  ", -1))
+			}
 		}
 
 		fmt.Println(builder.String())
