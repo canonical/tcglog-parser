@@ -6,30 +6,38 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
 )
 
 var (
-	alg           string
-	verbose       bool
-	withGrub      bool
-	withSdEfiStub bool
-	sdEfiStubPcr  int
-	pcrs          internal.PCRArgList
+	alg            string
+	verbose        bool
+	hexDump        bool
+	varDataHexDump bool
+	withGrub       bool
+	withSdEfiStub  bool
+	sdEfiStubPcr   int
+	pcrs           internal.PCRArgList
 )
 
 func init() {
 	flag.StringVar(&alg, "alg", "sha1", "Name of the hash algorithm to display")
 	flag.BoolVar(&verbose, "verbose", false, "Display details of event data")
+	flag.BoolVar(&verbose, "v", false, "Display details of event data (shorthand)")
+	flag.BoolVar(&hexDump, "hexdump", false, "Display hexdump of event data")
+	flag.BoolVar(&hexDump, "x", false, "Display hexdump of event data (shorthand)")
+	flag.BoolVar(&varDataHexDump, "vardatahexdump", false, "Display hexdump of EFI variable data")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
 	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
-	flag.Var(&pcrs, "pcr", "Display events associated with the specified PCR. Can be specified multiple times")
+	flag.Var(&pcrs, "pcrs", "Display events associated with the specified PCRs. Can be specified multiple times")
 }
 
 func shouldDisplayEvent(event *tcglog.Event) bool {
@@ -93,13 +101,24 @@ func main() {
 
 		var builder bytes.Buffer
 		fmt.Fprintf(&builder, "%2d %x %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
-		if verbose {
+		if verbose || hexDump {
 			data := event.Data.String()
 			if data != "" {
 				fmt.Fprintf(&builder, " [ %s ]", data)
 			}
-
 		}
+
+		if hexDump {
+			fmt.Fprintf(&builder, "\n  Event data:\n  %s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n  ", -1))
+		}
+
+		if varDataHexDump {
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
+			if ok {
+				fmt.Fprintf(&builder, "\n  EFI variable data:\n  %s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n  ", -1))
+			}
+		}
+
 		fmt.Println(builder.String())
 	}
 }
