@@ -127,7 +127,7 @@ func main() {
 			}
 		}
 
-		if eslDump && (event.EventType == tcglog.EventTypeEFIVariableDriverConfig || event.EventType == tcglog.EventTypeEFIVariableAuthority) {
+		if eslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				db, err := efi.DecodeSignatureDatabase(bytes.NewReader(varData.VariableData))
