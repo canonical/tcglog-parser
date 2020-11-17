@@ -20,6 +20,22 @@ import (
 	"github.com/canonical/tcglog-parser/internal"
 )
 
+type efiBootVariableBehaviourArg string
+
+func (a *efiBootVariableBehaviourArg) String() string {
+	return string(*a)
+}
+
+func (a *efiBootVariableBehaviourArg) Set(value string) error {
+	switch value {
+	case "full", "data-only":
+	default:
+		return errors.New("invalid value (must be \"full\" or \"data-only\"")
+	}
+	*a = efiBootVariableBehaviourArg(value)
+	return nil
+}
+
 var (
 	withGrub      bool
 	withSdEfiStub bool
@@ -27,6 +43,10 @@ var (
 	noDefaultPcrs bool
 	tpmPath       string
 	pcrs          internal.PCRArgList
+
+	efiBootVarBehaviour         efiBootVariableBehaviourArg
+	ignoreDataDecodeErrors      bool
+	ignoreMeasuredTrailingBytes bool
 )
 
 type algorithmIdArgList tcglog.AlgorithmIdList
@@ -58,6 +78,13 @@ func init() {
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
+
+	flag.Var(&efiBootVarBehaviour, "efi-bootvar-behaviour", "Require that EV_EFI_VARIABLE_BOOT events are associated with "+
+		"either the full UEFI_VARIABLE_DATA structure (full) or the variable data only (data-only)")
+	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
+		"Don't exit with an error if any event data fails to decode correctly")
+	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-meaured-trailing-bytes", false,
+		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
 }
 
 type efiBootVariableBehaviour int
@@ -300,10 +327,12 @@ func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 }
 
 type logChecker struct {
-	algs                     tcglog.AlgorithmIdList
-	expectedPCRValues        map[tcglog.PCRIndex]tcglog.DigestMap
-	efiBootVariableBehaviour efiBootVariableBehaviour
-	events                   []*checkedEvent
+	algs                      tcglog.AlgorithmIdList
+	expectedPCRValues         map[tcglog.PCRIndex]tcglog.DigestMap
+	efiBootVariableBehaviour  efiBootVariableBehaviour
+	events                    []*checkedEvent
+	seenMeasuredTrailingBytes bool
+	seenIncorrectDigests      bool
 }
 
 func (c *logChecker) ensureExpectedPCRValuesInitialized(index tcglog.PCRIndex) {
@@ -335,6 +364,12 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 	c.ensureExpectedPCRValuesInitialized(event.PCRIndex)
 
 	ce := checkEvent(event, c)
+	if len(ce.measuredTrailingBytes) > 0 {
+		c.seenMeasuredTrailingBytes = true
+	}
+	if len(ce.incorrectDigestValues) > 0 {
+		c.seenIncorrectDigests = true
+	}
 
 	c.simulatePCRExtend(ce)
 	c.events = append(c.events, ce)
@@ -349,13 +384,13 @@ func (c *logChecker) run(log *tcglog.Log) {
 	}
 }
 
-func main() {
+func run() int {
 	flag.Parse()
 
 	args := flag.Args()
 	if len(args) > 1 {
 		fmt.Fprintf(os.Stderr, "Too many arguments\n")
-		os.Exit(1)
+		return 1
 	}
 
 	logPath := ""
@@ -385,111 +420,140 @@ func main() {
 	f, err := os.Open(logPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to open log: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	defer f.Close()
 
 	log, err := tcglog.ParseLog(f, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	c := &logChecker{}
 	c.run(log)
 
-	if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
-		fmt.Printf("- EV_EFI_VARIABLE_BOOT events only contain measurement of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
+	failCount := 0
+
+	switch efiBootVarBehaviour {
+	case "data-only":
+		if c.efiBootVariableBehaviour == efiBootVariableBehaviourFull {
+			fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events contain measurements of the entire UEFI_VARIABLE_DATA structure rather than just the event data\n\n")
+			failCount++
+		}
+	case "full":
+		if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
+			fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
+			failCount++
+		}
+	default:
+		if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
+			fmt.Printf("- INFO: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
+		}
 	}
 
-	seenInvalidData := false
+	var dataDecoderErrs []string
 	for _, e := range c.events {
 		err := e.dataDecoderErr()
 		if err == nil {
 			continue
 		}
 
-		if !seenInvalidData {
-			seenInvalidData = true
-			fmt.Printf("- The following events contain event data that was not in the expected format and could not be decoded correctly:\n")
-		}
-
-		fmt.Printf("  - Event %d in PCR %d (type: %s): %v\n", e.Index, e.PCRIndex, e.EventType, err)
+		dataDecoderErrs = append(dataDecoderErrs, fmt.Sprintf("\t- Event %d in PCR %d (type: %s): %v\n", e.Index, e.PCRIndex, e.EventType, err))
 	}
-	if seenInvalidData {
-		fmt.Printf("\n\n")
-	}
-
-	seenTrailingMeasuredBytes := false
-	for _, e := range c.events {
-		if len(e.measuredTrailingBytes) == 0 {
-			continue
+	if len(dataDecoderErrs) > 0 {
+		if !ignoreDataDecodeErrors {
+			fmt.Printf("*** FAIL ***")
+			failCount++
+		} else {
+			fmt.Printf("- INFO")
 		}
-
-		if !seenTrailingMeasuredBytes {
-			seenTrailingMeasuredBytes = true
-			fmt.Printf("- The following events have trailing bytes at the end of their event data that was hashed and measured:\n")
+		fmt.Printf(": The following events contain event data that was not in the expected format and could not be decoded correctly:\n")
+		for _, err := range dataDecoderErrs {
+			fmt.Printf("%s", err)
 		}
-
-		fmt.Printf("  - Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Index, e.PCRIndex, e.EventType, e.measuredTrailingBytes, len(e.measuredTrailingBytes))
-	}
-	if seenTrailingMeasuredBytes {
-		fmt.Printf("  This trailing bytes should be taken in to account when pre-computing digests for these events when the components " +
-			"being measured are updated or changed in some way.\n\n")
+		fmt.Printf("This might be a bug in the firmware or bootloader code responsible for performing these measurements.\n\n")
 	}
 
-	seenIncorrectDigests := false
-	for _, e := range c.events {
-		if len(e.incorrectDigestValues) == 0 {
-			continue
+	if c.seenMeasuredTrailingBytes {
+		if !ignoreMeasuredTrailingBytes {
+			fmt.Printf("*** FAIL ***")
+			failCount++
+		} else {
+			fmt.Printf("- INFO")
 		}
+		fmt.Printf(": The following events have trailing bytes at the end of their event data that was hashed and measured:\n")
+		for _, e := range c.events {
+			if len(e.measuredTrailingBytes) == 0 {
+				continue
+			}
 
-		if !seenIncorrectDigests {
-			seenIncorrectDigests = true
-			fmt.Printf("- The following events have digests that aren't consistent with the data recorded with them in the log:\n")
+			fmt.Printf("\t- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Index, e.PCRIndex, e.EventType, e.measuredTrailingBytes, len(e.measuredTrailingBytes))
 		}
-
-		for _, d := range e.incorrectDigestValues {
-			fmt.Printf("  - Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, got: %x\n", e.Index, e.PCRIndex, e.EventType, d.algorithm, d.expected, e.Digests[d.algorithm])
-		}
+		fmt.Printf("These trailing bytes might indicate a bug in the firmware or bootloader code responsible for performing the " +
+			"measurements, and should be taken in to account when pre-computing digests for these events.\n\n")
 	}
-	if seenIncorrectDigests {
-		fmt.Printf("  This is unexpected for these event types. Knowledge of the format of the data being measured is required in order " +
-			"to pre-compute digests for these events when the components being measured are updated or changed in some way.\n\n")
+
+	if c.seenIncorrectDigests {
+		failCount++
+		fmt.Printf("*** FAIL ***: The following events have digests that aren't consistent with the data recorded with them in the log:\n")
+		for _, e := range c.events {
+			if len(e.incorrectDigestValues) == 0 {
+				continue
+			}
+
+			for _, d := range e.incorrectDigestValues {
+				fmt.Printf("\t- Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, got: %x\n", e.Index, e.PCRIndex, e.EventType, d.algorithm, d.expected, e.Digests[d.algorithm])
+			}
+		}
+		fmt.Printf("This is unexpected for these event types, and might indicate a bug in the firmware of bootloader code responsible " +
+			"for performing these measurements. Knowledge of the format of the data being measured is required in order to pre-compute " +
+			"digests for these events or by a remote verifier for attestation purposes.\n\n")
 	}
 
 	if tpmPath == "" {
-		fmt.Printf("- Expected PCR values from log:\n")
+		fmt.Printf("- INFO: Expected PCR values from log:\n")
 		for _, i := range pcrs {
 			for _, alg := range log.Algorithms {
-				fmt.Printf("PCR %d, bank %s: %x\n", i, alg, c.expectedPCRValues[i][alg])
+				fmt.Printf("\tPCR %d, bank %s: %x\n", i, alg, c.expectedPCRValues[i][alg])
 			}
 		}
-		return
-	}
+	} else {
+		tpmPCRValues, err := readPCRs(log.Algorithms)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
+			return 1
+		}
 
-	tpmPCRValues, err := readPCRs(log.Algorithms)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
-		os.Exit(1)
-	}
+		seenLogConsistencyError := false
+		for _, i := range pcrs {
+			for _, alg := range log.Algorithms {
+				if bytes.Equal(c.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
+					continue
+				}
+				if !seenLogConsistencyError {
+					seenLogConsistencyError = true
+					fmt.Printf("*** FAIL ***: The log is not consistent with what was measured in to the TPM for some PCRs:\n")
+					failCount++
+				}
+				fmt.Printf("\t- PCR %d, bank %s - actual value from TPM: %x, expected value from log: %x\n",
+					i, alg, tpmPCRValues[i][alg], c.expectedPCRValues[i][alg])
+			}
+		}
 
-	seenLogConsistencyError := false
-	for _, i := range pcrs {
-		for _, alg := range log.Algorithms {
-			if bytes.Equal(c.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
-				continue
-			}
-			if !seenLogConsistencyError {
-				seenLogConsistencyError = true
-				fmt.Printf("- The log is not consistent with what was measured in to the TPM for some PCRs:\n")
-			}
-			fmt.Printf("  - PCR %d, bank %s - actual value from TPM: %x, expected value from log: %x\n",
-				i, alg, tpmPCRValues[i][alg], c.expectedPCRValues[i][alg])
+		if seenLogConsistencyError {
+			fmt.Printf("This might be caused by a bug in the firmware or bootloader code participating in the measured boot chain, " +
+				"a bug in the kernel's log handling code, or because events have been measured to the TPM by OS code. A " +
+				"remote verifier will require consistency between the log and the TPM's PCR values for attestation.\n")
 		}
 	}
 
-	if seenLogConsistencyError {
-		fmt.Printf("*** The event log is broken! ***\n")
+	if failCount > 0 {
+		return 1
 	}
+	return 0
+
+}
+func main() {
+	os.Exit(run())
 }
