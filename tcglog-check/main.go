@@ -59,7 +59,8 @@ func init() {
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
-	flag.StringVar(&logPath, "log-path", "", "")
+	flag.StringVar(&logPath, "log-path", "", "Specify the path to the event log. The default path associated with the TPM "+
+		"device is used if empty. If supplied, log entries are not validated with a TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
 	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified multiple times")
 }
@@ -155,46 +156,51 @@ func readPCRs() (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 	return nil, errors.New("not a valid TPM device")
 }
 
-func doesEventTypeExtendPCR(t tcglog.EventType) bool {
-	if t == tcglog.EventTypeNoAction {
+type incorrectDigestValue struct {
+	algorithm tcglog.AlgorithmId
+	expected  tcglog.Digest
+}
+
+type checkedEvent struct {
+	*tcglog.Event
+	measuredBytes         []byte
+	measuredTrailingBytes []byte
+	incorrectDigestValues []incorrectDigestValue
+}
+
+func (e *checkedEvent) extendsPCR() bool {
+	if e.EventType == tcglog.EventTypeNoAction {
 		return false
 	}
 	return true
 }
 
-func isExpectedDigestValue(digest tcglog.Digest, alg tcglog.AlgorithmId, measuredBytes []byte) (bool, []byte) {
-	h := alg.GetHash().New()
-	h.Write(measuredBytes)
-	expected := h.Sum(nil)
-	return bytes.Equal(digest, expected), expected
-}
-
-func determineMeasuredBytes(event *tcglog.Event, efiBootVariableQuirk bool) []byte {
-	if _, isErr := event.Data.(error); isErr {
+func (e *checkedEvent) expectedMeasuredBytes(efiBootVariableQuirk bool) []byte {
+	if err := e.dataDecoderErr(); err != nil {
 		return nil
 	}
 
-	switch event.EventType {
+	switch e.EventType {
 	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
-		return event.Data.Bytes()
+		return e.Data.Bytes()
 	case tcglog.EventTypeSeparator:
-		if event.Data.(*tcglog.SeparatorEventData).IsError {
+		if e.Data.(*tcglog.SeparatorEventData).IsError {
 			var d [4]byte
 			binary.LittleEndian.PutUint32(d[:], tcglog.SeparatorEventErrorValue)
 			return d[:]
 		}
-		return event.Data.Bytes()
+		return e.Data.Bytes()
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
-		return event.Data.Bytes()
+		return e.Data.Bytes()
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
-		if event.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
-			return event.Data.(*tcglog.EFIVariableData).VariableData
+		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
+			return e.Data.(*tcglog.EFIVariableData).VariableData
 		}
-		return event.Data.Bytes()
+		return e.Data.Bytes()
 	case tcglog.EventTypeEFIGPTEvent:
-		return event.Data.Bytes()
+		return e.Data.Bytes()
 	case tcglog.EventTypeIPL:
-		switch d := event.Data.(type) {
+		switch d := e.Data.(type) {
 		case *tcglog.GrubStringEventData:
 			var b bytes.Buffer
 			d.EncodeMeasuredBytes(&b)
@@ -209,124 +215,142 @@ func determineMeasuredBytes(event *tcglog.Event, efiBootVariableQuirk bool) []by
 	return nil
 }
 
-type incorrectDigestValue struct {
-	algorithm tcglog.AlgorithmId
-	expected  tcglog.Digest
+func (e *checkedEvent) dataDecoderErr() error {
+	if err, isErr := e.Data.(error); isErr {
+		return err
+	}
+	return nil
 }
 
-type validatedEvent struct {
-	*tcglog.Event
-	measuredTrailingBytes []byte
-	incorrectDigestValues []incorrectDigestValue
-	dataDecoderErr        error
+func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId) []byte {
+	h := alg.GetHash().New()
+	h.Write(e.measuredBytes)
+	return h.Sum(nil)
 }
 
-type logValidator struct {
-	expectedPCRValues        map[tcglog.PCRIndex]tcglog.DigestMap
-	efiBootVariableBehaviour efiBootVariableBehaviour
-	validatedEvents          []*validatedEvent
+func (e *checkedEvent) hasExpectedDigest(alg tcglog.AlgorithmId) bool {
+	h := alg.GetHash().New()
+	h.Write(e.measuredBytes)
+	return bytes.Equal(e.Digests[alg], e.expectedDigest(alg))
 }
 
-func (v *logValidator) processEvent(log *tcglog.Log, event *tcglog.Event) {
-	if _, exists := v.expectedPCRValues[event.PCRIndex]; !exists {
-		v.expectedPCRValues[event.PCRIndex] = tcglog.DigestMap{}
-		for _, alg := range log.Algorithms {
-			v.expectedPCRValues[event.PCRIndex][alg] = make(tcglog.Digest, alg.Size())
-		}
-	}
+func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
+	out = &checkedEvent{Event: event}
 
-	ve := &validatedEvent{Event: event}
-	v.validatedEvents = append(v.validatedEvents, ve)
-
-	if err, isErr := ve.Data.(error); isErr {
-		ve.dataDecoderErr = err
-	}
-
-	if !doesEventTypeExtendPCR(ve.EventType) {
-		return
-	}
-
-	for alg, digest := range ve.Digests {
-		h := alg.GetHash().New()
-		h.Write(v.expectedPCRValues[ve.PCRIndex][alg])
-		h.Write(digest)
-		v.expectedPCRValues[ve.PCRIndex][alg] = h.Sum(nil)
-	}
-
-	var measuredBytes []byte
-
-	for alg, digest := range ve.Digests {
-		if len(measuredBytes) > 0 {
+	for alg := range out.Digests {
+		if len(out.measuredBytes) > 0 {
 			// We've already determined the bytes measured for this event for a previous digest
-			if ok, expected := isExpectedDigestValue(digest, alg, measuredBytes); !ok {
-				ve.incorrectDigestValues = append(ve.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: expected})
+			if !out.hasExpectedDigest(alg) {
+				out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: out.expectedDigest(alg)})
 			}
 			continue
 		}
 
-		efiBootVariableBehaviourTry := v.efiBootVariableBehaviour
+		efiBootVariableBehaviourTry := c.efiBootVariableBehaviour
 
 	Loop:
 		for {
 			// Determine what we expect to be measured
-			provisionalMeasuredBytes := determineMeasuredBytes(ve.Event, efiBootVariableBehaviourTry == efiBootVariableBehaviourVarDataOnly)
-			if provisionalMeasuredBytes == nil {
+			out.measuredBytes = out.expectedMeasuredBytes(efiBootVariableBehaviourTry == efiBootVariableBehaviourVarDataOnly)
+			if out.measuredBytes == nil {
 				return
 			}
 
-			var provisionalMeasuredTrailingBytes []byte
-			if m, ok := ve.Data.(interface{ TrailingBytes() []byte }); ok {
-				provisionalMeasuredTrailingBytes = m.TrailingBytes()
+			if m, ok := out.Data.(interface{ TrailingBytes() []byte }); ok {
+				out.measuredTrailingBytes = m.TrailingBytes()
 			}
 
 			for {
 				// Determine whether the digest is consistent with the current provisional measured bytes
-				ok, _ := isExpectedDigestValue(digest, alg, provisionalMeasuredBytes)
 				switch {
-				case ok:
+				case out.hasExpectedDigest(alg):
 					// All good
-					measuredBytes = provisionalMeasuredBytes
-					ve.measuredTrailingBytes = provisionalMeasuredTrailingBytes
-
-					if ve.EventType == tcglog.EventTypeEFIVariableBoot && v.efiBootVariableBehaviour == efiBootVariableBehaviourUnknown {
+					if out.EventType == tcglog.EventTypeEFIVariableBoot && c.efiBootVariableBehaviour == efiBootVariableBehaviourUnknown {
 						// This is the first EV_EFI_VARIABLE_BOOT event, so record the measurement behaviour.
-						v.efiBootVariableBehaviour = efiBootVariableBehaviourTry
+						c.efiBootVariableBehaviour = efiBootVariableBehaviourTry
 						if efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
-							v.efiBootVariableBehaviour = efiBootVariableBehaviourFull
+							c.efiBootVariableBehaviour = efiBootVariableBehaviourFull
 						}
 					}
-					break Loop
-				case len(provisionalMeasuredTrailingBytes) > 0:
+					return
+				case len(out.measuredTrailingBytes) > 0:
 					// Invalid digest, the event data decoder determined there were trailing bytes, and we were expecting the measured
 					// bytes to match the event data. Test if any of the trailing bytes only appear in the event data by truncating
 					// the provisional measured bytes one byte at a time and re-testing.
-					provisionalMeasuredBytes = provisionalMeasuredBytes[0 : len(provisionalMeasuredBytes)-1]
-					provisionalMeasuredTrailingBytes = provisionalMeasuredTrailingBytes[0 : len(provisionalMeasuredTrailingBytes)-1]
+					out.measuredBytes = out.measuredBytes[0 : len(out.measuredBytes)-1]
+					out.measuredTrailingBytes = out.measuredTrailingBytes[0 : len(out.measuredTrailingBytes)-1]
 				default:
 					// Invalid digest
-					if ve.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
+					if out.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
 						// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
 						// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data.
 						efiBootVariableBehaviourTry = efiBootVariableBehaviourVarDataOnly
 						continue Loop
 					}
 					// Record the expected digest on the event
-					expectedMeasuredBytes := determineMeasuredBytes(ve.Event, false)
+					expectedMeasuredBytes := out.expectedMeasuredBytes(false)
 					h := alg.GetHash().New()
 					h.Write(expectedMeasuredBytes)
-					ve.incorrectDigestValues = append(ve.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: h.Sum(nil)})
-					break Loop
+					out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: h.Sum(nil)})
+
+					out.measuredBytes = nil
+					out.measuredTrailingBytes = nil
+
+					return
 				}
 			}
 		}
 	}
+	return
 }
 
-func (v *logValidator) run(log *tcglog.Log) {
-	v.expectedPCRValues = make(map[tcglog.PCRIndex]tcglog.DigestMap)
+type logChecker struct {
+	algs                     tcglog.AlgorithmIdList
+	expectedPCRValues        map[tcglog.PCRIndex]tcglog.DigestMap
+	efiBootVariableBehaviour efiBootVariableBehaviour
+	events                   []*checkedEvent
+}
+
+func (c *logChecker) ensureExpectedPCRValuesInitialized(index tcglog.PCRIndex) {
+	if _, exists := c.expectedPCRValues[index]; exists {
+		return
+	}
+
+	c.expectedPCRValues[index] = tcglog.DigestMap{}
+
+	for _, alg := range c.algs {
+		c.expectedPCRValues[index][alg] = make(tcglog.Digest, alg.Size())
+	}
+}
+
+func (c *logChecker) simulatePCRExtend(event *checkedEvent) {
+	if !event.extendsPCR() {
+		return
+	}
+
+	for alg, digest := range event.Digests {
+		h := alg.GetHash().New()
+		h.Write(c.expectedPCRValues[event.PCRIndex][alg])
+		h.Write(digest)
+		c.expectedPCRValues[event.PCRIndex][alg] = h.Sum(nil)
+	}
+}
+
+func (c *logChecker) processEvent(event *tcglog.Event) {
+	c.ensureExpectedPCRValuesInitialized(event.PCRIndex)
+
+	ce := checkEvent(event, c)
+
+	c.simulatePCRExtend(ce)
+	c.events = append(c.events, ce)
+}
+
+func (c *logChecker) run(log *tcglog.Log) {
+	c.algs = log.Algorithms
+	c.expectedPCRValues = make(map[tcglog.PCRIndex]tcglog.DigestMap)
 
 	for _, event := range log.Events {
-		v.processEvent(log, event)
+		c.processEvent(event)
 	}
 }
 
@@ -371,8 +395,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	v := &logValidator{}
-	v.run(log)
+	c := &logChecker{}
+	c.run(log)
 
 	if len(algorithms) == 0 {
 		algorithms = algorithmIdArgList(log.Algorithms)
@@ -384,13 +408,14 @@ func main() {
 		}
 	}
 
-	if v.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
+	if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
 		fmt.Printf("- EV_EFI_VARIABLE_BOOT events only contain measurement of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
 	}
 
 	seenInvalidData := false
-	for _, e := range v.validatedEvents {
-		if e.dataDecoderErr == nil {
+	for _, e := range c.events {
+		err := e.dataDecoderErr()
+		if err == nil {
 			continue
 		}
 
@@ -399,14 +424,14 @@ func main() {
 			fmt.Printf("- The following events contain event data that was not in the expected format and could not be decoded correctly:\n")
 		}
 
-		fmt.Printf("  - Event %d in PCR %d (type: %s): %v\n", e.Index, e.PCRIndex, e.EventType, e.dataDecoderErr)
+		fmt.Printf("  - Event %d in PCR %d (type: %s): %v\n", e.Index, e.PCRIndex, e.EventType, err)
 	}
 	if seenInvalidData {
 		fmt.Printf("\n\n")
 	}
 
 	seenTrailingMeasuredBytes := false
-	for _, e := range v.validatedEvents {
+	for _, e := range c.events {
 		if len(e.measuredTrailingBytes) == 0 {
 			continue
 		}
@@ -424,7 +449,7 @@ func main() {
 	}
 
 	seenIncorrectDigests := false
-	for _, e := range v.validatedEvents {
+	for _, e := range c.events {
 		if len(e.incorrectDigestValues) == 0 {
 			continue
 		}
@@ -447,7 +472,7 @@ func main() {
 		fmt.Printf("- Expected PCR values from log:\n")
 		for _, i := range pcrs {
 			for _, alg := range algorithms {
-				fmt.Printf("PCR %d, bank %s: %x\n", i, alg, v.expectedPCRValues[i][alg])
+				fmt.Printf("PCR %d, bank %s: %x\n", i, alg, c.expectedPCRValues[i][alg])
 			}
 		}
 		return
@@ -462,7 +487,7 @@ func main() {
 	seenLogConsistencyError := false
 	for _, i := range pcrs {
 		for _, alg := range algorithms {
-			if bytes.Equal(v.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
+			if bytes.Equal(c.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
 				continue
 			}
 			if !seenLogConsistencyError {
@@ -470,7 +495,7 @@ func main() {
 				fmt.Printf("- The log is not consistent with what was measured in to the TPM for some PCRs:\n")
 			}
 			fmt.Printf("  - PCR %d, bank %s - actual value from TPM: %x, expected value from log: %x\n",
-				i, alg, tpmPCRValues[i][alg], v.expectedPCRValues[i][alg])
+				i, alg, tpmPCRValues[i][alg], c.expectedPCRValues[i][alg])
 		}
 	}
 
