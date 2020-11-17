@@ -26,7 +26,6 @@ var (
 	sdEfiStubPcr  int
 	noDefaultPcrs bool
 	tpmPath       string
-	logPath       string
 	pcrs          internal.PCRArgList
 )
 
@@ -58,8 +57,6 @@ func init() {
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
 	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
-	flag.StringVar(&logPath, "log-path", "", "Specify the path to the event log. The default path associated with the TPM "+
-		"device is used if empty. If supplied, log entries are not validated with a TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
 }
 
@@ -356,9 +353,14 @@ func main() {
 	flag.Parse()
 
 	args := flag.Args()
-	if len(args) > 0 {
+	if len(args) > 1 {
 		fmt.Fprintf(os.Stderr, "Too many arguments\n")
 		os.Exit(1)
+	}
+
+	logPath := ""
+	if len(args) == 1 {
+		logPath = args[0]
 	}
 
 	if !noDefaultPcrs {
