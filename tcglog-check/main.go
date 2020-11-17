@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
@@ -36,6 +37,24 @@ func (a *efiBootVariableBehaviourArg) Set(value string) error {
 	return nil
 }
 
+type requiredAlgsArg tcglog.AlgorithmIdList
+
+func (l *requiredAlgsArg) String() string {
+	return fmt.Sprintf("%v", *l)
+}
+
+func (l *requiredAlgsArg) Set(value string) error {
+	algs := strings.Split(value, ",")
+	for _, alg := range algs {
+		a, err := internal.ParseAlgorithm(alg)
+		if err != nil {
+			return err
+		}
+		*l = append(*l, a)
+	}
+	return nil
+}
+
 var (
 	withGrub      bool
 	withSdEfiStub bool
@@ -47,29 +66,8 @@ var (
 	efiBootVarBehaviour         efiBootVariableBehaviourArg
 	ignoreDataDecodeErrors      bool
 	ignoreMeasuredTrailingBytes bool
+	requiredAlgs                requiredAlgsArg
 )
-
-type algorithmIdArgList tcglog.AlgorithmIdList
-
-func (l *algorithmIdArgList) String() string {
-	var builder bytes.Buffer
-	for i, alg := range *l {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		fmt.Fprintf(&builder, "%s", alg)
-	}
-	return builder.String()
-}
-
-func (l *algorithmIdArgList) Set(value string) error {
-	algorithmId, err := internal.ParseAlgorithm(value)
-	if err != nil {
-		return err
-	}
-	*l = append(*l, algorithmId)
-	return nil
-}
 
 func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
@@ -85,6 +83,7 @@ func init() {
 		"Don't exit with an error if any event data fails to decode correctly")
 	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-meaured-trailing-bytes", false,
 		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
+	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
 }
 
 type efiBootVariableBehaviour int
@@ -424,16 +423,34 @@ func run() int {
 	}
 	defer f.Close()
 
+	failCount := 0
+
 	log, err := tcglog.ParseLog(f, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log: %v\n", err)
 		return 1
 	}
 
+	missingAlg := false
+	for _, alg := range requiredAlgs {
+		if log.Algorithms.Contains(alg) {
+			continue
+		}
+
+		if !missingAlg {
+			missingAlg = true
+			failCount++
+			fmt.Printf("*** FAIL ***: The log is missing the following required algorithms:\n")
+		}
+
+		fmt.Printf("\t- %s\n", alg)
+	}
+	if missingAlg {
+		fmt.Printf("\n")
+	}
+
 	c := &logChecker{}
 	c.run(log)
-
-	failCount := 0
 
 	switch efiBootVarBehaviour {
 	case "data-only":
