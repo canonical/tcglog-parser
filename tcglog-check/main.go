@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,6 +19,7 @@ import (
 	"github.com/canonical/go-tpm2/mu"
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
+	"github.com/chrisccoulson/go-efilib"
 )
 
 var (
@@ -28,30 +30,7 @@ var (
 	tpmPath       string
 	logPath       string
 	pcrs          internal.PCRArgList
-	algorithms    algorithmIdArgList
 )
-
-type algorithmIdArgList tcglog.AlgorithmIdList
-
-func (l *algorithmIdArgList) String() string {
-	var builder bytes.Buffer
-	for i, alg := range *l {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		fmt.Fprintf(&builder, "%s", alg)
-	}
-	return builder.String()
-}
-
-func (l *algorithmIdArgList) Set(value string) error {
-	algorithmId, err := internal.ParseAlgorithm(value)
-	if err != nil {
-		return err
-	}
-	*l = append(*l, algorithmId)
-	return nil
-}
 
 func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
@@ -61,7 +40,67 @@ func init() {
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.StringVar(&logPath, "log-path", "", "")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
-	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified multiple times")
+}
+
+type peImageData struct {
+	path     string
+	peHash   []byte
+	fileHash []byte
+}
+
+var peImageDataCache map[tcglog.AlgorithmId][]*peImageData
+
+func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
+	peImageDataCache = make(map[tcglog.AlgorithmId][]*peImageData)
+
+	dirs := []string{"/boot"}
+	for len(dirs) > 0 {
+		dir := dirs[0]
+		dirs = dirs[1:]
+
+		f, err := os.Open(dir)
+		if err != nil {
+			continue
+		}
+		func() {
+			defer f.Close()
+			dirInfo, err := f.Readdir(-1)
+			if err != nil {
+				return
+			}
+
+			for _, fi := range dirInfo {
+				path := filepath.Join(dir, fi.Name())
+				switch {
+				case fi.IsDir():
+					dirs = append(dirs, path)
+				case fi.Mode().IsRegular():
+					f, err := os.Open(path)
+					if err != nil {
+						continue
+					}
+					func() {
+						defer f.Close()
+						fi, err := f.Stat()
+						if err != nil {
+							return
+						}
+						for _, alg := range algorithms {
+							peHash, err := efi.ComputePeImageDigest(alg.GetHash(), f, fi.Size())
+							if err != nil {
+								continue
+							}
+							h := alg.GetHash().New()
+							if _, err := io.Copy(h, f); err != nil {
+								continue
+							}
+							peImageDataCache[alg] = append(peImageDataCache[alg], &peImageData{path: path, peHash: peHash, fileHash: h.Sum(nil)})
+						}
+					}()
+				}
+			}
+		}()
+	}
 }
 
 type efiBootVariableBehaviour int
@@ -79,7 +118,7 @@ func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
 	return
 }
 
-func readPCRsFromTPM2Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
+func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 	result := make(map[tcglog.PCRIndex]tcglog.DigestMap)
 
 	var selections tpm2.PCRSelectionList
@@ -137,7 +176,7 @@ func getTPMDeviceVersion(tpm *tpm2.TPMContext) int {
 	return 0
 }
 
-func readPCRs() (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
+func readPCRs(algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 	tcti, err := tpm2.OpenTPMDevice(tpmPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open TPM device: %v", err)
@@ -147,7 +186,7 @@ func readPCRs() (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 
 	switch getTPMDeviceVersion(tpm) {
 	case 2:
-		return readPCRsFromTPM2Device(tpm)
+		return readPCRsFromTPM2Device(tpm, algorithms)
 	case 1:
 		return readPCRsFromTPM1Device(tpm)
 	}
@@ -371,18 +410,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	populatePeImageDataCache(log.Algorithms)
+
 	v := &logValidator{}
 	v.run(log)
-
-	if len(algorithms) == 0 {
-		algorithms = algorithmIdArgList(log.Algorithms)
-	}
-	for _, alg := range algorithms {
-		if !log.Algorithms.Contains(alg) {
-			fmt.Fprintf(os.Stderr, "Log doesn't contain entries for %s algorithm", alg)
-			os.Exit(1)
-		}
-	}
 
 	if v.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
 		fmt.Printf("- EV_EFI_VARIABLE_BOOT events only contain measurement of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
@@ -443,17 +474,80 @@ func main() {
 			"to pre-compute digests for these events when the components being measured are updated or changed in some way.\n\n")
 	}
 
+	var incorrectBSApplicationEventMsgs []string
+	for _, e := range v.validatedEvents {
+		if e.PCRIndex != 4 {
+			continue
+		}
+		if e.EventType != tcglog.EventTypeEFIBootServicesApplication {
+			continue
+		}
+
+		var path string
+		var isPeHash bool
+		var isFileHash bool
+		invalidDigests := make(map[tcglog.AlgorithmId]tcglog.Digest)
+
+		for alg, digest := range e.Digests {
+			var foundData *peImageData
+			for _, f := range peImageDataCache[alg] {
+				var found bool
+				switch {
+				case (isPeHash && bytes.Equal(digest, f.peHash)) || (isFileHash && bytes.Equal(digest, f.fileHash)):
+					found = true
+				case isFileHash || isPeHash:
+				case bytes.Equal(digest, f.peHash):
+					found = true
+					path = f.path
+					isPeHash = true
+				case bytes.Equal(digest, f.fileHash):
+					found = true
+					path = f.path
+					isFileHash = true
+					incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
+						fmt.Sprintf("  - Event %d in PCR 4 for %s has file digests as opposed to PE image digests\n", e.Index, path))
+				}
+				if found {
+					foundData = f
+					break
+				}
+			}
+			if foundData == nil {
+				invalidDigests[alg] = digest
+			}
+		}
+		if !isPeHash && !isFileHash {
+			incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
+				fmt.Sprintf("  - Event %d in PCR 4 has digests that don't correspond to any PE images\n", e.Index))
+		} else {
+			for alg, digest := range invalidDigests {
+				incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
+					fmt.Sprintf("  - Event %d in PCR 4 for %s has an invalid digest for alg %s (got: %x)\n", e.Index, path, alg, digest))
+			}
+		}
+	}
+	if len(incorrectBSApplicationEventMsgs) > 0 {
+		fmt.Printf("- The following EV_EFI_BOOT_SERVICES_APPLICATION events might be incorrect:\n")
+		for _, msg := range incorrectBSApplicationEventMsgs {
+			fmt.Printf("%s", msg)
+		}
+		fmt.Printf("  The presence of file digests rather than PE image digests might be because the platform firmware doesn't " +
+			"implement the 2.0 version of the TCG EFI Protocol Specification. Events with digests that don't correspond to " +
+			"any PE images might be caused by a firmware bug (invalid digest), or might be because the image was loaded from " +
+			"a location that is not currently mounted in to the expected location (/boot)\n")
+	}
+
 	if tpmPath == "" {
 		fmt.Printf("- Expected PCR values from log:\n")
 		for _, i := range pcrs {
-			for _, alg := range algorithms {
+			for _, alg := range log.Algorithms {
 				fmt.Printf("PCR %d, bank %s: %x\n", i, alg, v.expectedPCRValues[i][alg])
 			}
 		}
 		return
 	}
 
-	tpmPCRValues, err := readPCRs()
+	tpmPCRValues, err := readPCRs(log.Algorithms)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
 		os.Exit(1)
@@ -461,7 +555,7 @@ func main() {
 
 	seenLogConsistencyError := false
 	for _, i := range pcrs {
-		for _, alg := range algorithms {
+		for _, alg := range log.Algorithms {
 			if bytes.Equal(v.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
 				continue
 			}
