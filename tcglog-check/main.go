@@ -498,14 +498,10 @@ func main() {
 				case isFileHash || isPeHash:
 				case bytes.Equal(digest, f.peHash):
 					found = true
-					path = f.path
 					isPeHash = true
 				case bytes.Equal(digest, f.fileHash):
 					found = true
-					path = f.path
 					isFileHash = true
-					incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
-						fmt.Sprintf("  - Event %d in PCR 4 for %s has file digests as opposed to PE image digests\n", e.Index, path))
 				}
 				if found {
 					foundData = f
@@ -514,6 +510,12 @@ func main() {
 			}
 			if foundData == nil {
 				invalidDigests[alg] = digest
+			} else {
+				path = foundData.path
+				if isFileHash {
+					incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
+						fmt.Sprintf("  - Event %d in PCR 4 (alg: %s) for %s has a file digest as opposed to a PE image digest\n", e.Index, alg, path))
+				}
 			}
 		}
 		if !isPeHash && !isFileHash {
