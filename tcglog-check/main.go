@@ -111,6 +111,14 @@ const (
 	efiBootVariableBehaviourVarDataOnly
 )
 
+type peImageDigestType int
+
+const (
+	peImageDigestTypeUnknown peImageDigestType = iota
+	peImageDigestTypePe
+	peImageDigestTypeFile
+)
+
 func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
 	for _, i := range l {
 		out = append(out, int(i))
@@ -255,9 +263,12 @@ type incorrectDigestValue struct {
 
 type validatedEvent struct {
 	*tcglog.Event
-	measuredTrailingBytes []byte
-	incorrectDigestValues []incorrectDigestValue
-	dataDecoderErr        error
+	measuredTrailingBytes   []byte
+	incorrectDigestValues   []incorrectDigestValue
+	peImageDigestType       peImageDigestType
+	peImagePath             string
+	incorrectPeImageDigests tcglog.AlgorithmIdList
+	dataDecoderErr          error
 }
 
 type logValidator struct {
@@ -310,7 +321,7 @@ func (v *logValidator) processEvent(log *tcglog.Log, event *tcglog.Event) {
 			// Determine what we expect to be measured
 			provisionalMeasuredBytes := determineMeasuredBytes(ve.Event, efiBootVariableBehaviourTry == efiBootVariableBehaviourVarDataOnly)
 			if provisionalMeasuredBytes == nil {
-				return
+				break Loop
 			}
 
 			var provisionalMeasuredTrailingBytes []byte
@@ -357,6 +368,42 @@ func (v *logValidator) processEvent(log *tcglog.Log, event *tcglog.Event) {
 					break Loop
 				}
 			}
+		}
+	}
+
+	if ve.PCRIndex != 4 {
+		return
+	}
+	if ve.EventType != tcglog.EventTypeEFIBootServicesApplication {
+		return
+	}
+
+	for alg, digest := range ve.Digests {
+		var foundData *peImageData
+		for _, f := range peImageDataCache[alg] {
+			var found bool
+			switch {
+			case ve.peImageDigestType == peImageDigestTypePe && bytes.Equal(digest, f.peHash):
+				found = true
+			case ve.peImageDigestType == peImageDigestTypeFile && bytes.Equal(digest, f.fileHash):
+				found = true
+			case ve.peImageDigestType != peImageDigestTypeUnknown:
+			case bytes.Equal(digest, f.peHash):
+				found = true
+				ve.peImageDigestType = peImageDigestTypePe
+			case bytes.Equal(digest, f.fileHash):
+				found = true
+				ve.peImageDigestType = peImageDigestTypeFile
+			}
+			if found {
+				foundData = f
+				break
+			}
+		}
+		if foundData == nil {
+			ve.incorrectPeImageDigests = append(ve.incorrectPeImageDigests, alg)
+		} else {
+			ve.peImagePath = foundData.path
 		}
 	}
 }
@@ -474,69 +521,49 @@ func main() {
 			"to pre-compute digests for these events when the components being measured are updated or changed in some way.\n\n")
 	}
 
-	var incorrectBSApplicationEventMsgs []string
+	seenIncorrectBSApplicationEvent := false
 	for _, e := range v.validatedEvents {
-		if e.PCRIndex != 4 {
-			continue
-		}
-		if e.EventType != tcglog.EventTypeEFIBootServicesApplication {
+		if e.peImageDigestType != peImageDigestTypeFile {
 			continue
 		}
 
-		var path string
-		var isPeHash bool
-		var isFileHash bool
-		invalidDigests := make(map[tcglog.AlgorithmId]tcglog.Digest)
-
-		for alg, digest := range e.Digests {
-			var foundData *peImageData
-			for _, f := range peImageDataCache[alg] {
-				var found bool
-				switch {
-				case (isPeHash && bytes.Equal(digest, f.peHash)) || (isFileHash && bytes.Equal(digest, f.fileHash)):
-					found = true
-				case isFileHash || isPeHash:
-				case bytes.Equal(digest, f.peHash):
-					found = true
-					isPeHash = true
-				case bytes.Equal(digest, f.fileHash):
-					found = true
-					isFileHash = true
-				}
-				if found {
-					foundData = f
-					break
-				}
-			}
-			if foundData == nil {
-				invalidDigests[alg] = digest
-			} else {
-				path = foundData.path
-				if isFileHash {
-					incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
-						fmt.Sprintf("  - Event %d in PCR 4 (alg: %s) for %s has a file digest as opposed to a PE image digest\n", e.Index, alg, path))
-				}
-			}
+		if !seenIncorrectBSApplicationEvent {
+			seenIncorrectBSApplicationEvent = true
+			fmt.Printf("- The following EV_EFI_BOOT_SERVICES_APPLICATION events contain file digests rather than PE image digests:\n")
 		}
-		if !isPeHash && !isFileHash {
-			incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
-				fmt.Sprintf("  - Event %d in PCR 4 has digests that don't correspond to any PE images\n", e.Index))
+
+		fmt.Printf("  - Event %d in PCR 4 (%s)\n", e.Index, e.peImagePath)
+	}
+	if seenIncorrectBSApplicationEvent {
+		fmt.Printf("  The presence of file digests rather than PE image digests might be because the measuring bootloader " +
+			"is using the 1.2 version of the TCG EFI Protocol Specification rather than the 2.0 version (which could be " +
+			"because the firmware doesn't support the newer version). It could also be because the measuring bootloader " +
+			"does not pass the appropriate flag to the firmware to indicate that what is being measured is a PE image\n")
+	}
+
+	seenIncorrectBSApplicationEvent = false
+	for _, e := range v.validatedEvents {
+		if len(e.incorrectPeImageDigests) == 0 {
+			continue
+		}
+
+		if !seenIncorrectBSApplicationEvent {
+			seenIncorrectBSApplicationEvent = true
+			fmt.Printf("- The following EV_EFI_BOOT_SERVICES_APPLICATION events contain digests that might be invalid:\n")
+		}
+
+		if e.peImageDigestType == peImageDigestTypeUnknown {
+			fmt.Printf("  - Event %d in PCR 4 has digests that don't correspond to any PE images\n", e.Index)
 		} else {
-			for alg, digest := range invalidDigests {
-				incorrectBSApplicationEventMsgs = append(incorrectBSApplicationEventMsgs,
-					fmt.Sprintf("  - Event %d in PCR 4 for %s has an invalid digest for alg %s (got: %x)\n", e.Index, path, alg, digest))
+			for _, alg := range e.incorrectPeImageDigests {
+				fmt.Printf("  - Event %d in PCR 4 (%s) has an invalid digest for alg %s (got: %x) [almost certainly a firmware bug]\n", e.Index, e.peImagePath, alg, e.Digests[alg])
 			}
 		}
 	}
-	if len(incorrectBSApplicationEventMsgs) > 0 {
-		fmt.Printf("- The following EV_EFI_BOOT_SERVICES_APPLICATION events might be incorrect:\n")
-		for _, msg := range incorrectBSApplicationEventMsgs {
-			fmt.Printf("%s", msg)
-		}
-		fmt.Printf("  The presence of file digests rather than PE image digests might be because the platform firmware doesn't " +
-			"implement the 2.0 version of the TCG EFI Protocol Specification. Events with digests that don't correspond to " +
-			"any PE images might be caused by a firmware bug (invalid digest), or might be because the image was loaded from " +
-			"a location that is not currently mounted in to the expected location (/boot)\n")
+	if seenIncorrectBSApplicationEvent {
+		fmt.Printf("  Event digests that don't correspond to any PE image might be caused by a firmware bug (invalid digest), " +
+			"or might be because the image was loaded from a location that is not currently mounted at the expected path " +
+			"(/boot), in which case it is not possible to determine if the digests are correct\n")
 	}
 
 	if tpmPath == "" {
