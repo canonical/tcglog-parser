@@ -28,7 +28,6 @@ var (
 	tpmPath       string
 	logPath       string
 	pcrs          internal.PCRArgList
-	algorithms    algorithmIdArgList
 )
 
 type algorithmIdArgList tcglog.AlgorithmIdList
@@ -62,7 +61,6 @@ func init() {
 	flag.StringVar(&logPath, "log-path", "", "Specify the path to the event log. The default path associated with the TPM "+
 		"device is used if empty. If supplied, log entries are not validated with a TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
-	flag.Var(&algorithms, "alg", "Validate log entries for the specified algorithm. Can be specified multiple times")
 }
 
 type efiBootVariableBehaviour int
@@ -80,7 +78,7 @@ func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
 	return
 }
 
-func readPCRsFromTPM2Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
+func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 	result := make(map[tcglog.PCRIndex]tcglog.DigestMap)
 
 	var selections tpm2.PCRSelectionList
@@ -138,7 +136,7 @@ func getTPMDeviceVersion(tpm *tpm2.TPMContext) int {
 	return 0
 }
 
-func readPCRs() (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
+func readPCRs(algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 	tcti, err := tpm2.OpenTPMDevice(tpmPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open TPM device: %v", err)
@@ -148,7 +146,7 @@ func readPCRs() (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 
 	switch getTPMDeviceVersion(tpm) {
 	case 2:
-		return readPCRsFromTPM2Device(tpm)
+		return readPCRsFromTPM2Device(tpm, algorithms)
 	case 1:
 		return readPCRsFromTPM1Device(tpm)
 	}
@@ -398,16 +396,6 @@ func main() {
 	c := &logChecker{}
 	c.run(log)
 
-	if len(algorithms) == 0 {
-		algorithms = algorithmIdArgList(log.Algorithms)
-	}
-	for _, alg := range algorithms {
-		if !log.Algorithms.Contains(alg) {
-			fmt.Fprintf(os.Stderr, "Log doesn't contain entries for %s algorithm", alg)
-			os.Exit(1)
-		}
-	}
-
 	if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
 		fmt.Printf("- EV_EFI_VARIABLE_BOOT events only contain measurement of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
 	}
@@ -471,14 +459,14 @@ func main() {
 	if tpmPath == "" {
 		fmt.Printf("- Expected PCR values from log:\n")
 		for _, i := range pcrs {
-			for _, alg := range algorithms {
+			for _, alg := range log.Algorithms {
 				fmt.Printf("PCR %d, bank %s: %x\n", i, alg, c.expectedPCRValues[i][alg])
 			}
 		}
 		return
 	}
 
-	tpmPCRValues, err := readPCRs()
+	tpmPCRValues, err := readPCRs(log.Algorithms)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
 		os.Exit(1)
@@ -486,7 +474,7 @@ func main() {
 
 	seenLogConsistencyError := false
 	for _, i := range pcrs {
-		for _, alg := range algorithms {
+		for _, alg := range log.Algorithms {
 			if bytes.Equal(c.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
 				continue
 			}
