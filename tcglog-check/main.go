@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
@@ -38,6 +39,24 @@ func (a *efiBootVariableBehaviourArg) Set(value string) error {
 	return nil
 }
 
+type requiredAlgsArg tcglog.AlgorithmIdList
+
+func (l *requiredAlgsArg) String() string {
+	return fmt.Sprintf("%v", *l)
+}
+
+func (l *requiredAlgsArg) Set(value string) error {
+	algs := strings.Split(value, ",")
+	for _, alg := range algs {
+		a, err := internal.ParseAlgorithm(alg)
+		if err != nil {
+			return err
+		}
+		*l = append(*l, a)
+	}
+	return nil
+}
+
 var (
 	withGrub      bool
 	withSdEfiStub bool
@@ -49,6 +68,7 @@ var (
 	efiBootVarBehaviour         efiBootVariableBehaviourArg
 	ignoreDataDecodeErrors      bool
 	ignoreMeasuredTrailingBytes bool
+	requiredAlgs                requiredAlgsArg
 	requirePeImageDigests       bool
 )
 
@@ -66,6 +86,7 @@ func init() {
 		"Don't exit with an error if any event data fails to decode correctly")
 	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-meaured-trailing-bytes", false,
 		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
+	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
 	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests associated with "+
 		"EV_EFI_BOOT_SERVICES_APPLICATION events are PE image digests rather than file digests")
 }
@@ -519,18 +540,36 @@ func run() int {
 	}
 	defer f.Close()
 
+	failCount := 0
+
 	log, err := tcglog.ParseLog(f, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log: %v\n", err)
 		return 1
 	}
 
+	missingAlg := false
+	for _, alg := range requiredAlgs {
+		if log.Algorithms.Contains(alg) {
+			continue
+		}
+
+		if !missingAlg {
+			missingAlg = true
+			failCount++
+			fmt.Printf("*** FAIL ***: The log is missing the following required algorithms:\n")
+		}
+
+		fmt.Printf("\t- %s\n", alg)
+	}
+	if missingAlg {
+		fmt.Printf("\n")
+	}
+
 	populatePeImageDataCache(log.Algorithms)
 
 	c := &logChecker{}
 	c.run(log)
-
-	failCount := 0
 
 	switch efiBootVarBehaviour {
 	case "data-only":
