@@ -74,7 +74,7 @@ var (
 	sdEfiStubPcr  int
 	noDefaultPcrs bool
 	tpmPath       string
-	pcrs          internal.PCRArgList
+	pcrs          = internal.PCRArgList{0, 1, 2, 3, 4, 5, 6, 7}
 
 	efiBootVarBehaviour         efiBootVariableBehaviourArg
 	ignoreDataDecodeErrors      bool
@@ -88,7 +88,7 @@ func init() {
 	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
 	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
 	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
-	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Don't validate log entries for PCRs 0 - 7")
+	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Omit the default PCRs")
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
 
@@ -96,7 +96,7 @@ func init() {
 		"either the full UEFI_VARIABLE_DATA structure (full) or the variable data only (data-only)")
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
-	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-meaured-trailing-bytes", false,
+	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-measured-trailing-bytes", false,
 		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
 	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests for "+
@@ -456,25 +456,12 @@ func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 }
 
 type logChecker struct {
-	algs                        tcglog.AlgorithmIdList
 	expectedPCRValues           map[tcglog.PCRIndex]tcglog.DigestMap
 	efiBootVariableBehaviour    efiBootVariableBehaviour
 	events                      []*checkedEvent
 	seenMeasuredTrailingBytes   bool
 	seenIncorrectDigests        bool
 	seenIncorrectPeImageDigests bool
-}
-
-func (c *logChecker) ensureExpectedPCRValuesInitialized(index tcglog.PCRIndex) {
-	if _, exists := c.expectedPCRValues[index]; exists {
-		return
-	}
-
-	c.expectedPCRValues[index] = tcglog.DigestMap{}
-
-	for _, alg := range c.algs {
-		c.expectedPCRValues[index][alg] = make(tcglog.Digest, alg.Size())
-	}
 }
 
 func (c *logChecker) simulatePCRExtend(event *checkedEvent) {
@@ -491,7 +478,9 @@ func (c *logChecker) simulatePCRExtend(event *checkedEvent) {
 }
 
 func (c *logChecker) processEvent(event *tcglog.Event) {
-	c.ensureExpectedPCRValuesInitialized(event.PCRIndex)
+	if !pcrs.Contains(event.PCRIndex) {
+		return
+	}
 
 	ce := checkEvent(event, c)
 	if len(ce.measuredTrailingBytes) > 0 {
@@ -509,8 +498,14 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 }
 
 func (c *logChecker) run(log *tcglog.Log) {
-	c.algs = log.Algorithms
 	c.expectedPCRValues = make(map[tcglog.PCRIndex]tcglog.DigestMap)
+	for _, pcr := range pcrs {
+		c.expectedPCRValues[pcr] = tcglog.DigestMap{}
+
+		for _, alg := range log.Algorithms {
+			c.expectedPCRValues[pcr][alg] = make(tcglog.Digest, alg.Size())
+		}
+	}
 
 	for _, event := range log.Events {
 		c.processEvent(event)
@@ -532,10 +527,14 @@ func run() int {
 	}
 
 	if !noDefaultPcrs {
-		pcrs = append(pcrs, 0, 1, 2, 3, 4, 5, 6, 7)
 		if withGrub {
 			pcrs = append(pcrs, 8, 9)
 		}
+		if withSdEfiStub {
+			pcrs = append(pcrs, tcglog.PCRIndex(sdEfiStubPcr))
+		}
+	} else {
+		pcrs = pcrs[8:]
 	}
 
 	sort.SliceStable(pcrs, func(i, j int) bool { return pcrs[i] < pcrs[j] })

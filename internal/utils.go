@@ -18,7 +18,7 @@ func (l *PCRArgList) String() string {
 	var builder bytes.Buffer
 	for i, pcr := range *l {
 		if i > 0 {
-			builder.WriteString(", ")
+			builder.WriteString(",")
 		}
 		fmt.Fprintf(&builder, "%d", pcr)
 	}
@@ -34,6 +34,15 @@ func (l *PCRArgList) Set(value string) error {
 		*l = append(*l, tcglog.PCRIndex(p))
 	}
 	return nil
+}
+
+func (l *PCRArgList) Contains(index tcglog.PCRIndex) bool {
+	for _, p := range *l {
+		if p == index {
+			return true
+		}
+	}
+	return false
 }
 
 func ParseAlgorithm(alg string) (tcglog.AlgorithmId, error) {
