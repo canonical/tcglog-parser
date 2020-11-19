@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/canonical/go-efilib"
+	"github.com/chrisccoulson/go-efilib"
 )
 
 func TestEFIVariableDataEncode(t *testing.T) {
