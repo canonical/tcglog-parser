@@ -57,6 +57,17 @@ func (l *requiredAlgsArg) Set(value string) error {
 	return nil
 }
 
+type bootImageSearchPathsArg []string
+
+func (a *bootImageSearchPathsArg) String() string {
+	return strings.Join(*a, ",")
+}
+
+func (a *bootImageSearchPathsArg) Set(value string) error {
+	*a = append(*a, value)
+	return nil
+}
+
 var (
 	withGrub      bool
 	withSdEfiStub bool
@@ -70,6 +81,7 @@ var (
 	ignoreMeasuredTrailingBytes bool
 	requiredAlgs                requiredAlgsArg
 	requirePeImageDigests       bool
+	bootImageSearchPaths        = bootImageSearchPathsArg{"/boot"}
 )
 
 func init() {
@@ -87,8 +99,12 @@ func init() {
 	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-meaured-trailing-bytes", false,
 		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
-	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests associated with "+
-		"EV_EFI_BOOT_SERVICES_APPLICATION events are PE image digests rather than file digests")
+	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests for "+
+		"EV_EFI_BOOT_SERVICES_APPLICATION events associated with PE images are PE image digests rather than "+
+		"file digests")
+	flag.Var(&bootImageSearchPaths, "boot-image-search-path", "Specify the path to search for images executed during "+
+		"boot and measured to PCR 4 with EV_EFI_BOOT_SERVICES_APPLICATION events. Can be specified multiple "+
+		"times. Default is /boot")
 }
 
 type peImageData struct {
@@ -102,7 +118,8 @@ var peImageDataCache map[tcglog.AlgorithmId][]*peImageData
 func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
 	peImageDataCache = make(map[tcglog.AlgorithmId][]*peImageData)
 
-	dirs := []string{"/boot"}
+	dirs := make([]string, len(bootImageSearchPaths))
+	copy(dirs, bootImageSearchPaths)
 	for len(dirs) > 0 {
 		dir := dirs[0]
 		dirs = dirs[1:]
