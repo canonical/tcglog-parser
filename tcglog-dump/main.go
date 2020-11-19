@@ -49,14 +49,7 @@ func shouldDisplayEvent(event *tcglog.Event) bool {
 	if len(pcrs) == 0 {
 		return true
 	}
-
-	for _, pcr := range pcrs {
-		if pcr == event.PCRIndex {
-			return true
-		}
-	}
-
-	return false
+	return pcrs.Contains(event.PCRIndex)
 }
 
 func main() {
