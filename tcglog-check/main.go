@@ -81,7 +81,7 @@ func init() {
 		"either the full UEFI_VARIABLE_DATA structure (full) or the variable data only (data-only)")
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
-	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-meaured-trailing-bytes", false,
+	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-measured-trailing-bytes", false,
 		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
 }
