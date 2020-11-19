@@ -33,6 +33,12 @@
 			"revisionTime": "2020-11-16T19:00:51Z"
 		},
 		{
+			"checksumSHA1": "7U0GQ0dMEQB/lMAorS97iYk0MlY=",
+			"path": "github.com/chrisccoulson/go-efilib/internal/pe1.14",
+			"revision": "38decff2655f8ea829562e67651efaba3c6ef975",
+			"revisionTime": "2020-11-16T19:00:51Z"
+		},
+		{
 			"checksumSHA1": "7gaY8AK3cmTK9H0yfMq/vmRDulA=",
 			"path": "golang.org/x/sys/unix",
 			"revision": "b016eb3dc98ea7f69ed55e8216b87187067ae621",
