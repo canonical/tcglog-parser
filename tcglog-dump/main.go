@@ -13,9 +13,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/canonical/go-efilib"
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
-	"github.com/chrisccoulson/go-efilib"
 )
 
 var (

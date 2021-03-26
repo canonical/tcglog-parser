@@ -9,6 +9,22 @@
 			"revisionTime": "2011-12-21T11:53:36Z"
 		},
 		{
+			"checksumSHA1": "CqOxdGNmNXaAMk3AxmLeAmO8DTY=",
+			"path": "github.com/canonical/go-efilib",
+			"revision": "16f0fdb33677a405fe246449aaeb5234081aa226",
+			"revisionTime": "2021-03-26T08:25:13Z",
+			"version": "main",
+			"versionExact": "main"
+		},
+		{
+			"checksumSHA1": "32kmrchV6DeWsy/jCE5jg6gYGig=",
+			"path": "github.com/canonical/go-efilib/internal/pe1.14",
+			"revision": "16f0fdb33677a405fe246449aaeb5234081aa226",
+			"revisionTime": "2021-03-26T08:25:13Z",
+			"version": "main",
+			"versionExact": "main"
+		},
+		{
 			"checksumSHA1": "inZOuvF07VvZnsj1HvApM8Uf7qY=",
 			"path": "github.com/canonical/go-tpm2",
 			"revision": "fb781d04d0dea72f916cc68b637b7be6bcb3ccd4",
@@ -25,18 +41,6 @@
 			"path": "github.com/canonical/go-tpm2/mu",
 			"revision": "fb781d04d0dea72f916cc68b637b7be6bcb3ccd4",
 			"revisionTime": "2020-08-24T18:49:43Z"
-		},
-		{
-			"checksumSHA1": "KhgpobV2GeSv5fsAr5nivgQMtZo=",
-			"path": "github.com/chrisccoulson/go-efilib",
-			"revision": "38decff2655f8ea829562e67651efaba3c6ef975",
-			"revisionTime": "2020-11-16T19:00:51Z"
-		},
-		{
-			"checksumSHA1": "7U0GQ0dMEQB/lMAorS97iYk0MlY=",
-			"path": "github.com/chrisccoulson/go-efilib/internal/pe1.14",
-			"revision": "38decff2655f8ea829562e67651efaba3c6ef975",
-			"revisionTime": "2020-11-16T19:00:51Z"
 		},
 		{
 			"checksumSHA1": "7gaY8AK3cmTK9H0yfMq/vmRDulA=",

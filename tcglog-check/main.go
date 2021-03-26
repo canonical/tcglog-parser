@@ -16,11 +16,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
-	"github.com/chrisccoulson/go-efilib"
 )
 
 type efiBootVariableBehaviourArg string

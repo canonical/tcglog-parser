@@ -12,7 +12,7 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/chrisccoulson/go-efilib"
+	"github.com/canonical/go-efilib"
 
 	"golang.org/x/xerrors"
 )
