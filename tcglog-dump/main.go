@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/canonical/go-efilib"
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
 )
@@ -22,6 +23,7 @@ var (
 	verbose              bool
 	hexDump              bool
 	varDataHexDump       bool
+	eslDump              bool
 	extractDataPrefix    string
 	extractVarDataPrefix string
 	withGrub             bool
@@ -37,6 +39,7 @@ func init() {
 	flag.BoolVar(&hexDump, "hexdump", false, "Display hexdump of event data")
 	flag.BoolVar(&hexDump, "x", false, "Display hexdump of event data (shorthand)")
 	flag.BoolVar(&varDataHexDump, "vardatahexdump", false, "Display hexdump of EFI variable data")
+	flag.BoolVar(&eslDump, "esldump", false, "Display a dump of EFI signature lists")
 	flag.StringVar(&extractDataPrefix, "extract-data", "", "Extract event data to individual files named with the specified prefix (format: <prefix>-<pcr>-<num>")
 	flag.StringVar(&extractVarDataPrefix, "extract-vardata", "", "Extract EFI variable data to individual files named with the specified prefix (format: <prefix>-<pcr>-<num>")
 	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
@@ -107,13 +110,23 @@ func main() {
 		}
 
 		if hexDump {
-			fmt.Fprintf(&builder, "\n  Event data:\n  %s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n  ", -1))
+			fmt.Fprintf(&builder, "\n\tEvent data:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
 		}
 
 		if varDataHexDump {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				fmt.Fprintf(&builder, "\n  EFI variable data:\n  %s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n  ", -1))
+				fmt.Fprintf(&builder, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
+			}
+		}
+
+		if eslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
+			if ok {
+				db, err := efi.DecodeSignatureDatabase(bytes.NewReader(varData.VariableData))
+				if err == nil {
+					fmt.Fprintf(&builder, "\n\tSignature database contents:%s", strings.Replace(db.String(), "\n", "\n\t", -1))
+				}
 			}
 		}
 
