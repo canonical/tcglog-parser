@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"unicode/utf8"
 
 	"github.com/canonical/go-efilib"
@@ -324,7 +325,7 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 type EFIGPTData struct {
 	data       []byte
 	Hdr        efi.PartitionTableHeader
-	Partitions []efi.PartitionEntryRaw
+	Partitions []*efi.PartitionEntry
 }
 
 func (e *EFIGPTData) String() string {
@@ -362,14 +363,16 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 		return nil, xerrors.Errorf("cannot read number of partitions: %w", err)
 	}
 
-	// UEFI_GPT_DATA.Partitions
-	for i := uint64(0); i < numberOfParts; i++ {
-		entryRaw, err := efi.ReadPartitionEntry(r, hdr.SizeOfPartitionEntry)
-		if err != nil {
-			return nil, xerrors.Errorf("cannot read partition entry: %w", err)
-		}
-		d.Partitions = append(d.Partitions, entryRaw)
+	if numberOfParts > math.MaxUint32 {
+		return nil, errors.New("invalid EFI_GPT_DATA.NumberOfPartitons")
 	}
+
+	// UEFI_GPT_DATA.Partitions
+	partitions, err := efi.ReadPartitionEntries(r, uint32(numberOfParts), hdr.SizeOfPartitionEntry)
+	if err != nil {
+		return nil, xerrors.Errorf("cannot read partition entries: %w", err)
+	}
+	d.Partitions = partitions
 
 	return d, nil
 }
