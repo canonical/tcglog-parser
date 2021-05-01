@@ -9,10 +9,10 @@
 			"revisionTime": "2011-12-21T11:53:36Z"
 		},
 		{
-			"checksumSHA1": "CqOxdGNmNXaAMk3AxmLeAmO8DTY=",
+			"checksumSHA1": "lDLf1Z17gbIcmgThB2hOCm9RGzI=",
 			"path": "github.com/canonical/go-efilib",
-			"revision": "16f0fdb33677a405fe246449aaeb5234081aa226",
-			"revisionTime": "2021-03-26T08:25:13Z",
+			"revision": "8a92bd81a83437ea5c5ddb86745972cb35cf1d45",
+			"revisionTime": "2021-04-19T17:55:38Z",
 			"version": "main",
 			"versionExact": "main"
 		},
