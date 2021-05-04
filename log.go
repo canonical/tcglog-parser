@@ -23,6 +23,13 @@ type parser interface {
 	readNextEvent() (*Event, error)
 }
 
+func eofUnexpected(err error) error {
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return err
+}
+
 func isPCRIndexInRange(index PCRIndex) bool {
 	const maxPCRIndex PCRIndex = 31
 	return index <= maxPCRIndex
@@ -55,19 +62,19 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 
 	digest := make(Digest, AlgorithmSha1.Size())
 	if _, err := p.r.Read(digest); err != nil {
-		return nil, xerrors.Errorf("cannot read SHA-1 digest: %w", err)
+		return nil, xerrors.Errorf("cannot read SHA-1 digest: %w", eofUnexpected(err))
 	}
 	digests := make(DigestMap)
 	digests[AlgorithmSha1] = digest
 
 	var eventSize uint32
 	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, xerrors.Errorf("cannot read event size: %w", err)
+		return nil, xerrors.Errorf("cannot read event size: %w", eofUnexpected(err))
 	}
 
 	event := make([]byte, eventSize)
 	if _, err := io.ReadFull(p.r, event); err != nil {
-		return nil, xerrors.Errorf("cannot read event data: %w", err)
+		return nil, xerrors.Errorf("cannot read event data: %w", eofUnexpected(err))
 	}
 
 	return &Event{
@@ -110,7 +117,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 	for i := uint32(0); i < header.Count; i++ {
 		var algorithmId AlgorithmId
 		if err := binary.Read(p.r, binary.LittleEndian, &algorithmId); err != nil {
-			return nil, xerrors.Errorf("cannot read algorithm ID: %w", err)
+			return nil, xerrors.Errorf("cannot read algorithm ID: %w", eofUnexpected(err))
 		}
 
 		var digestSize uint16
@@ -128,7 +135,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 
 		digest := make(Digest, digestSize)
 		if _, err := io.ReadFull(p.r, digest); err != nil {
-			return nil, xerrors.Errorf("cannot read digest for algorithm %v: %w", algorithmId, err)
+			return nil, xerrors.Errorf("cannot read digest for algorithm %v: %w", algorithmId, eofUnexpected(err))
 		}
 
 		if _, exists := digests[algorithmId]; exists {
@@ -152,12 +159,12 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 
 	var eventSize uint32
 	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, xerrors.Errorf("cannot read event size: %w", err)
+		return nil, xerrors.Errorf("cannot read event size: %w", eofUnexpected(err))
 	}
 
 	event := make([]byte, eventSize)
 	if _, err := io.ReadFull(p.r, event); err != nil {
-		return nil, xerrors.Errorf("cannot read event data: %w", err)
+		return nil, xerrors.Errorf("cannot read event data: %w", eofUnexpected(err))
 	}
 
 	return &Event{
