@@ -11,7 +11,6 @@ import (
 	"io"
 	"math"
 	"strings"
-	"unsafe"
 
 	"golang.org/x/xerrors"
 )
@@ -172,16 +171,14 @@ var (
 
 // asciiStringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides a hint
 // as to what was measured as opposed to representing what was measured).
-type asciiStringEventData struct {
-	data []byte
+type asciiStringEventData string
+
+func (d asciiStringEventData) String() string {
+	return string(d)
 }
 
-func (e *asciiStringEventData) String() string {
-	return *(*string)(unsafe.Pointer(&e.data))
-}
-
-func (e *asciiStringEventData) Bytes() []byte {
-	return e.data
+func (d asciiStringEventData) Bytes() []byte {
+	return []byte(d)
 }
 
 // unknownNoActionEventData is the event data for a EV_NO_ACTION event with an unrecognized type.
@@ -258,12 +255,12 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func decodeEventDataAction(data []byte) *asciiStringEventData {
-	return &asciiStringEventData{data: data}
+func decodeEventDataAction(data []byte) asciiStringEventData {
+	return asciiStringEventData(data)
 }
 
-func decodeEventDataHostPlatformSpecificCompactHash(data []byte) *asciiStringEventData {
-	return &asciiStringEventData{data: data}
+func decodeEventDataHostPlatformSpecificCompactHash(data []byte) asciiStringEventData {
+	return asciiStringEventData(data)
 }
 
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.

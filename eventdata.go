@@ -43,16 +43,14 @@ func (e *invalidEventData) Unwrap() error {
 }
 
 // opaqueEventData is event data whose format is unknown or implementation defined.
-type opaqueEventData struct {
-	data []byte
-}
+type opaqueEventData []byte
 
-func (e *opaqueEventData) String() string {
+func (d opaqueEventData) String() string {
 	return ""
 }
 
-func (e *opaqueEventData) Bytes() []byte {
-	return e.data
+func (d opaqueEventData) Bytes() []byte {
+	return []byte(d)
 }
 
 func decodeEventData(pcrIndex PCRIndex, eventType EventType, digests DigestMap, data []byte, options *LogOptions) EventData {
@@ -78,5 +76,5 @@ func decodeEventData(pcrIndex PCRIndex, eventType EventType, digests DigestMap, 
 		return out
 	}
 
-	return &opaqueEventData{data: data}
+	return opaqueEventData(data)
 }
