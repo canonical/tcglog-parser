@@ -6,6 +6,7 @@ package tcglog
 
 import (
 	"bytes"
+	"crypto"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -208,30 +209,22 @@ func (e *EFIVariableData) Bytes() []byte {
 	return e.data
 }
 
-// EncodeMeasuredBytes encodes this data in to the form in which it is hashed and measured by firmware or other bootloaders.
-func (e *EFIVariableData) EncodeMeasuredBytes(w io.Writer) error {
-	if _, err := w.Write(e.VariableName[:]); err != nil {
-		return xerrors.Errorf("cannot write variable name: %w", err)
-	}
-	if err := binary.Write(w, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
-		return xerrors.Errorf("cannot write unicode name length: %w", err)
-	}
-	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
-		return xerrors.Errorf("cannot write variable data length: %w", err)
-	}
-	if err := binary.Write(w, binary.LittleEndian, convertStringToUtf16(e.UnicodeName)); err != nil {
-		return xerrors.Errorf("cannot write unicode name: %w", err)
-	}
-	if _, err := w.Write(e.VariableData); err != nil {
-		return xerrors.Errorf("cannot write variable data: %w", err)
-	}
-	return nil
+// ComputeEFIVariableDataDigest computes the EFI_VARIABLE_DATA digest associated with the supplied
+// parameters.
+func ComputeEFIVariableDataDigest(alg crypto.Hash, name string, guid efi.GUID, data []byte) []byte {
+	h := alg.New()
+	h.Write(guid[:])
+	binary.Write(h, binary.LittleEndian, uint64(utf8.RuneCount([]byte(name))))
+	binary.Write(h, binary.LittleEndian, uint64(len(data)))
+	binary.Write(h, binary.LittleEndian, convertStringToUtf16(name))
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 // TrailingBytes returns any trailing bytes that were not used during decoding. This indicates a bug in the software responsible
 // for the event. See https://github.com/rhboot/shim/commit/7e4d3f1c8c730a5d3f40729cb285b5d8c7b241af and
 // https://github.com/rhboot/shim/commit/8a27a4809a6a2b40fb6a4049071bf96d6ad71b50 for the types of bugs that might cause this. Note
-// that trailing bytes that are measured must be taken in to account when using EncodeMeasuredBytes.
+// that trailing bytes that are measured must be taken in to account when precomputing digests for these event types.
 func (e *EFIVariableData) TrailingBytes() []byte {
 	return e.data[e.consumedBytes:]
 }

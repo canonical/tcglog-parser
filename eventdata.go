@@ -5,6 +5,7 @@
 package tcglog
 
 import (
+	"crypto"
 	"fmt"
 )
 
@@ -51,6 +52,13 @@ func (d opaqueEventData) String() string {
 
 func (d opaqueEventData) Bytes() []byte {
 	return []byte(d)
+}
+
+// ComputeEventDigest computes the digest associated with the supplied event data bytes.
+func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
+	h := alg.New()
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) EventData {

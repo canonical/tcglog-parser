@@ -6,6 +6,7 @@ package tcglog
 
 import (
 	"bytes"
+	"crypto"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -181,6 +182,15 @@ func (d asciiStringEventData) Bytes() []byte {
 	return []byte(d)
 }
 
+// ComputeStringEventDigest computes the digest associated with the supplied string. The
+// function assumes that the string is ASCII encoded and measured without a terminating
+// NULL byte.
+func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
+	h := alg.New()
+	io.WriteString(h, str)
+	return h.Sum(nil)
+}
+
 // unknownNoActionEventData is the event data for a EV_NO_ACTION event with an unrecognized type.
 type unknownNoActionEventData struct {
 	data      []byte
@@ -278,6 +288,12 @@ func (e *SeparatorEventData) String() string {
 
 func (e *SeparatorEventData) Bytes() []byte {
 	return e.data
+}
+
+func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
+	h := alg.New()
+	binary.Write(h, binary.LittleEndian, value)
+	return h.Sum(nil)
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf

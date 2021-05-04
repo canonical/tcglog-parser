@@ -6,9 +6,8 @@ package tcglog
 
 import (
 	"bytes"
+	"crypto"
 	"encoding/binary"
-	"fmt"
-	"io"
 )
 
 // SystemdEFIStubEventData represents the data associated with a kernel commandline measured by the systemd EFI stub linux loader.
@@ -18,21 +17,24 @@ type SystemdEFIStubEventData struct {
 }
 
 func (e *SystemdEFIStubEventData) String() string {
-	return fmt.Sprintf("%s", e.Str)
+	return e.Str
 }
 
 func (e *SystemdEFIStubEventData) Bytes() []byte {
 	return e.data
 }
 
-// EncodeMeasured bytes encodes this data to the form that would be hashed and measured by the systemd EFI stub linux loader for the
-// specified kernel commandline. Note that it assumes that the calling bootloader includes a UTF-16 NULL terminator at the end of
-// LoadOptions, and sets LoadOptionsSize to StrLen(LoadOptions)+1
-func (e *SystemdEFIStubEventData) EncodeMeasuredBytes(w io.Writer) error {
+// ComputeSystemdEFIStubEventDataDigest computes the digest measured by the systemd EFI stub linux loader for the specified
+// kernel commandline. Note that it assumes that the calling bootloader includes a UTF-16 NULL terminator at the end of
+// LoadOptions and sets LoadOptionsSize to StrLen(LoadOptions)+1.
+func ComputeSystemdEFIStubEventDataDigest(alg crypto.Hash, commandline string) []byte {
+	h := alg.New()
+
 	// Both GRUB's chainloader and systemd's EFI bootloader include a UTF-16 NULL terminator at the end of LoadOptions and
 	// set LoadOptionsSize to StrLen(LoadOptions)+1. The EFI stub loader measures LoadOptionsSize number of bytes, meaning that
 	// the 2 NULL bytes are measured. Include those here.
-	return binary.Write(w, binary.LittleEndian, append(convertStringToUtf16(e.Str), 0))
+	binary.Write(h, binary.LittleEndian, append(convertStringToUtf16(commandline), 0))
+	return h.Sum(nil)
 }
 
 func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) EventData {

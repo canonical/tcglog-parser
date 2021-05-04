@@ -6,7 +6,6 @@ package tcglog
 
 import (
 	"fmt"
-	"io"
 	"strings"
 )
 
@@ -49,14 +48,6 @@ func (e *GrubStringEventData) String() string {
 
 func (e *GrubStringEventData) Bytes() []byte {
 	return e.data
-}
-
-// EncodeMeasuredBytes encodes this data to the form that would be hashed and measured by GRUB.
-func (e *GrubStringEventData) EncodeMeasuredBytes(buf io.Writer) error {
-	if _, err := io.WriteString(buf, e.Str); err != nil {
-		return err
-	}
-	return nil
 }
 
 func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) EventData {

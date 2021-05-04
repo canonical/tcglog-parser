@@ -275,7 +275,6 @@ type incorrectDigestValue struct {
 
 type checkedEvent struct {
 	*tcglog.Event
-	measuredBytes           []byte
 	trailingBytes           []byte
 	incorrectDigestValues   []incorrectDigestValue
 	peImageDigestType       peImageDigestType
@@ -290,46 +289,6 @@ func (e *checkedEvent) extendsPCR() bool {
 	return true
 }
 
-func (e *checkedEvent) expectedMeasuredBytes(efiBootVariableQuirk bool) []byte {
-	if err := e.dataDecoderErr(); err != nil {
-		return nil
-	}
-
-	switch e.EventType {
-	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
-		return e.Data.Bytes()
-	case tcglog.EventTypeSeparator:
-		if e.Data.(*tcglog.SeparatorEventData).IsError {
-			var d [4]byte
-			binary.LittleEndian.PutUint32(d[:], tcglog.SeparatorEventErrorValue)
-			return d[:]
-		}
-		return e.Data.Bytes()
-	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
-		return e.Data.Bytes()
-	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
-		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
-			return e.Data.(*tcglog.EFIVariableData).VariableData
-		}
-		return e.Data.Bytes()
-	case tcglog.EventTypeEFIGPTEvent:
-		return e.Data.Bytes()
-	case tcglog.EventTypeIPL:
-		switch d := e.Data.(type) {
-		case *tcglog.GrubStringEventData:
-			var b bytes.Buffer
-			d.EncodeMeasuredBytes(&b)
-			return b.Bytes()
-		case *tcglog.SystemdEFIStubEventData:
-			var b bytes.Buffer
-			d.EncodeMeasuredBytes(&b)
-			return b.Bytes()
-		}
-	}
-
-	return nil
-}
-
 func (e *checkedEvent) dataDecoderErr() error {
 	if err, isErr := e.Data.(error); isErr {
 		return err
@@ -337,16 +296,44 @@ func (e *checkedEvent) dataDecoderErr() error {
 	return nil
 }
 
-func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId) []byte {
-	h := alg.GetHash().New()
-	h.Write(e.measuredBytes)
-	return h.Sum(nil)
-}
+func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQuirk bool) []byte {
+	if err := e.dataDecoderErr(); err != nil {
+		return nil
+	}
 
-func (e *checkedEvent) hasExpectedDigest(alg tcglog.AlgorithmId) bool {
-	h := alg.GetHash().New()
-	h.Write(e.measuredBytes)
-	return bytes.Equal(e.Digests[alg], e.expectedDigest(alg))
+	switch e.EventType {
+	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
+		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
+	case tcglog.EventTypeSeparator:
+		var value uint32
+		if e.Data.(*tcglog.SeparatorEventData).IsError {
+			value = tcglog.SeparatorEventErrorValue
+		} else {
+			value = binary.LittleEndian.Uint32(e.Data.Bytes())
+		}
+		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), value)
+	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
+		return tcglog.ComputeStringEventDigest(alg.GetHash(), e.Data.String())
+	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
+		data := e.Data.(*tcglog.EFIVariableData)
+		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
+			h := alg.GetHash().New()
+			h.Write(data.VariableData)
+			return h.Sum(nil)
+		}
+		return tcglog.ComputeEFIVariableDataDigest(alg.GetHash(), data.UnicodeName, data.VariableName, data.VariableData)
+	case tcglog.EventTypeEFIGPTEvent:
+		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
+	case tcglog.EventTypeIPL:
+		switch d := e.Data.(type) {
+		case *tcglog.GrubStringEventData:
+			return tcglog.ComputeStringEventDigest(alg.GetHash(), d.Str)
+		case *tcglog.SystemdEFIStubEventData:
+			return tcglog.ComputeSystemdEFIStubEventDataDigest(alg.GetHash(), d.String())
+		}
+	}
+
+	return nil
 }
 
 func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
@@ -356,56 +343,39 @@ func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 		out.trailingBytes = i.TrailingBytes()
 	}
 
-	for alg := range out.Digests {
-		if len(out.measuredBytes) > 0 {
-			// We've already determined the bytes measured for this event for a previous digest
-			if !out.hasExpectedDigest(alg) {
-				out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: out.expectedDigest(alg)})
-			}
-			continue
-		}
-
+Outer:
+	for alg, digest := range out.Digests {
 		efiBootVariableBehaviourTry := c.efiBootVariableBehaviour
 
-	Loop:
+	Inner:
 		for {
-			// Determine what we expect to be measured
-			out.measuredBytes = out.expectedMeasuredBytes(efiBootVariableBehaviourTry == efiBootVariableBehaviourVarDataOnly)
-			if out.measuredBytes == nil {
-				break Loop
+			expectedDigest := out.expectedDigest(alg, efiBootVariableBehaviourTry == efiBootVariableBehaviourVarDataOnly)
+			if expectedDigest == nil {
+				break Outer
 			}
 
-			for {
-				// Determine whether the digest is consistent with the current provisional measured bytes
-				switch {
-				case out.hasExpectedDigest(alg):
-					// All good
-					if out.EventType == tcglog.EventTypeEFIVariableBoot && c.efiBootVariableBehaviour == efiBootVariableBehaviourUnknown {
-						// This is the first EV_EFI_VARIABLE_BOOT event, so record the measurement behaviour.
-						c.efiBootVariableBehaviour = efiBootVariableBehaviourTry
-						if efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
-							c.efiBootVariableBehaviour = efiBootVariableBehaviourFull
-						}
-					}
-					break Loop
-				case out.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown:
-					// Invalid digest
-					// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
-					// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data, which
-					// is how EDK2 measures these.
-					efiBootVariableBehaviourTry = efiBootVariableBehaviourVarDataOnly
-					continue Loop
-				default:
-					// Invalid digest. Record the expected digest on the event.
-					expectedMeasuredBytes := out.expectedMeasuredBytes(false)
-					h := alg.GetHash().New()
-					h.Write(expectedMeasuredBytes)
-					out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: h.Sum(nil)})
-
-					out.measuredBytes = nil
-
-					break Loop
+			switch {
+			case bytes.Equal(digest, expectedDigest) && out.EventType == tcglog.EventTypeEFIVariableBoot && c.efiBootVariableBehaviour == efiBootVariableBehaviourUnknown:
+				// Valid digest, and this is the first EV_EFI_VARIABLE_BOOT event,
+				// so record the measurement behaviour.
+				c.efiBootVariableBehaviour = efiBootVariableBehaviourTry
+				if efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
+					c.efiBootVariableBehaviour = efiBootVariableBehaviourFull
 				}
+				fallthrough
+			case bytes.Equal(digest, expectedDigest):
+				// Valid digest
+				break Inner
+			case out.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown:
+				// Invalid digest
+				// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
+				// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data, which
+				// is how EDK2 measures these.
+				efiBootVariableBehaviourTry = efiBootVariableBehaviourVarDataOnly
+			default:
+				// Invalid digest. Record the expected digest on the event.
+				out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: expectedDigest})
+				break Inner
 			}
 		}
 	}
