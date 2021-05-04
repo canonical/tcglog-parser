@@ -308,7 +308,7 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 	}
 
 	lr := io.LimitReader(r, int64(e.LengthOfDevicePath))
-	path, err := efi.DecodeDevicePath(lr)
+	path, err := efi.ReadDevicePath(lr)
 	if err != nil {
 		return nil, xerrors.Errorf("cannot decode device path: %w", err)
 	}

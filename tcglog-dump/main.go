@@ -123,7 +123,7 @@ func main() {
 		if eslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				db, err := efi.DecodeSignatureDatabase(bytes.NewReader(varData.VariableData))
+				db, err := efi.ReadSignatureDatabase(bytes.NewReader(varData.VariableData))
 				if err == nil {
 					fmt.Fprintf(&builder, "\n\tSignature database contents:%s", strings.Replace(db.String(), "\n", "\n\t", -1))
 				}
