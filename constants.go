@@ -4,6 +4,10 @@
 
 package tcglog
 
+import (
+	"math"
+)
+
 const (
 	EventTypePrebootCert EventType = 0x00000000 // EV_PREBOOT_CERT
 	EventTypePostCode    EventType = 0x00000001 // EV_POST_CODE
@@ -67,5 +71,7 @@ const (
 )
 
 const (
+	SeparatorEventNormalValue uint32 = 0
 	SeparatorEventErrorValue uint32 = 1
+	SeparatorEventAltNormalValue uint32 = math.MaxUint32
 )

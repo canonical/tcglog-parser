@@ -290,6 +290,9 @@ func (e *SeparatorEventData) Bytes() []byte {
 	return e.data
 }
 
+// ComputeSeparatorEventDigest computes the digest associated with a seaprator event. The value
+// argument should be one of SeparatorEventNormalValue, SeparatorEventAltNormalValue or
+// SeparatorEventErrorValue.
 func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 	h := alg.New()
 	binary.Write(h, binary.LittleEndian, value)
