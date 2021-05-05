@@ -76,12 +76,12 @@ var (
 	tpmPath       string
 	pcrs          = internal.PCRArgList{0, 1, 2, 3, 4, 5, 6, 7}
 
-	efiBootVarBehaviour         efiBootVariableBehaviourArg
-	ignoreDataDecodeErrors      bool
-	ignoreMeasuredTrailingBytes bool
-	requiredAlgs                requiredAlgsArg
-	requirePeImageDigests       bool
-	bootImageSearchPaths        = bootImageSearchPathsArg{"/boot"}
+	efiBootVarBehaviour    efiBootVariableBehaviourArg
+	ignoreDataDecodeErrors bool
+	ignoreTrailingBytes    bool
+	requiredAlgs           requiredAlgsArg
+	requirePeImageDigests  bool
+	bootImageSearchPaths   = bootImageSearchPathsArg{"/boot"}
 )
 
 func init() {
@@ -96,8 +96,8 @@ func init() {
 		"either the full UEFI_VARIABLE_DATA structure (full) or the variable data only (data-only)")
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
-	flag.BoolVar(&ignoreMeasuredTrailingBytes, "ignore-measured-trailing-bytes", false,
-		"Don't exit with an error if any event data contains trailing bytes that were hashed and measured")
+	flag.BoolVar(&ignoreTrailingBytes, "ignore-trailing-bytes", false,
+		"Don't exit with an error if any event data contains trailing bytes")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
 	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests for "+
 		"EV_EFI_BOOT_SERVICES_APPLICATION events associated with PE images are PE image digests rather than "+
@@ -276,7 +276,7 @@ type incorrectDigestValue struct {
 type checkedEvent struct {
 	*tcglog.Event
 	measuredBytes           []byte
-	measuredTrailingBytes   []byte
+	trailingBytes           []byte
 	incorrectDigestValues   []incorrectDigestValue
 	peImageDigestType       peImageDigestType
 	peImagePath             string
@@ -352,6 +352,10 @@ func (e *checkedEvent) hasExpectedDigest(alg tcglog.AlgorithmId) bool {
 func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 	out = &checkedEvent{Event: event}
 
+	if i, ok := out.Data.(interface{ TrailingBytes() []byte }); ok {
+		out.trailingBytes = i.TrailingBytes()
+	}
+
 	for alg := range out.Digests {
 		if len(out.measuredBytes) > 0 {
 			// We've already determined the bytes measured for this event for a previous digest
@@ -371,10 +375,6 @@ func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 				break Loop
 			}
 
-			if m, ok := out.Data.(interface{ TrailingBytes() []byte }); ok {
-				out.measuredTrailingBytes = m.TrailingBytes()
-			}
-
 			for {
 				// Determine whether the digest is consistent with the current provisional measured bytes
 				switch {
@@ -388,28 +388,21 @@ func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 						}
 					}
 					break Loop
-				case len(out.measuredTrailingBytes) > 0:
-					// Invalid digest, the event data decoder determined there were trailing bytes, and we were expecting the measured
-					// bytes to match the event data. Test if any of the trailing bytes only appear in the event data by truncating
-					// the provisional measured bytes one byte at a time and re-testing.
-					out.measuredBytes = out.measuredBytes[0 : len(out.measuredBytes)-1]
-					out.measuredTrailingBytes = out.measuredTrailingBytes[0 : len(out.measuredTrailingBytes)-1]
-				default:
+				case out.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown:
 					// Invalid digest
-					if out.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
-						// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
-						// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data.
-						efiBootVariableBehaviourTry = efiBootVariableBehaviourVarDataOnly
-						continue Loop
-					}
-					// Record the expected digest on the event
+					// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
+					// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data, which
+					// is how EDK2 measures these.
+					efiBootVariableBehaviourTry = efiBootVariableBehaviourVarDataOnly
+					continue Loop
+				default:
+					// Invalid digest. Record the expected digest on the event.
 					expectedMeasuredBytes := out.expectedMeasuredBytes(false)
 					h := alg.GetHash().New()
 					h.Write(expectedMeasuredBytes)
 					out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: h.Sum(nil)})
 
 					out.measuredBytes = nil
-					out.measuredTrailingBytes = nil
 
 					break Loop
 				}
@@ -459,7 +452,7 @@ type logChecker struct {
 	expectedPCRValues           map[tcglog.PCRIndex]tcglog.DigestMap
 	efiBootVariableBehaviour    efiBootVariableBehaviour
 	events                      []*checkedEvent
-	seenMeasuredTrailingBytes   bool
+	seenTrailingBytes           bool
 	seenIncorrectDigests        bool
 	seenIncorrectPeImageDigests bool
 }
@@ -483,8 +476,8 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 	}
 
 	ce := checkEvent(event, c)
-	if len(ce.measuredTrailingBytes) > 0 {
-		c.seenMeasuredTrailingBytes = true
+	if len(ce.trailingBytes) > 0 {
+		c.seenTrailingBytes = true
 	}
 	if len(ce.incorrectDigestValues) > 0 {
 		c.seenIncorrectDigests = true
@@ -627,23 +620,25 @@ func run() int {
 		fmt.Printf("This might be a bug in the firmware or bootloader code responsible for performing these measurements.\n\n")
 	}
 
-	if c.seenMeasuredTrailingBytes {
-		if !ignoreMeasuredTrailingBytes {
+	if c.seenTrailingBytes {
+		if !ignoreTrailingBytes {
 			fmt.Printf("*** FAIL ***")
 			failCount++
 		} else {
 			fmt.Printf("- INFO")
 		}
-		fmt.Printf(": The following events have trailing bytes at the end of their event data that was hashed and measured:\n")
+		fmt.Printf(": The following events have trailing bytes at the end of their event data:\n")
 		for _, e := range c.events {
-			if len(e.measuredTrailingBytes) == 0 {
+			if len(e.trailingBytes) == 0 {
 				continue
 			}
 
-			fmt.Printf("\t- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Index, e.PCRIndex, e.EventType, e.measuredTrailingBytes, len(e.measuredTrailingBytes))
+			fmt.Printf("\t- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Index, e.PCRIndex, e.EventType, e.trailingBytes, len(e.trailingBytes))
 		}
 		fmt.Printf("These trailing bytes might indicate a bug in the firmware or bootloader code responsible for performing the " +
-			"measurements, and should be taken in to account when pre-computing digests for these events.\n\n")
+			"measurements. If the corresponding digests are not consistent with the event data, this might mean that the " +
+			"trailing bytes formed part of the measurement and should be taken in to account when pre-computing digests for " +
+			"these events.\n\n")
 	}
 
 	if c.seenIncorrectDigests {

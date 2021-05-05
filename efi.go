@@ -323,9 +323,10 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 
 // EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT events.
 type EFIGPTData struct {
-	data       []byte
-	Hdr        efi.PartitionTableHeader
-	Partitions []*efi.PartitionEntry
+	data          []byte
+	consumedBytes int
+	Hdr           efi.PartitionTableHeader
+	Partitions    []*efi.PartitionEntry
 }
 
 func (e *EFIGPTData) String() string {
@@ -343,6 +344,12 @@ func (e *EFIGPTData) String() string {
 
 func (e *EFIGPTData) Bytes() []byte {
 	return e.data
+}
+
+// TrailingBytes returns any trailing bytes that were not used during decoding. This indicates a bug in the software responsible
+// for the event.
+func (e *EFIGPTData) TrailingBytes() []byte {
+	return e.data[e.consumedBytes:]
 }
 
 func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
@@ -373,6 +380,8 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 		return nil, xerrors.Errorf("cannot read partition entries: %w", err)
 	}
 	d.Partitions = partitions
+
+	d.consumedBytes = int(r.Size()) - r.Len()
 
 	return d, nil
 }
