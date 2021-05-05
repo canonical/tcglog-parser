@@ -81,7 +81,7 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
-		Data:      decodeEventData(header.PCRIndex, header.EventType, digests, event, p.options),
+		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
 	}, nil
 }
 
@@ -171,7 +171,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
-		Data:      decodeEventData(header.PCRIndex, header.EventType, digests, event, p.options),
+		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
 	}, nil
 }
 

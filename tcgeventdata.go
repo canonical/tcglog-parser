@@ -285,7 +285,7 @@ func (e *SeparatorEventData) Bytes() []byte {
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
-func decodeEventDataSeparator(digests DigestMap, data []byte) *SeparatorEventData {
+func decodeEventDataSeparator(data []byte, digests DigestMap) *SeparatorEventData {
 	errorValue := make([]byte, 4)
 	binary.LittleEndian.PutUint32(errorValue, SeparatorEventErrorValue)
 
@@ -301,12 +301,12 @@ func decodeEventDataSeparator(digests DigestMap, data []byte) *SeparatorEventDat
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func decodeEventDataTCG(pcrIndex PCRIndex, eventType EventType, digests DigestMap, data []byte) (out EventData, err error) {
+func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap) (out EventData, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		out, err = decodeEventDataNoAction(data)
 	case EventTypeSeparator:
-		return decodeEventDataSeparator(digests, data), nil
+		return decodeEventDataSeparator(data, digests), nil
 	case EventTypeAction, EventTypeEFIAction:
 		return decodeEventDataAction(data), nil
 	case EventTypeCompactHash:

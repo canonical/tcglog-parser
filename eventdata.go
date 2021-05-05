@@ -53,21 +53,21 @@ func (d opaqueEventData) Bytes() []byte {
 	return []byte(d)
 }
 
-func decodeEventData(pcrIndex PCRIndex, eventType EventType, digests DigestMap, data []byte, options *LogOptions) EventData {
+func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) EventData {
 	if options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9) {
-		if out := decodeEventDataGRUB(pcrIndex, eventType, data); out != nil {
+		if out := decodeEventDataGRUB(data, pcrIndex, eventType); out != nil {
 			return out
 		}
 	}
 
 	if options.EnableSystemdEFIStub && pcrIndex == options.SystemdEFIStubPCR {
-		if out := decodeEventDataSystemdEFIStub(eventType, data); out != nil {
+		if out := decodeEventDataSystemdEFIStub(data, eventType); out != nil {
 			return out
 		}
 
 	}
 
-	out, err := decodeEventDataTCG(pcrIndex, eventType, digests, data)
+	out, err := decodeEventDataTCG(data, pcrIndex, eventType, digests)
 	if err != nil {
 		return &invalidEventData{data: data, err: err}
 	}
