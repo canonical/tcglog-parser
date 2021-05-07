@@ -71,7 +71,16 @@ const (
 )
 
 const (
-	SeparatorEventNormalValue uint32 = 0
-	SeparatorEventErrorValue uint32 = 1
+	SeparatorEventNormalValue    uint32 = 0
+	SeparatorEventErrorValue     uint32 = 1
 	SeparatorEventAltNormalValue uint32 = math.MaxUint32
+)
+
+var (
+	EFICallingEFIApplicationEvent       EventData = asciiStringEventData("Calling EFI Application from Boot Option")
+	EFIReturningFromEFIApplicationEvent EventData = asciiStringEventData("Returning from EFI Application from Boot Option")
+	EFIExitBootServicesInvocationEvent  EventData = asciiStringEventData("Exit Boot Services Invocation")
+	EFIExitBootServicesFailedEvent      EventData = asciiStringEventData("Exit Boot Services Returned with Failure")
+	EFIExitBootServicesSucceededEvent   EventData = asciiStringEventData("Exit Boot Services Returned with Success")
+	FirmwareDebuggerEvent               EventData = asciiStringEventData("UEFI Debug Mode")
 )
