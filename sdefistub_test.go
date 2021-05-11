@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestComputeSystemdEFIStubEventDataDigest(t *testing.T) {
+func TestComputeSystemdEFIStubCommandlineDigest(t *testing.T) {
 	for _, data := range []struct {
 		desc     string
 		alg      crypto.Hash
@@ -26,7 +26,7 @@ func TestComputeSystemdEFIStubEventDataDigest(t *testing.T) {
 		},
 	} {
 		t.Run(data.desc, func(t *testing.T) {
-			digest := ComputeSystemdEFIStubEventDataDigest(data.alg, data.str)
+			digest := ComputeSystemdEFIStubCommandlineDigest(data.alg, data.str)
 			if !bytes.Equal(digest, data.expected) {
 				t.Errorf("Unexpected digest")
 			}

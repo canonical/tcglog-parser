@@ -10,24 +10,24 @@ import (
 	"encoding/binary"
 )
 
-// SystemdEFIStubEventData represents the data associated with a kernel commandline measured by the systemd EFI stub linux loader.
-type SystemdEFIStubEventData struct {
+// SystemdEFIStubCommandline represents the data associated with a kernel commandline measured by the systemd EFI stub linux loader.
+type SystemdEFIStubCommandline struct {
 	data []byte
 	Str  string
 }
 
-func (e *SystemdEFIStubEventData) String() string {
+func (e *SystemdEFIStubCommandline) String() string {
 	return e.Str
 }
 
-func (e *SystemdEFIStubEventData) Bytes() []byte {
+func (e *SystemdEFIStubCommandline) Bytes() []byte {
 	return e.data
 }
 
-// ComputeSystemdEFIStubEventDataDigest computes the digest measured by the systemd EFI stub linux loader for the specified
+// ComputeSystemdEFIStubCommandlineDigest computes the digest measured by the systemd EFI stub linux loader for the specified
 // kernel commandline. Note that it assumes that the calling bootloader includes a UTF-16 NULL terminator at the end of
 // LoadOptions and sets LoadOptionsSize to StrLen(LoadOptions)+1.
-func ComputeSystemdEFIStubEventDataDigest(alg crypto.Hash, commandline string) []byte {
+func ComputeSystemdEFIStubCommandlineDigest(alg crypto.Hash, commandline string) []byte {
 	h := alg.New()
 
 	// Both GRUB's chainloader and systemd's EFI bootloader include a UTF-16 NULL terminator at the end of LoadOptions and
@@ -49,5 +49,5 @@ func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) EventData {
 	utf16Str := make([]uint16, len(data)/2)
 	binary.Read(reader, binary.LittleEndian, &utf16Str)
 
-	return &SystemdEFIStubEventData{data: data, Str: convertUtf16ToString(utf16Str)}
+	return &SystemdEFIStubCommandline{data: data, Str: convertUtf16ToString(utf16Str)}
 }
