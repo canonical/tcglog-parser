@@ -95,7 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	for _, event := range log.Events {
+	for i, event := range log.Events {
 		if !shouldDisplayEvent(event) {
 			continue
 		}
@@ -133,13 +133,13 @@ func main() {
 		fmt.Println(builder.String())
 
 		if extractDataPrefix != "" {
-			ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractDataPrefix, event.PCRIndex, event.Index), event.Data.Bytes(), 0644)
+			ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractDataPrefix, event.PCRIndex, i), event.Data.Bytes(), 0644)
 		}
 
 		if extractVarDataPrefix != "" {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractVarDataPrefix, event.PCRIndex, event.Index), varData.VariableData, 0644)
+				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractVarDataPrefix, event.PCRIndex, i), varData.VariableData, 0644)
 			}
 		}
 	}

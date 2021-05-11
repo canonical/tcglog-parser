@@ -275,6 +275,7 @@ type incorrectDigestValue struct {
 
 type checkedEvent struct {
 	*tcglog.Event
+	index		        uint
 	trailingBytes           []byte
 	incorrectDigestValues   []incorrectDigestValue
 	peImageDigestType       peImageDigestType
@@ -419,6 +420,7 @@ Outer:
 }
 
 type logChecker struct {
+	indexTracker		    map[tcglog.PCRIndex]uint
 	expectedPCRValues           map[tcglog.PCRIndex]tcglog.DigestMap
 	efiBootVariableBehaviour    efiBootVariableBehaviour
 	events                      []*checkedEvent
@@ -457,10 +459,13 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 	}
 
 	c.simulatePCRExtend(ce)
+	ce.index = c.indexTracker[ce.PCRIndex]
 	c.events = append(c.events, ce)
+	c.indexTracker[ce.PCRIndex] = ce.index + 1
 }
 
 func (c *logChecker) run(log *tcglog.Log) {
+	c.indexTracker = make(map[tcglog.PCRIndex]uint)
 	c.expectedPCRValues = make(map[tcglog.PCRIndex]tcglog.DigestMap)
 	for _, pcr := range pcrs {
 		c.expectedPCRValues[pcr] = tcglog.DigestMap{}
@@ -574,7 +579,7 @@ func run() int {
 			continue
 		}
 
-		dataDecoderErrs = append(dataDecoderErrs, fmt.Sprintf("\t- Event %d in PCR %d (type: %s): %v\n", e.Index, e.PCRIndex, e.EventType, err))
+		dataDecoderErrs = append(dataDecoderErrs, fmt.Sprintf("\t- Event %d in PCR %d (type: %s): %v\n", e.index, e.PCRIndex, e.EventType, err))
 	}
 	if len(dataDecoderErrs) > 0 {
 		if !ignoreDataDecodeErrors {
@@ -603,7 +608,7 @@ func run() int {
 				continue
 			}
 
-			fmt.Printf("\t- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.Index, e.PCRIndex, e.EventType, e.trailingBytes, len(e.trailingBytes))
+			fmt.Printf("\t- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.index, e.PCRIndex, e.EventType, e.trailingBytes, len(e.trailingBytes))
 		}
 		fmt.Printf("These trailing bytes might indicate a bug in the firmware or bootloader code responsible for performing the " +
 			"measurements. If the corresponding digests are not consistent with the event data, this might mean that the " +
@@ -620,7 +625,7 @@ func run() int {
 			}
 
 			for _, d := range e.incorrectDigestValues {
-				fmt.Printf("\t- Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, got: %x\n", e.Index, e.PCRIndex, e.EventType, d.algorithm, d.expected, e.Digests[d.algorithm])
+				fmt.Printf("\t- Event %d in PCR %d (type: %s, alg: %s) - expected (from data): %x, got: %x\n", e.index, e.PCRIndex, e.EventType, d.algorithm, d.expected, e.Digests[d.algorithm])
 			}
 		}
 		fmt.Printf("This is unexpected for these event types, and might indicate a bug in the firmware of bootloader code responsible " +
@@ -641,7 +646,7 @@ func run() int {
 				fmt.Printf("*** FAIL ***: The following EV_EFI_BOOT_SERVICES_APPLICATION events contain file digests rather than PE image digests:\n")
 			}
 
-			fmt.Printf("\t- Event %d in PCR 4 (%s)\n", e.Index, e.peImagePath)
+			fmt.Printf("\t- Event %d in PCR 4 (%s)\n", e.index, e.peImagePath)
 		}
 		if seenFileDigest {
 			fmt.Printf("The presence of file digests rather than PE image digests might be because the measuring bootloader " +
@@ -660,10 +665,10 @@ func run() int {
 			}
 
 			if e.peImageDigestType == peImageDigestTypeUnknown {
-				fmt.Printf("\t- Event %d in PCR 4 has digests that don't correspond to any PE images\n", e.Index)
+				fmt.Printf("\t- Event %d in PCR 4 has digests that don't correspond to any PE images\n", e.index)
 			} else {
 				for _, alg := range e.incorrectPeImageDigests {
-					fmt.Printf("\t- Event %d in PCR 4 (%s) has an invalid digest for alg %s (got: %x) [almost certainly a firmware bug]\n", e.Index, e.peImagePath, alg, e.Digests[alg])
+					fmt.Printf("\t- Event %d in PCR 4 (%s) has an invalid digest for alg %s (got: %x) [almost certainly a firmware bug]\n", e.index, e.peImagePath, alg, e.Digests[alg])
 				}
 			}
 		}

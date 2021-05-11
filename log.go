@@ -238,17 +238,6 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 		algorithms = AlgorithmIdList{AlgorithmSha1}
 	}
 
-	indexTracker := make(map[PCRIndex]uint)
-	populateEventIndex := func(event *Event) {
-		var index uint
-		if i, ok := indexTracker[event.PCRIndex]; ok {
-			index = i
-		}
-		event.Index = index
-		indexTracker[event.PCRIndex] = index + 1
-	}
-
-	populateEventIndex(event)
 	if isSpecIdEvent(event) {
 		fixupSpecIdEvent(event, algorithms)
 	}
@@ -263,7 +252,6 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 		case err != nil:
 			return log, err
 		default:
-			populateEventIndex(event)
 			log.Events = append(log.Events, event)
 		}
 	}

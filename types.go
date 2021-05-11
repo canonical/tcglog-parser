@@ -173,7 +173,6 @@ func (l AlgorithmIdList) Contains(a AlgorithmId) bool {
 
 // Event corresponds to a single event in an event log.
 type Event struct {
-	Index     uint      // Sequential index of event in the log
 	PCRIndex  PCRIndex  // PCR index to which this event was measured
 	EventType EventType // The type of this event
 	Digests   DigestMap // The digests corresponding to this event for the supported algorithms
