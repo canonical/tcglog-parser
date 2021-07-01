@@ -77,10 +77,10 @@ const (
 )
 
 var (
-	EFICallingEFIApplicationEvent       EventData = asciiStringEventData("Calling EFI Application from Boot Option")
-	EFIReturningFromEFIApplicationEvent EventData = asciiStringEventData("Returning from EFI Application from Boot Option")
-	EFIExitBootServicesInvocationEvent  EventData = asciiStringEventData("Exit Boot Services Invocation")
-	EFIExitBootServicesFailedEvent      EventData = asciiStringEventData("Exit Boot Services Returned with Failure")
-	EFIExitBootServicesSucceededEvent   EventData = asciiStringEventData("Exit Boot Services Returned with Success")
-	FirmwareDebuggerEvent               EventData = asciiStringEventData("UEFI Debug Mode")
+	EFICallingEFIApplicationEvent       DecodedEventData = asciiStringEventData("Calling EFI Application from Boot Option")
+	EFIReturningFromEFIApplicationEvent DecodedEventData = asciiStringEventData("Returning from EFI Application from Boot Option")
+	EFIExitBootServicesInvocationEvent  DecodedEventData = asciiStringEventData("Exit Boot Services Invocation")
+	EFIExitBootServicesFailedEvent      DecodedEventData = asciiStringEventData("Exit Boot Services Returned with Failure")
+	EFIExitBootServicesSucceededEvent   DecodedEventData = asciiStringEventData("Exit Boot Services Returned with Success")
+	FirmwareDebuggerEvent               DecodedEventData = asciiStringEventData("UEFI Debug Mode")
 )

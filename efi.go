@@ -120,17 +120,12 @@ func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
 
 // startupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
 type startupLocalityEventData struct {
-	data      []byte
 	signature string
 	locality  uint8
 }
 
 func (e *startupLocalityEventData) String() string {
 	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.locality)
-}
-
-func (e *startupLocalityEventData) Bytes() []byte {
-	return e.data
 }
 
 func (e *startupLocalityEventData) Type() NoActionEventType {
@@ -143,17 +138,16 @@ func (e *startupLocalityEventData) Signature() string {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(r io.Reader, signature string, data []byte) (*startupLocalityEventData, error) {
+func decodeStartupLocalityEvent(r io.Reader, signature string) (*startupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
 		return nil, err
 	}
 
-	return &startupLocalityEventData{data: data, signature: signature, locality: locality}, nil
+	return &startupLocalityEventData{signature: signature, locality: locality}, nil
 }
 
 type bimReferenceManifestEventData struct {
-	data      []byte
 	signature string
 	vendorId  uint32
 	guid      efi.GUID
@@ -161,10 +155,6 @@ type bimReferenceManifestEventData struct {
 
 func (e *bimReferenceManifestEventData) String() string {
 	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.vendorId, &e.guid)
-}
-
-func (e *bimReferenceManifestEventData) Bytes() []byte {
-	return e.data
 }
 
 func (e *bimReferenceManifestEventData) Type() NoActionEventType {
@@ -179,7 +169,7 @@ func (e *bimReferenceManifestEventData) Signature() string {
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte) (*bimReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(r io.Reader, signature string) (*bimReferenceManifestEventData, error) {
 	var d struct {
 		VendorId uint32
 		Guid     efi.GUID
@@ -188,25 +178,19 @@ func decodeBIMReferenceManifestEvent(r io.Reader, signature string, data []byte)
 		return nil, err
 	}
 
-	return &bimReferenceManifestEventData{data: data, signature: signature, vendorId: d.VendorId, guid: d.Guid}, nil
+	return &bimReferenceManifestEventData{signature: signature, vendorId: d.VendorId, guid: d.Guid}, nil
 }
 
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
 // EFI variable.
 type EFIVariableData struct {
-	data          []byte
-	consumedBytes int
-	VariableName  efi.GUID
-	UnicodeName   string
-	VariableData  []byte
+	VariableName efi.GUID
+	UnicodeName  string
+	VariableData []byte
 }
 
 func (e *EFIVariableData) String() string {
 	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\" }", e.VariableName, e.UnicodeName)
-}
-
-func (e *EFIVariableData) Bytes() []byte {
-	return e.data
 }
 
 // ComputeEFIVariableDataDigest computes the EFI_VARIABLE_DATA digest associated with the supplied
@@ -221,20 +205,12 @@ func ComputeEFIVariableDataDigest(alg crypto.Hash, name string, guid efi.GUID, d
 	return h.Sum(nil)
 }
 
-// TrailingBytes returns any trailing bytes that were not used during decoding. This indicates a bug in the software responsible
-// for the event. See https://github.com/rhboot/shim/commit/7e4d3f1c8c730a5d3f40729cb285b5d8c7b241af and
-// https://github.com/rhboot/shim/commit/8a27a4809a6a2b40fb6a4049071bf96d6ad71b50 for the types of bugs that might cause this. Note
-// that trailing bytes that are measured must be taken in to account when precomputing digests for these event types.
-func (e *EFIVariableData) TrailingBytes() []byte {
-	return e.data[e.consumedBytes:]
-}
-
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.6 "Measuring UEFI Variables")
 func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableData, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIVariableData{data: data}
+	d := &EFIVariableData{}
 
 	variableName, err := efi.ReadGUID(r)
 	if err != nil {
@@ -263,13 +239,10 @@ func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableD
 		return nil, xerrors.Errorf("cannot read variable data: %w", err)
 	}
 
-	d.consumedBytes = int(r.Size()) - r.Len()
-
 	return d, nil
 }
 
 type EFIImageLoadEvent struct {
-	data             []byte
 	LocationInMemory efi.PhysicalAddress
 	LengthInMemory   uint64
 	LinkTimeAddress  uint64
@@ -279,10 +252,6 @@ type EFIImageLoadEvent struct {
 func (e *EFIImageLoadEvent) String() string {
 	return fmt.Sprintf("UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x%016x, ImageLengthInMemory: %d, "+
 		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.LocationInMemory, e.LengthInMemory, e.LinkTimeAddress, e.DevicePath)
-}
-
-func (e *EFIImageLoadEvent) Bytes() []byte {
-	return e.data
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
@@ -307,7 +276,6 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 	}
 
 	return &EFIImageLoadEvent{
-		data:             data,
 		LocationInMemory: e.LocationInMemory,
 		LengthInMemory:   e.LengthInMemory,
 		LinkTimeAddress:  e.LinkTimeAddress,
@@ -316,10 +284,8 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 
 // EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT events.
 type EFIGPTData struct {
-	data          []byte
-	consumedBytes int
-	Hdr           efi.PartitionTableHeader
-	Partitions    []*efi.PartitionEntry
+	Hdr        efi.PartitionTableHeader
+	Partitions []*efi.PartitionEntry
 }
 
 func (e *EFIGPTData) String() string {
@@ -335,20 +301,10 @@ func (e *EFIGPTData) String() string {
 	return builder.String()
 }
 
-func (e *EFIGPTData) Bytes() []byte {
-	return e.data
-}
-
-// TrailingBytes returns any trailing bytes that were not used during decoding. This indicates a bug in the software responsible
-// for the event.
-func (e *EFIGPTData) TrailingBytes() []byte {
-	return e.data[e.consumedBytes:]
-}
-
 func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIGPTData{data: data}
+	d := &EFIGPTData{}
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader
 	hdr, err := efi.ReadPartitionTableHeader(r)
@@ -373,8 +329,6 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 		return nil, xerrors.Errorf("cannot read partition entries: %w", err)
 	}
 	d.Partitions = partitions
-
-	d.consumedBytes = int(r.Size()) - r.Len()
 
 	return d, nil
 }

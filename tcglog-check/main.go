@@ -96,8 +96,6 @@ func init() {
 		"either the full UEFI_VARIABLE_DATA structure (full) or the variable data only (data-only)")
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
-	flag.BoolVar(&ignoreTrailingBytes, "ignore-trailing-bytes", false,
-		"Don't exit with an error if any event data contains trailing bytes")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
 	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests for "+
 		"EV_EFI_BOOT_SERVICES_APPLICATION events associated with PE images are PE image digests rather than "+
@@ -275,8 +273,7 @@ type incorrectDigestValue struct {
 
 type checkedEvent struct {
 	*tcglog.Event
-	index		        uint
-	trailingBytes           []byte
+	index                   uint
 	incorrectDigestValues   []incorrectDigestValue
 	peImageDigestType       peImageDigestType
 	peImagePath             string
@@ -291,7 +288,7 @@ func (e *checkedEvent) extendsPCR() bool {
 }
 
 func (e *checkedEvent) dataDecoderErr() error {
-	if err, isErr := e.Data.(error); isErr {
+	if err, isErr := e.Data.Decoded.(error); isErr {
 		return err
 	}
 	return nil
@@ -304,19 +301,19 @@ func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQui
 
 	switch e.EventType {
 	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
-		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
+		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes)
 	case tcglog.EventTypeSeparator:
 		var value uint32
-		if e.Data.(*tcglog.SeparatorEventData).IsError {
+		if e.Data.Decoded.(*tcglog.SeparatorEventData).IsError {
 			value = tcglog.SeparatorEventErrorValue
 		} else {
-			value = binary.LittleEndian.Uint32(e.Data.Bytes())
+			value = binary.LittleEndian.Uint32(e.Data.Bytes)
 		}
 		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
 		return tcglog.ComputeStringEventDigest(alg.GetHash(), e.Data.String())
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
-		data := e.Data.(*tcglog.EFIVariableData)
+		data := e.Data.Decoded.(*tcglog.EFIVariableData)
 		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
 			h := alg.GetHash().New()
 			h.Write(data.VariableData)
@@ -324,13 +321,13 @@ func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQui
 		}
 		return tcglog.ComputeEFIVariableDataDigest(alg.GetHash(), data.UnicodeName, data.VariableName, data.VariableData)
 	case tcglog.EventTypeEFIGPTEvent:
-		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
+		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes)
 	case tcglog.EventTypeIPL:
-		switch d := e.Data.(type) {
+		switch d := e.Data.Decoded.(type) {
 		case *tcglog.GrubStringEventData:
 			return tcglog.ComputeStringEventDigest(alg.GetHash(), d.Str)
-		case *tcglog.SystemdEFIStubEventData:
-			return tcglog.ComputeSystemdEFIStubEventDataDigest(alg.GetHash(), d.String())
+		case tcglog.SystemdEFIStubCommandline:
+			return tcglog.ComputeSystemdEFIStubCommandlineDigest(alg.GetHash(), d.String())
 		}
 	}
 
@@ -339,10 +336,6 @@ func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQui
 
 func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 	out = &checkedEvent{Event: event}
-
-	if i, ok := out.Data.(interface{ TrailingBytes() []byte }); ok {
-		out.trailingBytes = i.TrailingBytes()
-	}
 
 Outer:
 	for alg, digest := range out.Digests {
@@ -420,11 +413,10 @@ Outer:
 }
 
 type logChecker struct {
-	indexTracker		    map[tcglog.PCRIndex]uint
+	indexTracker                map[tcglog.PCRIndex]uint
 	expectedPCRValues           map[tcglog.PCRIndex]tcglog.DigestMap
 	efiBootVariableBehaviour    efiBootVariableBehaviour
 	events                      []*checkedEvent
-	seenTrailingBytes           bool
 	seenIncorrectDigests        bool
 	seenIncorrectPeImageDigests bool
 }
@@ -448,9 +440,6 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 	}
 
 	ce := checkEvent(event, c)
-	if len(ce.trailingBytes) > 0 {
-		c.seenTrailingBytes = true
-	}
 	if len(ce.incorrectDigestValues) > 0 {
 		c.seenIncorrectDigests = true
 	}
@@ -593,27 +582,6 @@ func run() int {
 			fmt.Printf("%s", err)
 		}
 		fmt.Printf("This might be a bug in the firmware or bootloader code responsible for performing these measurements.\n\n")
-	}
-
-	if c.seenTrailingBytes {
-		if !ignoreTrailingBytes {
-			fmt.Printf("*** FAIL ***")
-			failCount++
-		} else {
-			fmt.Printf("- INFO")
-		}
-		fmt.Printf(": The following events have trailing bytes at the end of their event data:\n")
-		for _, e := range c.events {
-			if len(e.trailingBytes) == 0 {
-				continue
-			}
-
-			fmt.Printf("\t- Event %d in PCR %d (type: %s): %x (%d bytes)\n", e.index, e.PCRIndex, e.EventType, e.trailingBytes, len(e.trailingBytes))
-		}
-		fmt.Printf("These trailing bytes might indicate a bug in the firmware or bootloader code responsible for performing the " +
-			"measurements. If the corresponding digests are not consistent with the event data, this might mean that the " +
-			"trailing bytes formed part of the measurement and should be taken in to account when pre-computing digests for " +
-			"these events.\n\n")
 	}
 
 	if c.seenIncorrectDigests {

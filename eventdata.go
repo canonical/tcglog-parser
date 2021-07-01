@@ -9,30 +9,33 @@ import (
 	"fmt"
 )
 
+type DecodedEventData interface {
+	fmt.Stringer
+}
+
 // EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
 // contents can be inspected programatically.
 //
 // If an error is encountered when decoding the data associated with an event, the event data will implement the error interface
 // which can be used for obtaining information about the decoding error.
-type EventData interface {
-	fmt.Stringer
+type EventData struct {
+	// Bytes is the raw event data bytes as they appear in the event log.
+	Bytes []byte
 
-	// Bytes returns the raw event data bytes as they appear in the event log from which this event data was decoded.
-	Bytes() []byte
+	Decoded DecodedEventData
+}
+
+func (e *EventData) String() string {
+	return e.Decoded.String()
 }
 
 // invalidEventData corresponds to an event data blob that failed to decode correctly.
 type invalidEventData struct {
-	data []byte
-	err  error
+	err error
 }
 
 func (e *invalidEventData) String() string {
 	return fmt.Sprintf("Invalid event data: %v", e.err)
-}
-
-func (e *invalidEventData) Bytes() []byte {
-	return e.data
 }
 
 func (e *invalidEventData) Error() string {
@@ -44,14 +47,10 @@ func (e *invalidEventData) Unwrap() error {
 }
 
 // opaqueEventData is event data whose format is unknown or implementation defined.
-type opaqueEventData []byte
+type opaqueEventData struct{}
 
 func (d opaqueEventData) String() string {
 	return ""
-}
-
-func (d opaqueEventData) Bytes() []byte {
-	return []byte(d)
 }
 
 // ComputeEventDigest computes the digest associated with the supplied event data bytes.
@@ -61,7 +60,7 @@ func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
 	return h.Sum(nil)
 }
 
-func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) EventData {
+func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) DecodedEventData {
 	if options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9) {
 		if out := decodeEventDataGRUB(data, pcrIndex, eventType); out != nil {
 			return out
@@ -77,12 +76,12 @@ func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digest
 
 	out, err := decodeEventDataTCG(data, pcrIndex, eventType, digests)
 	if err != nil {
-		return &invalidEventData{data: data, err: err}
+		return &invalidEventData{err: err}
 	}
 
 	if out != nil {
 		return out
 	}
 
-	return opaqueEventData(data)
+	return opaqueEventData{}
 }
