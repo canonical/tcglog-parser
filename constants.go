@@ -44,13 +44,6 @@ const (
 )
 
 const (
-	AlgorithmSha1   AlgorithmId = 0x0004 // TPM_ALG_SHA1
-	AlgorithmSha256 AlgorithmId = 0x000b // TPM_ALG_SHA256
-	AlgorithmSha384 AlgorithmId = 0x000c // TPM_ALG_SHA384
-	AlgorithmSha512 AlgorithmId = 0x000d // TPM_ALG_SHA512
-)
-
-const (
 	// SpecUnknown indicates that the specification to which the log conforms is unknown because it doesn't
 	// start with a spec ID event.
 	SpecUnknown Spec = iota

@@ -5,11 +5,9 @@
 package tcglog
 
 import (
-	"crypto"
-	_ "crypto/sha1"
-	_ "crypto/sha256"
-	_ "crypto/sha512"
 	"fmt"
+
+	"github.com/canonical/go-tpm2"
 )
 
 // Spec corresponds to the TCG specification that an event log conforms to.
@@ -21,45 +19,11 @@ type PCRIndex uint32
 // EventType corresponds to the type of an event in an event log.
 type EventType uint32
 
-// AlgorithmId corresponds to the algorithm of digests that appear in the log. The values are in sync with those
-// in the TPM Library Specification for the TPM_ALG_ID type.
-// See https://trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf (Table 9)
-type AlgorithmId uint16
-
-func (a AlgorithmId) GetHash() crypto.Hash {
-	switch a {
-	case AlgorithmSha1:
-		return crypto.SHA1
-	case AlgorithmSha256:
-		return crypto.SHA256
-	case AlgorithmSha384:
-		return crypto.SHA384
-	case AlgorithmSha512:
-		return crypto.SHA512
-	default:
-		return 0
-	}
-}
-
-func (a AlgorithmId) supported() bool {
-	return a.GetHash() != crypto.Hash(0)
-}
-
-func (a AlgorithmId) Size() int {
-	return a.GetHash().Size()
-}
-
-func (a AlgorithmId) hash(data []byte) []byte {
-	h := a.GetHash().New()
-	h.Write(data)
-	return h.Sum(nil)
-}
-
 // Digest is the result of hashing some data.
 type Digest []byte
 
 // DigestMap is a map of algorithms to digests.
-type DigestMap map[AlgorithmId]Digest
+type DigestMap map[tpm2.HashAlgorithmId]Digest
 
 func (e EventType) String() string {
 	switch e {
@@ -135,34 +99,10 @@ func (e EventType) Format(s fmt.State, f rune) {
 	}
 }
 
-func (a AlgorithmId) String() string {
-	switch a {
-	case AlgorithmSha1:
-		return "SHA-1"
-	case AlgorithmSha256:
-		return "SHA-256"
-	case AlgorithmSha384:
-		return "SHA-384"
-	case AlgorithmSha512:
-		return "SHA-512"
-	default:
-		return fmt.Sprintf("%04x", uint16(a))
-	}
-}
+// AlgorithmListId is a slice of tpm2.HashAlgorithmId values,
+type AlgorithmIdList []tpm2.HashAlgorithmId
 
-func (a AlgorithmId) Format(s fmt.State, f rune) {
-	switch f {
-	case 's', 'v':
-		fmt.Fprintf(s, "%s", a.String())
-	default:
-		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint16(a))
-	}
-}
-
-// AlgorithmListId is a slice of AlgorithmId values,
-type AlgorithmIdList []AlgorithmId
-
-func (l AlgorithmIdList) Contains(a AlgorithmId) bool {
+func (l AlgorithmIdList) Contains(a tpm2.HashAlgorithmId) bool {
 	for _, alg := range l {
 		if alg == a {
 			return true

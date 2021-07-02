@@ -98,7 +98,7 @@ func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
 		return xerrors.Errorf("cannot read digest algorithm sizes: %w", err)
 	}
 	for _, d := range eventData.DigestSizes {
-		if d.AlgorithmId.supported() && d.AlgorithmId.Size() != int(d.DigestSize) {
+		if d.AlgorithmId.Supported() && d.AlgorithmId.Size() != int(d.DigestSize) {
 			return fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
 		}
 	}

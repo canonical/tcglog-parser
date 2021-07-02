@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/canonical/go-tpm2"
+
 	"golang.org/x/xerrors"
 )
 
@@ -60,12 +62,12 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 		return nil, fmt.Errorf("log entry has an out-of-range PCR index (%d)", header.PCRIndex)
 	}
 
-	digest := make(Digest, AlgorithmSha1.Size())
+	digest := make(Digest, tpm2.HashAlgorithmSHA1.Size())
 	if _, err := p.r.Read(digest); err != nil {
 		return nil, xerrors.Errorf("cannot read SHA-1 digest: %w", eofUnexpected(err))
 	}
 	digests := make(DigestMap)
-	digests[AlgorithmSha1] = digest
+	digests[tpm2.HashAlgorithmSHA1] = digest
 
 	var eventSize uint32
 	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
@@ -118,7 +120,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 	digests := make(DigestMap)
 
 	for i := uint32(0); i < header.Count; i++ {
-		var algorithmId AlgorithmId
+		var algorithmId tpm2.HashAlgorithmId
 		if err := binary.Read(p.r, binary.LittleEndian, &algorithmId); err != nil {
 			return nil, xerrors.Errorf("cannot read algorithm ID: %w", eofUnexpected(err))
 		}
@@ -154,7 +156,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 	}
 
 	for alg, _ := range digests {
-		if alg.supported() {
+		if alg.Supported() {
 			continue
 		}
 		delete(digests, alg)
@@ -187,7 +189,7 @@ func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
 	}
 
 	for _, alg := range algorithms {
-		if alg == AlgorithmSha1 {
+		if alg == tpm2.HashAlgorithmSHA1 {
 			continue
 		}
 
@@ -233,7 +235,7 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 
 	if spec == SpecEFI_2 {
 		for _, s := range digestSizes {
-			if s.AlgorithmId.supported() {
+			if s.AlgorithmId.Supported() {
 				algorithms = append(algorithms, s.AlgorithmId)
 			}
 		}
@@ -241,7 +243,7 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 			options:  options,
 			algSizes: digestSizes}
 	} else {
-		algorithms = AlgorithmIdList{AlgorithmSha1}
+		algorithms = AlgorithmIdList{tpm2.HashAlgorithmSHA1}
 	}
 
 	if isSpecIdEvent(event) {

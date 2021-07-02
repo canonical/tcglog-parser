@@ -13,6 +13,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/canonical/go-tpm2"
+
 	"golang.org/x/xerrors"
 )
 
@@ -31,7 +33,7 @@ func (e invalidSpecIdEventError) Unwrap() error {
 // EFISpecIdEventAlgorithmSize represents a digest algorithm and its length and corresponds to the
 // TCG_EfiSpecIdEventAlgorithmSize type.
 type EFISpecIdEventAlgorithmSize struct {
-	AlgorithmId AlgorithmId
+	AlgorithmId tpm2.HashAlgorithmId
 	DigestSize  uint16
 }
 
@@ -275,12 +277,11 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
 func decodeEventDataSeparator(data []byte, digests DigestMap) *SeparatorEventData {
-	errorValue := make([]byte, 4)
-	binary.LittleEndian.PutUint32(errorValue, SeparatorEventErrorValue)
-
 	var isError bool
 	for alg, digest := range digests {
-		isError = bytes.Equal(digest, alg.hash(errorValue))
+		h := alg.NewHash()
+		binary.Write(h, binary.LittleEndian, SeparatorEventErrorValue)
+		isError = bytes.Equal(digest, h.Sum(nil))
 		break
 	}
 

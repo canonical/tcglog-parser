@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	"github.com/bsiegert/ranges"
+	"github.com/canonical/go-tpm2"
+
 	"github.com/canonical/tcglog-parser"
 )
 
@@ -45,16 +47,16 @@ func (l *PCRArgList) Contains(index tcglog.PCRIndex) bool {
 	return false
 }
 
-func ParseAlgorithm(alg string) (tcglog.AlgorithmId, error) {
+func ParseAlgorithm(alg string) (tpm2.HashAlgorithmId, error) {
 	switch alg {
 	case "sha1":
-		return tcglog.AlgorithmSha1, nil
+		return tpm2.HashAlgorithmSHA1, nil
 	case "sha256":
-		return tcglog.AlgorithmSha256, nil
+		return tpm2.HashAlgorithmSHA256, nil
 	case "sha384":
-		return tcglog.AlgorithmSha384, nil
+		return tpm2.HashAlgorithmSHA384, nil
 	case "sha512":
-		return tcglog.AlgorithmSha512, nil
+		return tpm2.HashAlgorithmSHA512, nil
 	default:
 		return 0, fmt.Errorf("Unrecognized algorithm \"%s\"", alg)
 	}

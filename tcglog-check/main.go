@@ -111,10 +111,10 @@ type peImageData struct {
 	fileHash []byte
 }
 
-var peImageDataCache map[tcglog.AlgorithmId][]*peImageData
+var peImageDataCache map[tpm2.HashAlgorithmId][]*peImageData
 
 func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
-	peImageDataCache = make(map[tcglog.AlgorithmId][]*peImageData)
+	peImageDataCache = make(map[tpm2.HashAlgorithmId][]*peImageData)
 
 	dirs := make([]string, len(bootImageSearchPaths))
 	copy(dirs, bootImageSearchPaths)
@@ -195,7 +195,7 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdL
 
 	var selections tpm2.PCRSelectionList
 	for _, alg := range algorithms {
-		selections = append(selections, tpm2.PCRSelection{Hash: tpm2.HashAlgorithmId(alg), Select: pcrIndexListToSelect(pcrs)})
+		selections = append(selections, tpm2.PCRSelection{Hash: alg, Select: pcrIndexListToSelect(pcrs)})
 	}
 
 	for _, i := range pcrs {
@@ -209,7 +209,7 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdL
 
 	for _, s := range selections {
 		for _, i := range s.Select {
-			result[tcglog.PCRIndex(i)][tcglog.AlgorithmId(s.Hash)] = tcglog.Digest(digests[s.Hash][i])
+			result[tcglog.PCRIndex(i)][s.Hash] = tcglog.Digest(digests[s.Hash][i])
 		}
 	}
 	return result, nil
@@ -230,7 +230,7 @@ func readPCRsFromTPM1Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.Di
 			return nil, fmt.Errorf("cannot read PCR values: unexpected response code (0x%08x)", rc)
 		}
 		result[i] = tcglog.DigestMap{}
-		result[i][tcglog.AlgorithmSha1] = out
+		result[i][tpm2.HashAlgorithmSHA1] = out
 	}
 	return result, nil
 }
@@ -267,7 +267,7 @@ func readPCRs(algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.Dig
 }
 
 type incorrectDigestValue struct {
-	algorithm tcglog.AlgorithmId
+	algorithm tpm2.HashAlgorithmId
 	expected  tcglog.Digest
 }
 
@@ -294,7 +294,7 @@ func (e *checkedEvent) dataDecoderErr() error {
 	return nil
 }
 
-func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQuirk bool) []byte {
+func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQuirk bool) []byte {
 	if err := e.dataDecoderErr(); err != nil {
 		return nil
 	}
