@@ -156,11 +156,11 @@ var (
 	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
 )
 
-// asciiStringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides a hint
-// as to what was measured as opposed to representing what was measured).
-type asciiStringEventData string
+// StringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides
+// a hint as to what was measured as opposed to representing what was measured).
+type StringEventData string
 
-func (d asciiStringEventData) String() string {
+func (d StringEventData) String() string {
 	return string(d)
 }
 
@@ -240,12 +240,12 @@ func decodeEventDataNoAction(data []byte) (DecodedEventData, error) {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func decodeEventDataAction(data []byte) asciiStringEventData {
-	return asciiStringEventData(data)
+func decodeEventDataAction(data []byte) StringEventData {
+	return StringEventData(data)
 }
 
-func decodeEventDataHostPlatformSpecificCompactHash(data []byte) asciiStringEventData {
-	return asciiStringEventData(data)
+func decodeEventDataHostPlatformSpecificCompactHash(data []byte) StringEventData {
+	return StringEventData(data)
 }
 
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.

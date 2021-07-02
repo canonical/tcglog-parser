@@ -10,22 +10,26 @@ import (
 	"encoding/binary"
 )
 
-// SystemdEFIStubCommandline represents the data associated with a kernel commandline measured by the systemd EFI stub linux loader.
+// SystemdEFIStubCommandline represents a kernel commandline measured by the
+// systemd EFI stub linux loader.
 type SystemdEFIStubCommandline string
 
 func (e SystemdEFIStubCommandline) String() string {
 	return string(e)
 }
 
-// ComputeSystemdEFIStubCommandlineDigest computes the digest measured by the systemd EFI stub linux loader for the specified
-// kernel commandline. Note that it assumes that the calling bootloader includes a UTF-16 NULL terminator at the end of
-// LoadOptions and sets LoadOptionsSize to StrLen(LoadOptions)+1.
+// ComputeSystemdEFIStubCommandlineDigest computes the digest measured by the systemd EFI stub
+// linux loader for the specified kernel commandline. The commandline is supplied to the stub
+// via the LoadOptions as a UTF-16 or UCS-2 string and is measured as such before being converted
+// to ASCII and passed to the kernel. Note that it assumes that the calling bootloader includes
+// a UTF-16 NULL terminator at the end of LoadOptions and sets LoadOptionsSize to StrLen(LoadOptions)+1.
 func ComputeSystemdEFIStubCommandlineDigest(alg crypto.Hash, commandline string) []byte {
 	h := alg.New()
 
-	// Both GRUB's chainloader and systemd's EFI bootloader include a UTF-16 NULL terminator at the end of LoadOptions and
-	// set LoadOptionsSize to StrLen(LoadOptions)+1. The EFI stub loader measures LoadOptionsSize number of bytes, meaning that
-	// the 2 NULL bytes are measured. Include those here.
+	// Both GRUB's chainloader and systemd's EFI bootloader include a UTF-16 NULL terminator at
+	// the end of LoadOptions and set LoadOptionsSize to StrLen(LoadOptions)+1. The EFI stub loader
+	// measures LoadOptionsSize number of bytes, meaning that the 2 NULL bytes are measured.
+	// Include those here.
 	binary.Write(h, binary.LittleEndian, append(convertStringToUtf16(commandline), 0))
 	return h.Sum(nil)
 }

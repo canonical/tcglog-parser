@@ -311,7 +311,7 @@ func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQui
 		}
 		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
-		return tcglog.ComputeStringEventDigest(alg.GetHash(), e.Data.String())
+		return tcglog.ComputeStringEventDigest(alg.GetHash(), string(e.Data.Decoded.(tcglog.StringEventData)))
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
 		data := e.Data.Decoded.(*tcglog.EFIVariableData)
 		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
@@ -327,7 +327,7 @@ func (e *checkedEvent) expectedDigest(alg tcglog.AlgorithmId, efiBootVariableQui
 		case *tcglog.GrubStringEventData:
 			return tcglog.ComputeStringEventDigest(alg.GetHash(), d.Str)
 		case tcglog.SystemdEFIStubCommandline:
-			return tcglog.ComputeSystemdEFIStubCommandlineDigest(alg.GetHash(), d.String())
+			return tcglog.ComputeSystemdEFIStubCommandlineDigest(alg.GetHash(), string(d))
 		}
 	}
 
@@ -515,7 +515,11 @@ func run() int {
 
 	failCount := 0
 
-	log, err := tcglog.ParseLog(f, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
+	options := tcglog.LogOptions{
+		EnableGrub:           withGrub,
+		EnableSystemdEFIStub: withSdEfiStub,
+		SystemdEFIStubPCR:    tcglog.PCRIndex(sdEfiStubPcr)}
+	log, err := tcglog.ParseLog(f, &options)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log: %v\n", err)
 		return 1

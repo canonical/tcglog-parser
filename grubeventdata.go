@@ -62,7 +62,7 @@ func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) De
 			return nil
 		}
 	case 9:
-		return asciiStringEventData(data)
+		return StringEventData(data)
 	default:
 		panic("unhandled PCR index")
 	}
