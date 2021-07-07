@@ -103,9 +103,24 @@ func main() {
 		var builder bytes.Buffer
 		fmt.Fprintf(&builder, "%2d %x %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
 		if verbose || hexDump {
-			data := event.Data.String()
-			if data != "" {
-				fmt.Fprintf(&builder, " [ %s ]", data)
+			switch {
+			case event.EventType == tcglog.EventTypeEFIVariableBoot:
+				varData, ok := event.Data.Decoded.(*tcglog.EFIVariableData)
+				if ok && varData.UnicodeName != "BootOrder" {
+					opt, err := efi.ReadLoadOption(bytes.NewReader(varData.VariableData))
+					if err != nil {
+						fmt.Fprintf(&builder, " [ Invalid load option for %s: %v ]", varData.UnicodeName, err)
+					} else {
+						fmt.Fprintf(&builder, " [ %s: %s ]", varData.UnicodeName, opt)
+					}
+				} else {
+					fmt.Fprintf(&builder, " [ %s ]", event.Data.String())
+				}
+			default:
+				data := event.Data.String()
+				if data != "" {
+					fmt.Fprintf(&builder, " [ %s ]", data)
+				}
 			}
 		}
 
