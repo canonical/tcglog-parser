@@ -246,7 +246,7 @@ type EFIImageLoadEvent struct {
 	LocationInMemory efi.PhysicalAddress
 	LengthInMemory   uint64
 	LinkTimeAddress  uint64
-	DevicePath       *efi.DevicePathNode
+	DevicePath       efi.DevicePath
 }
 
 func (e *EFIImageLoadEvent) String() string {
@@ -307,7 +307,7 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 	d := &EFIGPTData{}
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader
-	hdr, err := efi.ReadPartitionTableHeader(r)
+	hdr, err := efi.ReadPartitionTableHeader(r, false)
 	if err != nil {
 		return nil, xerrors.Errorf("cannot read partition table header: %w", err)
 	}
