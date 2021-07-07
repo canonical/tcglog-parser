@@ -11,8 +11,8 @@
 		{
 			"checksumSHA1": "PYkGcSDj8nvBbVv+AAh6fRj00N4=",
 			"path": "github.com/canonical/go-efilib",
-			"revision": "29a9c8580566361b7905476942187c0f29363a8c",
-			"revisionTime": "2021-07-07T20:55:54Z",
+			"revision": "b0ba20b1dfaf51dce576373e81cf947717275adc",
+			"revisionTime": "2021-07-07T21:18:54Z",
 			"version": "main",
 			"versionExact": "main"
 		},
