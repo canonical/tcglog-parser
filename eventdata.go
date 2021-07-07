@@ -19,14 +19,21 @@ type DecodedEventData interface {
 // If an error is encountered when decoding the data associated with an event, the event data will implement the error interface
 // which can be used for obtaining information about the decoding error.
 type EventData struct {
-	// Bytes is the raw event data bytes as they appear in the event log.
-	Bytes []byte
+	bytes   []byte
+	decoded DecodedEventData
+}
 
-	Decoded DecodedEventData
+// Bytes is the raw event data bytes as they appear in the event log.
+func (e *EventData) Bytes() []byte {
+	return e.bytes
+}
+
+func (e *EventData) Decoded() DecodedEventData {
+	return e.decoded
 }
 
 func (e *EventData) String() string {
-	return e.Decoded.String()
+	return e.decoded.String()
 }
 
 // invalidEventData corresponds to an event data blob that failed to decode correctly.

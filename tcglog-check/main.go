@@ -288,7 +288,7 @@ func (e *checkedEvent) extendsPCR() bool {
 }
 
 func (e *checkedEvent) dataDecoderErr() error {
-	if err, isErr := e.Data.Decoded.(error); isErr {
+	if err, isErr := e.Data.Decoded().(error); isErr {
 		return err
 	}
 	return nil
@@ -301,19 +301,19 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 
 	switch e.EventType {
 	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
-		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes)
+		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
 	case tcglog.EventTypeSeparator:
 		var value uint32
-		if e.Data.Decoded.(*tcglog.SeparatorEventData).IsError {
+		if e.Data.Decoded().(*tcglog.SeparatorEventData).IsError {
 			value = tcglog.SeparatorEventErrorValue
 		} else {
-			value = binary.LittleEndian.Uint32(e.Data.Bytes)
+			value = binary.LittleEndian.Uint32(e.Data.Bytes())
 		}
 		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
-		return tcglog.ComputeStringEventDigest(alg.GetHash(), string(e.Data.Decoded.(tcglog.StringEventData)))
+		return tcglog.ComputeStringEventDigest(alg.GetHash(), string(e.Data.Decoded().(tcglog.StringEventData)))
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
-		data := e.Data.Decoded.(*tcglog.EFIVariableData)
+		data := e.Data.Decoded().(*tcglog.EFIVariableData)
 		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
 			h := alg.GetHash().New()
 			h.Write(data.VariableData)
@@ -321,9 +321,9 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 		}
 		return tcglog.ComputeEFIVariableDataDigest(alg.GetHash(), data.UnicodeName, data.VariableName, data.VariableData)
 	case tcglog.EventTypeEFIGPTEvent:
-		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes)
+		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
 	case tcglog.EventTypeIPL:
-		switch d := e.Data.Decoded.(type) {
+		switch d := e.Data.Decoded().(type) {
 		case *tcglog.GrubStringEventData:
 			return tcglog.ComputeStringEventDigest(alg.GetHash(), d.Str)
 		case tcglog.SystemdEFIStubCommandline:

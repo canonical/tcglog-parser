@@ -84,8 +84,8 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 		EventType: header.EventType,
 		Digests:   digests,
 		Data: &EventData{
-			Bytes:   event,
-			Decoded: decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
+			bytes:   event,
+			decoded: decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
 		},
 	}, nil
 }
@@ -177,14 +177,14 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 		EventType: header.EventType,
 		Digests:   digests,
 		Data: &EventData{
-			Bytes:   event,
-			Decoded: decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
+			bytes:   event,
+			decoded: decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
 		},
 	}, nil
 }
 
 func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
-	if event.Data.Decoded.(*SpecIdEvent).Spec != SpecEFI_2 {
+	if event.Data.Decoded().(*SpecIdEvent).Spec != SpecEFI_2 {
 		return
 	}
 
@@ -202,7 +202,7 @@ func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
 }
 
 func isSpecIdEvent(event *Event) (out bool) {
-	_, out = event.Data.Decoded.(*SpecIdEvent)
+	_, out = event.Data.Decoded().(*SpecIdEvent)
 	return
 }
 
@@ -225,7 +225,7 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 	var spec Spec = SpecUnknown
 	var digestSizes []EFISpecIdEventAlgorithmSize
 
-	switch d := event.Data.Decoded.(type) {
+	switch d := event.Data.Decoded().(type) {
 	case *SpecIdEvent:
 		spec = d.Spec
 		digestSizes = d.DigestSizes
