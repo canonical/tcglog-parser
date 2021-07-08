@@ -76,12 +76,11 @@ var (
 	tpmPath       string
 	pcrs          = internal.PCRArgList{0, 1, 2, 3, 4, 5, 6, 7}
 
-	efiBootVarBehaviour    efiBootVariableBehaviourArg
-	ignoreDataDecodeErrors bool
-	ignoreTrailingBytes    bool
-	requiredAlgs           requiredAlgsArg
-	requirePeImageDigests  bool
-	bootImageSearchPaths   = bootImageSearchPathsArg{"/boot", "/cdrom/EFI", "/cdrom/casper"}
+	ignoreIncorrectEfiBootvar bool
+	ignoreDataDecodeErrors    bool
+	requiredAlgs              requiredAlgsArg
+	requirePeImageDigests     bool
+	bootImageSearchPaths      = bootImageSearchPathsArg{"/boot", "/cdrom/EFI", "/cdrom/casper"}
 )
 
 func init() {
@@ -92,8 +91,9 @@ func init() {
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
 
-	flag.Var(&efiBootVarBehaviour, "efi-bootvar-behaviour", "Require that EV_EFI_VARIABLE_BOOT events are associated with "+
-		"either the full UEFI_VARIABLE_DATA structure (full) or the variable data only (data-only)")
+	flag.BoolVar(&ignoreIncorrectEfiBootvar, "ignore-incorrect-efi-bootvar", false,
+		"Don't exit with an error if the EV_EFI_VARIABLE_BOOT events don't contain the entire corresponding "+
+			"UEFI_VARIABLE_DATA structure, but instead only contain the variable payload")
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
@@ -173,8 +173,8 @@ type efiBootVariableBehaviour int
 
 const (
 	efiBootVariableBehaviourUnknown efiBootVariableBehaviour = iota
-	efiBootVariableBehaviourFull
-	efiBootVariableBehaviourVarDataOnly
+	efiBootVariableBehaviourOK
+	efiBootVariableBehaviourIncorrect
 )
 
 type peImageDigestType int
@@ -345,7 +345,7 @@ Outer:
 
 	Inner:
 		for {
-			expectedDigest := out.expectedDigest(alg, efiBootVariableBehaviourTry == efiBootVariableBehaviourVarDataOnly)
+			expectedDigest := out.expectedDigest(alg, efiBootVariableBehaviourTry == efiBootVariableBehaviourIncorrect)
 			if expectedDigest == nil {
 				break Outer
 			}
@@ -356,7 +356,7 @@ Outer:
 				// so record the measurement behaviour.
 				c.efiBootVariableBehaviour = efiBootVariableBehaviourTry
 				if efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
-					c.efiBootVariableBehaviour = efiBootVariableBehaviourFull
+					c.efiBootVariableBehaviour = efiBootVariableBehaviourOK
 				}
 				fallthrough
 			case bytes.Equal(digest, expectedDigest):
@@ -367,7 +367,7 @@ Outer:
 				// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
 				// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data, which
 				// is how EDK2 measures these.
-				efiBootVariableBehaviourTry = efiBootVariableBehaviourVarDataOnly
+				efiBootVariableBehaviourTry = efiBootVariableBehaviourIncorrect
 			default:
 				// Invalid digest. Record the expected digest on the event.
 				out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: expectedDigest})
@@ -550,21 +550,12 @@ func run() int {
 	c := &logChecker{}
 	c.run(log)
 
-	switch efiBootVarBehaviour {
-	case "data-only":
-		if c.efiBootVariableBehaviour == efiBootVariableBehaviourFull {
-			fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events contain measurements of the entire UEFI_VARIABLE_DATA structure rather than just the event data\n\n")
-			failCount++
-		}
-	case "full":
-		if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
-			fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
-			failCount++
-		}
-	default:
-		if c.efiBootVariableBehaviour == efiBootVariableBehaviourVarDataOnly {
-			fmt.Printf("- INFO: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
-		}
+	switch {
+	case c.efiBootVariableBehaviour == efiBootVariableBehaviourIncorrect && ignoreIncorrectEfiBootvar:
+		fmt.Printf("- INFO: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
+	case c.efiBootVariableBehaviour == efiBootVariableBehaviourIncorrect:
+		fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
+		failCount++
 	}
 
 	var dataDecoderErrs []string
