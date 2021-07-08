@@ -19,25 +19,12 @@ import (
 	"github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
+
+	"golang.org/x/xerrors"
+
 	"github.com/canonical/tcglog-parser"
 	"github.com/canonical/tcglog-parser/internal"
 )
-
-type efiBootVariableBehaviourArg string
-
-func (a *efiBootVariableBehaviourArg) String() string {
-	return string(*a)
-}
-
-func (a *efiBootVariableBehaviourArg) Set(value string) error {
-	switch value {
-	case "full", "data-only":
-	default:
-		return errors.New("invalid value (must be \"full\" or \"data-only\"")
-	}
-	*a = efiBootVariableBehaviourArg(value)
-	return nil
-}
 
 type requiredAlgsArg tcglog.AlgorithmIdList
 
@@ -167,6 +154,8 @@ func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
 			}
 		}()
 	}
+
+	fmt.Println("")
 }
 
 type efiBootVariableBehaviour int
@@ -471,13 +460,12 @@ func (c *logChecker) run(log *tcglog.Log) {
 	}
 }
 
-func run() int {
+func run() error {
 	flag.Parse()
 
 	args := flag.Args()
 	if len(args) > 1 {
-		fmt.Fprintf(os.Stderr, "Too many arguments\n")
-		return 1
+		return errors.New("too many arguments")
 	}
 
 	logPath := ""
@@ -500,8 +488,7 @@ func run() int {
 
 	if logPath == "" {
 		if filepath.Dir(tpmPath) != "/dev" {
-			fmt.Fprintf(os.Stderr, "Expected TPM path to be a device node in /dev")
-			os.Exit(1)
+			return errors.New("expected TPM path to be a device node in /dev")
 		}
 		logPath = fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", filepath.Base(tpmPath))
 	} else {
@@ -510,12 +497,11 @@ func run() int {
 
 	f, err := os.Open(logPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open log: %v\n", err)
-		return 1
+		return xerrors.Errorf("cannot open log: %w", err)
 	}
 	defer f.Close()
 
-	failCount := 0
+	failed := false
 
 	options := tcglog.LogOptions{
 		EnableGrub:           withGrub,
@@ -523,8 +509,7 @@ func run() int {
 		SystemdEFIStubPCR:    tcglog.PCRIndex(sdEfiStubPcr)}
 	log, err := tcglog.ParseLog(f, &options)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse log: %v\n", err)
-		return 1
+		return xerrors.Errorf("cannot parse log: %w", err)
 	}
 
 	missingAlg := false
@@ -535,7 +520,7 @@ func run() int {
 
 		if !missingAlg {
 			missingAlg = true
-			failCount++
+			failed = true
 			fmt.Printf("*** FAIL ***: The log is missing the following required algorithms:\n")
 		}
 
@@ -555,7 +540,7 @@ func run() int {
 		fmt.Printf("- INFO: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
 	case c.efiBootVariableBehaviour == efiBootVariableBehaviourIncorrect:
 		fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
-		failCount++
+		failed = true
 	}
 
 	var dataDecoderErrs []string
@@ -570,7 +555,7 @@ func run() int {
 	if len(dataDecoderErrs) > 0 {
 		if !ignoreDataDecodeErrors {
 			fmt.Printf("*** FAIL ***")
-			failCount++
+			failed = true
 		} else {
 			fmt.Printf("- INFO")
 		}
@@ -582,7 +567,7 @@ func run() int {
 	}
 
 	if c.seenIncorrectDigests {
-		failCount++
+		failed = true
 		fmt.Printf("*** FAIL ***: The following events have digests that aren't consistent with the data recorded with them in the log:\n")
 		for _, e := range c.events {
 			if len(e.incorrectDigestValues) == 0 {
@@ -607,7 +592,7 @@ func run() int {
 
 			if !seenFileDigest {
 				seenFileDigest = true
-				failCount++
+				failed = true
 				fmt.Printf("*** FAIL ***: The following EV_EFI_BOOT_SERVICES_APPLICATION events contain file digests rather than PE image digests:\n")
 			}
 
@@ -622,7 +607,7 @@ func run() int {
 	}
 
 	if c.seenIncorrectPeImageDigests {
-		failCount++
+		failed = true
 		fmt.Printf("*** FAIL ***: The following EV_EFI_BOOT_SERVICES_APPLICATION events contain digests that might be invalid:\n")
 		for _, e := range c.events {
 			if len(e.incorrectPeImageDigests) == 0 {
@@ -653,8 +638,7 @@ func run() int {
 	} else {
 		tpmPCRValues, err := readPCRs(log.Algorithms)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Cannot read PCR values from TPM: %v", err)
-			return 1
+			return xerrors.Errorf("cannot read PCR values from TPM: %w", err)
 		}
 
 		seenLogConsistencyError := false
@@ -666,7 +650,7 @@ func run() int {
 				if !seenLogConsistencyError {
 					seenLogConsistencyError = true
 					fmt.Printf("*** FAIL ***: The log is not consistent with what was measured in to the TPM for some PCRs:\n")
-					failCount++
+					failed = true
 				}
 				fmt.Printf("\t- PCR %d, bank %s - actual value from TPM: %x, expected value from log: %x\n",
 					i, alg, tpmPCRValues[i][alg], c.expectedPCRValues[i][alg])
@@ -680,12 +664,15 @@ func run() int {
 		}
 	}
 
-	if failCount > 0 {
-		return 1
+	if failed {
+		return errors.New("One or more failures were detected!")
 	}
-	return 0
+	return nil
 
 }
 func main() {
-	os.Exit(run())
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 }
