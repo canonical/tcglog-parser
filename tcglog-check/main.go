@@ -66,8 +66,7 @@ var (
 	ignoreIncorrectEfiBootvar bool
 	ignoreDataDecodeErrors    bool
 	requiredAlgs              requiredAlgsArg
-	requirePeImageDigests     bool
-	bootImageSearchPaths      = bootImageSearchPathsArg{"/boot", "/cdrom/EFI", "/cdrom/casper"}
+	bootImageSearchPaths      bootImageSearchPathsArg
 )
 
 func init() {
@@ -84,24 +83,27 @@ func init() {
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
-	flag.BoolVar(&requirePeImageDigests, "require-pe-image-digests", false, "Require that the digests for "+
-		"EV_EFI_BOOT_SERVICES_APPLICATION events associated with PE images are PE image digests rather than "+
-		"file digests")
 	flag.Var(&bootImageSearchPaths, "boot-image-search-path", "Specify the path to search for images executed during "+
 		"boot and measured to PCR 4 with EV_EFI_BOOT_SERVICES_APPLICATION events. Can be specified multiple "+
 		"times. Default is /boot, /cdrom/EFI and /cdrom/casper")
 }
 
-type peImageData struct {
-	path     string
+type peImageHashes struct {
 	peHash   []byte
 	fileHash []byte
 }
 
-var peImageDataCache map[tpm2.HashAlgorithmId][]*peImageData
+var peImageDataCache map[tpm2.HashAlgorithmId]map[string]*peImageHashes
 
 func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
-	peImageDataCache = make(map[tpm2.HashAlgorithmId][]*peImageData)
+	if len(bootImageSearchPaths) == 0 {
+		bootImageSearchPaths = bootImageSearchPathsArg{"/boot", "/cdrom/EFI", "/cdrom/casper"}
+	}
+
+	peImageDataCache = make(map[tpm2.HashAlgorithmId]map[string]*peImageHashes)
+	for _, alg := range algorithms {
+		peImageDataCache[alg] = make(map[string]*peImageHashes)
+	}
 
 	dirs := make([]string, len(bootImageSearchPaths))
 	copy(dirs, bootImageSearchPaths)
@@ -147,7 +149,7 @@ func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
 							}
 							fileHash := h.Sum(nil)
 							fmt.Printf("Computed %v for PE image %s - file:%x, authenticode:%x\n", alg, path, fileHash, peHash)
-							peImageDataCache[alg] = append(peImageDataCache[alg], &peImageData{path: path, peHash: peHash, fileHash: fileHash})
+							peImageDataCache[alg][path] = &peImageHashes{peHash: peHash, fileHash: fileHash}
 						}
 					}()
 				}
@@ -164,14 +166,6 @@ const (
 	efiBootVariableBehaviourUnknown efiBootVariableBehaviour = iota
 	efiBootVariableBehaviourOK
 	efiBootVariableBehaviourIncorrect
-)
-
-type peImageDigestType int
-
-const (
-	peImageDigestTypeUnknown peImageDigestType = iota
-	peImageDigestTypePe
-	peImageDigestTypeFile
 )
 
 func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
@@ -262,11 +256,15 @@ type incorrectDigestValue struct {
 	expected  tcglog.Digest
 }
 
+type incorrectPeImageDigest struct {
+	algorithm tpm2.HashAlgorithmId
+	imagePath string
+}
+
 type checkedEvent struct {
 	*tcglog.Event
 	index                   uint
 	incorrectDigestValues   []incorrectDigestValue
-	peImageDigestType       peImageDigestType
 	peImagePath             string
 	incorrectPeImageDigests tcglog.AlgorithmIdList
 }
@@ -373,31 +371,26 @@ Outer:
 	}
 
 	for alg, digest := range out.Digests {
-		var foundData *peImageData
-		for _, f := range peImageDataCache[alg] {
-			var found bool
-			switch {
-			case out.peImageDigestType == peImageDigestTypePe && bytes.Equal(digest, f.peHash):
-				found = true
-			case out.peImageDigestType == peImageDigestTypeFile && bytes.Equal(digest, f.fileHash):
-				found = true
-			case out.peImageDigestType != peImageDigestTypeUnknown:
-			case bytes.Equal(digest, f.peHash):
-				found = true
-				out.peImageDigestType = peImageDigestTypePe
-			case bytes.Equal(digest, f.fileHash):
-				found = true
-				out.peImageDigestType = peImageDigestTypeFile
+		ok := false
+		if out.peImagePath == "" {
+			for path, hashes := range peImageDataCache[alg] {
+				switch {
+				case bytes.Equal(digest, hashes.peHash):
+					out.peImagePath = path
+					ok = true
+				case bytes.Equal(digest, hashes.fileHash):
+					out.peImagePath = path
+				}
 			}
-			if found {
-				foundData = f
-				break
+		} else {
+			hashes := peImageDataCache[alg][out.peImagePath]
+			if bytes.Equal(digest, hashes.peHash) {
+				ok = true
 			}
 		}
-		if foundData == nil {
+
+		if !ok {
 			out.incorrectPeImageDigests = append(out.incorrectPeImageDigests, alg)
-		} else {
-			out.peImagePath = foundData.path
 		}
 	}
 	return
@@ -583,29 +576,6 @@ func run() error {
 			"digests for these events or by a remote verifier for attestation purposes.\n\n")
 	}
 
-	if requirePeImageDigests {
-		seenFileDigest := false
-		for _, e := range c.events {
-			if e.peImageDigestType != peImageDigestTypeFile {
-				continue
-			}
-
-			if !seenFileDigest {
-				seenFileDigest = true
-				failed = true
-				fmt.Printf("*** FAIL ***: The following EV_EFI_BOOT_SERVICES_APPLICATION events contain file digests rather than PE image digests:\n")
-			}
-
-			fmt.Printf("\t- Event %d in PCR 4 (%s)\n", e.index, e.peImagePath)
-		}
-		if seenFileDigest {
-			fmt.Printf("The presence of file digests rather than PE image digests might be because the measuring bootloader " +
-				"is using the 1.2 version of the TCG EFI Protocol Specification rather than the 2.0 version (which could be " +
-				"because the firmware doesn't support the newer version). It could also be because the measuring bootloader " +
-				"does not pass the appropriate flag to the firmware to indicate that what is being measured is a PE image\n")
-		}
-	}
-
 	if c.seenIncorrectPeImageDigests {
 		failed = true
 		fmt.Printf("*** FAIL ***: The following EV_EFI_BOOT_SERVICES_APPLICATION events contain digests that might be invalid:\n")
@@ -614,18 +584,24 @@ func run() error {
 				continue
 			}
 
-			if e.peImageDigestType == peImageDigestTypeUnknown {
-				fmt.Printf("\t- Event %d in PCR 4 has digests that don't correspond to any PE images\n", e.index)
-			} else {
-				for _, alg := range e.incorrectPeImageDigests {
-					fmt.Printf("\t- Event %d in PCR 4 (%s) has an invalid digest for alg %s (got: %x) [almost certainly a firmware bug]\n", e.index, e.peImagePath, alg, e.Digests[alg])
+			for _, alg := range e.incorrectPeImageDigests {
+				if e.peImagePath == "" {
+					fmt.Printf("\t- Event %d in PCR 4 has a digest for alg %s that doesn't correspond to any PE image (got: %x)\n", e.index, alg, e.Digests[alg])
+				} else if hashes, ok := peImageDataCache[alg][e.peImagePath]; !ok {
+					fmt.Printf("\t- Event %d in PCR 4 (%s) has a digest for alg %s that doesn't correspond to any PE image (got: %x)\n", e.index, e.peImagePath, alg, e.Digests[alg])
+				} else {
+					fmt.Printf("\t- Event %d in PCR 4 (%s) has a digest for alg %s that matches the file digest rather than the PE image digest (got: %x, expected: %x)", e.index, e.peImagePath, alg, e.Digests[alg], hashes.peHash)
 				}
 			}
 		}
-		fmt.Printf("Event digests that don't correspond to any PE image might be caused by a bug in the firmware or bootloader " +
-			"code responsible for performing the measurements, or might be because the image was loaded from a location " +
-			"that is not currently mounted at the expected path (/boot), in which case it is not possible to determine if " +
-			"the digests are correct.\n")
+		fmt.Printf("Event digests that don't correspond to any PE image might be caused by a bug in the firmware or bootloader "+
+			"code responsible for performing the measurements, or might be because the image was loaded from a location "+
+			"that is not currently mounted at an expected path (%s), in which case it is not possible to determine if "+
+			"the digests are correct. The presence of file digests rather than PE image digests might be because the "+
+			"measuring bootloader is using the 1.2 version of the TCG EFI Protocol Specification rather than the 2.0 "+
+			"version (which could be because it is not provided by the firmware). It could also be because the measuring "+
+			"bootloader does not pass the appropriate flag to the firmware to indicate that a PE image is being measured.\n\n",
+			strings.Join(bootImageSearchPaths, ","))
 	}
 
 	if tpmPath == "" {
