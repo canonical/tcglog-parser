@@ -81,7 +81,7 @@ var (
 	ignoreTrailingBytes    bool
 	requiredAlgs           requiredAlgsArg
 	requirePeImageDigests  bool
-	bootImageSearchPaths   = bootImageSearchPathsArg{"/boot"}
+	bootImageSearchPaths   = bootImageSearchPathsArg{"/boot", "/cdrom/EFI", "/cdrom/casper"}
 )
 
 func init() {
@@ -102,7 +102,7 @@ func init() {
 		"file digests")
 	flag.Var(&bootImageSearchPaths, "boot-image-search-path", "Specify the path to search for images executed during "+
 		"boot and measured to PCR 4 with EV_EFI_BOOT_SERVICES_APPLICATION events. Can be specified multiple "+
-		"times. Default is /boot")
+		"times. Default is /boot, /cdrom/EFI and /cdrom/casper")
 }
 
 type peImageData struct {
@@ -158,7 +158,9 @@ func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
 							if _, err := io.Copy(h, f); err != nil {
 								continue
 							}
-							peImageDataCache[alg] = append(peImageDataCache[alg], &peImageData{path: path, peHash: peHash, fileHash: h.Sum(nil)})
+							fileHash := h.Sum(nil)
+							fmt.Printf("Computed %v for PE image %s - file:%x, authenticode:%x\n", alg, path, fileHash, peHash)
+							peImageDataCache[alg] = append(peImageDataCache[alg], &peImageData{path: path, peHash: peHash, fileHash: fileHash})
 						}
 					}()
 				}
