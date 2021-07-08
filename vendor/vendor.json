@@ -9,18 +9,18 @@
 			"revisionTime": "2011-12-21T11:53:36Z"
 		},
 		{
-			"checksumSHA1": "PYkGcSDj8nvBbVv+AAh6fRj00N4=",
+			"checksumSHA1": "Lx9VsnbaBLBCL+L1UPvsULum1dE=",
 			"path": "github.com/canonical/go-efilib",
-			"revision": "b0ba20b1dfaf51dce576373e81cf947717275adc",
-			"revisionTime": "2021-07-07T21:18:54Z",
+			"revision": "7d3f2e29397f8cf8b516710c609fde8bd6fe0550",
+			"revisionTime": "2021-07-08T20:55:05Z",
 			"version": "main",
 			"versionExact": "main"
 		},
 		{
-			"checksumSHA1": "5VzVmTBMuD2uLqk2maC4Pm91bx4=",
+			"checksumSHA1": "w0EI7UJmvC1OS1fFXdr0CAGIFgY=",
 			"path": "github.com/canonical/go-efilib/internal/ioerr",
-			"revision": "29a9c8580566361b7905476942187c0f29363a8c",
-			"revisionTime": "2021-07-07T20:55:54Z",
+			"revision": "7d3f2e29397f8cf8b516710c609fde8bd6fe0550",
+			"revisionTime": "2021-07-08T20:55:05Z",
 			"version": "main",
 			"versionExact": "main"
 		},
@@ -33,10 +33,10 @@
 			"versionExact": "main"
 		},
 		{
-			"checksumSHA1": "9qNJRsvswJJ82w2I+PxeT4bjK+w=",
+			"checksumSHA1": "+TWu/BOvV/iqfrN+Mo8d0p97a2w=",
 			"path": "github.com/canonical/go-efilib/internal/uefi",
-			"revision": "29a9c8580566361b7905476942187c0f29363a8c",
-			"revisionTime": "2021-07-07T20:55:54Z",
+			"revision": "7d3f2e29397f8cf8b516710c609fde8bd6fe0550",
+			"revisionTime": "2021-07-08T20:55:05Z",
 			"version": "main",
 			"versionExact": "main"
 		},
