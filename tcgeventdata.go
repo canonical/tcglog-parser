@@ -33,27 +33,32 @@ const (
 // NoActionEventData provides a mechanism to determine the type of a EV_NO_ACTION event from the decoded EventData.
 type NoActionEventData interface {
 	Type() NoActionEventType
-	Spec() string
+	Signature() string
 }
 
 // StringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides
 // a hint as to what was measured as opposed to representing what was measured).
 type StringEventData string
 
-func (d StringEventData) Bytes() []byte {
-	return []byte(d)
-}
-
 func (d StringEventData) String() string {
 	return string(d)
+}
+
+func (d StringEventData) Write(w io.Writer) error {
+	_, err := io.WriteString(w, string(d))
+	return err
+}
+
+func (d StringEventData) Bytes() []byte {
+	return []byte(d)
 }
 
 // ComputeStringEventDigest computes the digest associated with the supplied string, for
 // events where the digest is a tagged hash of the string. The function assumes that the
 // string is ASCII encoded and measured without a terminating NULL byte.
-func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
+func ComputeStringEventDigest(alg crypto.Hash, str StringEventData) []byte {
 	h := alg.New()
-	io.WriteString(h, str)
+	str.Write(h)
 	return h.Sum(nil)
 }
 
@@ -65,6 +70,11 @@ type unknownNoActionEventData struct {
 
 func (e *unknownNoActionEventData) String() string {
 	return ""
+}
+
+func (e *unknownNoActionEventData) Write(w io.Writer) error {
+	_, err := w.Write(e.rawEventData)
+	return err
 }
 
 func (e *unknownNoActionEventData) Type() NoActionEventType {
@@ -141,6 +151,10 @@ type SeparatorEventData struct {
 	Value uint32 // The separator value measured to the TPM
 }
 
+func NewErrorSeparatorEventData(err []byte) *SeparatorEventData {
+	return &SeparatorEventData{rawEventData: err, Value: SeparatorEventErrorValue}
+}
+
 // IsError indicates that this event was associated with an error condition.
 // The value returned from Bytes() contains an implementation defined indication
 // of the actual error.
@@ -155,7 +169,19 @@ func (e *SeparatorEventData) String() string {
 	return fmt.Sprintf("ERROR: 0x%x", e.rawEventData)
 }
 
-// ComputeSeparatorEventDigest computes the digest associated with a seaprator event. The value
+func (e *SeparatorEventData) Write(w io.Writer) error {
+	switch e.Value {
+	case SeparatorEventNormalValue, SeparatorEventAltNormalValue:
+		return binary.Write(w, binary.LittleEndian, e.Value)
+	case SeparatorEventErrorValue:
+		_, err := w.Write(e.rawEventData)
+		return err
+	default:
+		return errors.New("invalid value")
+	}
+}
+
+// ComputeSeparatorEventDigest computes the digest associated with the separator event. The value
 // argument should be one of SeparatorEventNormalValue, SeparatorEventAltNormalValue or
 // SeparatorEventErrorValue.
 func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
@@ -189,8 +215,8 @@ func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventDa
 		return &SeparatorEventData{rawEventData: data, Value: SeparatorEventErrorValue}, nil
 	}
 
-	if len(data) < binary.Size(uint32(0)) {
-		return nil, errors.New("data too small")
+	if len(data) != binary.Size(uint32(0)) {
+		return nil, errors.New("data is the wrong size")
 	}
 
 	value := binary.LittleEndian.Uint32(data)
@@ -219,7 +245,7 @@ func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, dig
 			return decodeEventDataHostPlatformSpecificCompactHash(data), nil
 		}
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
-		out, err = decodeEventDataEFIVariable(data, eventType)
+		out, err = decodeEventDataEFIVariable(data)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
 		out, err = decodeEventDataEFIImageLoad(data)
 	case EventTypeEFIGPTEvent:

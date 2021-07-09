@@ -6,6 +6,7 @@ package tcglog
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -15,25 +16,15 @@ var (
 )
 
 // GrubStringEventType indicates the type of data measured by GRUB in to a log by GRUB.
-type GrubStringEventType int
+type GrubStringEventType string
 
 const (
 	// GrubCmd indicates that the data measured by GRUB is associated with a GRUB command.
-	GrubCmd GrubStringEventType = iota
+	GrubCmd GrubStringEventType = "grub_cmd"
 
 	// KernelCmdline indicates that the data measured by GRUB is associated with a kernel commandline.
-	KernelCmdline
+	KernelCmdline = "kernel_cmdline"
 )
-
-func grubEventTypeString(t GrubStringEventType) string {
-	switch t {
-	case GrubCmd:
-		return "grub_cmd"
-	case KernelCmdline:
-		return "kernel_cmdline"
-	}
-	panic("invalid value")
-}
 
 // GrubStringEventData represents the data associated with an event measured by GRUB.
 type GrubStringEventData struct {
@@ -43,7 +34,12 @@ type GrubStringEventData struct {
 }
 
 func (e *GrubStringEventData) String() string {
-	return fmt.Sprintf("%s{ %s }", grubEventTypeString(e.Type), e.Str)
+	return fmt.Sprintf("%s{ %s }", string(e.Type), e.Str)
+}
+
+func (e *GrubStringEventData) Write(w io.Writer) error {
+	_, err := io.WriteString(w, fmt.Sprintf("%s: %s\x00", string(e.Type), e.Str))
+	return err
 }
 
 func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) EventData {

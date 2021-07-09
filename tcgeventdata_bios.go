@@ -6,11 +6,22 @@ package tcglog
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
+
+type rawSpecIdEvent00Hdr struct {
+	PlatformClass    uint32
+	SpecVersionMinor uint8
+	SpecVersionMajor uint8
+	SpecErrata       uint8
+	Reserved         uint8
+	VendorInfoSize   uint8
+}
 
 // SpecIdEvent00 corresponds to the TCG_PCClientSpecIdEventStruct type and is the
 // event data for a Specification ID Version EV_NO_ACTION event for BIOS platforms.
@@ -28,6 +39,32 @@ func (e *SpecIdEvent00) String() string {
 		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
 }
 
+func (e *SpecIdEvent00) Write(w io.Writer) error {
+	vendorInfoSize := len(e.VendorInfo)
+	if vendorInfoSize > math.MaxUint8 {
+		return errors.New("VendorInfo too large")
+	}
+
+	var signature [16]byte
+	copy(signature[:], []byte(e.Signature()))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+
+	spec := rawSpecIdEvent00Hdr{
+		PlatformClass:    e.PlatformClass,
+		SpecVersionMinor: e.SpecVersionMinor,
+		SpecVersionMajor: e.SpecVersionMajor,
+		SpecErrata:       e.SpecErrata,
+		VendorInfoSize:   uint8(vendorInfoSize)}
+	if err := binary.Write(w, binary.LittleEndian, &spec); err != nil {
+		return err
+	}
+
+	_, err := w.Write(e.VendorInfo)
+	return err
+}
+
 func (e *SpecIdEvent00) Type() NoActionEventType {
 	return SpecId
 }
@@ -39,33 +76,20 @@ func (e *SpecIdEvent00) Signature() string {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
 func decodeSpecIdEvent00(data []byte, r io.Reader) (out *SpecIdEvent00, err error) {
-	out = &SpecIdEvent00{rawEventData: data}
-	if err := binary.Read(r, binary.LittleEndian, &out.PlatformClass); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &out.SpecVersionMinor); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &out.SpecVersionMajor); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &out.SpecErrata); err != nil {
+	var spec rawSpecIdEvent00Hdr
+	if err := binary.Read(r, binary.LittleEndian, &spec); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
-	var reserved uint8
-	if err := binary.Read(r, binary.LittleEndian, &reserved); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	var vendorInfoSize uint8
-	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	out.VendorInfo = make([]byte, vendorInfoSize)
+	out = &SpecIdEvent00{
+		rawEventData:     data,
+		PlatformClass:    spec.PlatformClass,
+		SpecVersionMinor: spec.SpecVersionMinor,
+		SpecVersionMajor: spec.SpecVersionMajor,
+		SpecErrata:       spec.SpecErrata,
+		VendorInfo:       make([]byte, spec.VendorInfoSize)}
 	if _, err := io.ReadFull(r, out.VendorInfo); err != nil {
-		return nil, err
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return out, nil

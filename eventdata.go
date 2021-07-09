@@ -7,6 +7,7 @@ package tcglog
 import (
 	"crypto"
 	"fmt"
+	"io"
 )
 
 // EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
@@ -19,6 +20,9 @@ type EventData interface {
 
 	// Bytes is the raw event data bytes as they appear in the event log.
 	Bytes() []byte
+
+	// Write will serialize this event data to the supplied io.Writer.
+	Write(w io.Writer) error
 }
 
 type rawEventData []byte
@@ -37,6 +41,11 @@ func (e *invalidEventData) String() string {
 	return fmt.Sprintf("Invalid event data: %v", e.err)
 }
 
+func (e *invalidEventData) Write(w io.Writer) error {
+	_, err := w.Write(e.rawEventData)
+	return err
+}
+
 func (e *invalidEventData) Error() string {
 	return e.err.Error()
 }
@@ -48,19 +57,24 @@ func (e *invalidEventData) Unwrap() error {
 // OpaqueEventData is event data whose format is unknown or implementation defined.
 type OpaqueEventData []byte
 
-func (d OpaqueEventData) Bytes() []byte {
-	return []byte(d)
-}
-
 func (d OpaqueEventData) String() string {
 	return ""
 }
 
+func (d OpaqueEventData) Bytes() []byte {
+	return []byte(d)
+}
+
+func (d OpaqueEventData) Write(w io.Writer) error {
+	_, err := w.Write(d)
+	return err
+}
+
 // ComputeEventDigest computes the digest associated with the supplied event data bytes,
 // for events where the digest is a tagged hash of the event data.
-func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
+func ComputeEventDigest(alg crypto.Hash, data OpaqueEventData) []byte {
 	h := alg.New()
-	h.Write(data)
+	data.Write(h)
 	return h.Sum(nil)
 }
 

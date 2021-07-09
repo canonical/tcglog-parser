@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
+	"io"
 )
 
 // SystemdEFIStubCommandline represents a kernel commandline measured by the
@@ -19,6 +20,14 @@ type SystemdEFIStubCommandline struct {
 
 func (e *SystemdEFIStubCommandline) String() string {
 	return "kernel commandline: " + e.Str
+}
+
+func (e *SystemdEFIStubCommandline) Write(w io.Writer) error {
+	if err := binary.Write(w, binary.LittleEndian, convertStringToUtf16(e.Str)); err != nil {
+		return err
+	}
+	_, err := w.Write([]byte{0x00})
+	return err
 }
 
 // ComputeSystemdEFIStubCommandlineDigest computes the digest measured by the systemd EFI stub
