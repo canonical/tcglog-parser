@@ -293,7 +293,7 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 	case tcglog.EventTypeSeparator:
 		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), e.Data.(*tcglog.SeparatorEventData).Value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
-		return tcglog.ComputeStringEventDigest(alg.GetHash(), string(e.Data.(tcglog.StringEventData)))
+		return tcglog.ComputeStringEventDigest(alg.GetHash(), e.Data.(tcglog.StringEventData))
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
 		data := e.Data.(*tcglog.EFIVariableData)
 		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
@@ -307,7 +307,7 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 	case tcglog.EventTypeIPL:
 		switch d := e.Data.(type) {
 		case *tcglog.GrubStringEventData:
-			return tcglog.ComputeStringEventDigest(alg.GetHash(), d.Str)
+			return tcglog.ComputeStringEventDigest(alg.GetHash(), tcglog.StringEventData(d.Str))
 		case *tcglog.SystemdEFIStubCommandline:
 			return tcglog.ComputeSystemdEFIStubCommandlineDigest(alg.GetHash(), d.Str)
 		}
