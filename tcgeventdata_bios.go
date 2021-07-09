@@ -46,7 +46,7 @@ func (e *SpecIdEvent00) Write(w io.Writer) error {
 	}
 
 	var signature [16]byte
-	copy(signature[:], []byte(e.Signature()))
+	copy(signature[:], []byte("Spec ID Event00"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
@@ -63,14 +63,6 @@ func (e *SpecIdEvent00) Write(w io.Writer) error {
 
 	_, err := w.Write(e.VendorInfo)
 	return err
-}
-
-func (e *SpecIdEvent00) Type() NoActionEventType {
-	return SpecId
-}
-
-func (e *SpecIdEvent00) Signature() string {
-	return "Spec ID Event00"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf

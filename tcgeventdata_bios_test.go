@@ -50,13 +50,3 @@ func (s *tcgeventdataBiosSuite) TestSpecIdEvent00Write(c *C) {
 	c.Check(event.Write(w), IsNil)
 	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "53706563204944204576656e74303000000000000201010000"))
 }
-
-func (s *tcgeventdataBiosSuite) TestSpecIdEvent00Type(c *C) {
-	var event SpecIdEvent00
-	c.Check(event.Type(), Equals, SpecId)
-}
-
-func (s *tcgeventdataBiosSuite) TestSpecIdEvent00Signature(c *C) {
-	var event SpecIdEvent00
-	c.Check(event.Signature(), Equals, "Spec ID Event00")
-}

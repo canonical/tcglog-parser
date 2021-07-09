@@ -20,22 +20,6 @@ import (
 
 var separatorErrorDigests = make(map[tpm2.HashAlgorithmId]tpm2.Digest)
 
-// NoActionEventType corresponds to the type of a EV_NO_ACTION event.
-type NoActionEventType int
-
-const (
-	UnknownNoActionEvent     NoActionEventType = iota // Unknown EV_NO_ACTION event type
-	SpecId                                            // "Spec ID Event00", "Spec ID Event02" or "Spec ID Event03" event type
-	StartupLocality                                   // "StartupLocality" event type
-	BiosIntegrityMeasurement                          // "SP800-155 Event" event type
-)
-
-// NoActionEventData provides a mechanism to determine the type of a EV_NO_ACTION event from the decoded EventData.
-type NoActionEventData interface {
-	Type() NoActionEventType
-	Signature() string
-}
-
 // StringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides
 // a hint as to what was measured as opposed to representing what was measured).
 type StringEventData string
@@ -60,29 +44,6 @@ func ComputeStringEventDigest(alg crypto.Hash, str StringEventData) []byte {
 	h := alg.New()
 	str.Write(h)
 	return h.Sum(nil)
-}
-
-// unknownNoActionEventData is the event data for a EV_NO_ACTION event with an unrecognized type.
-type unknownNoActionEventData struct {
-	rawEventData
-	signature string
-}
-
-func (e *unknownNoActionEventData) String() string {
-	return ""
-}
-
-func (e *unknownNoActionEventData) Write(w io.Writer) error {
-	_, err := w.Write(e.rawEventData)
-	return err
-}
-
-func (e *unknownNoActionEventData) Type() NoActionEventType {
-	return UnknownNoActionEvent
-}
-
-func (e *unknownNoActionEventData) Signature() string {
-	return e.signature
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
@@ -131,7 +92,7 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 		}
 		return out, nil
 	default:
-		return &unknownNoActionEventData{rawEventData: data, signature: signature}, nil
+		return nil, nil
 	}
 }
 

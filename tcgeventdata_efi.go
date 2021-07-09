@@ -94,7 +94,7 @@ func (e *SpecIdEvent02) Write(w io.Writer) error {
 	}
 
 	var signature [16]byte
-	copy(signature[:], []byte(e.Signature()))
+	copy(signature[:], []byte("Spec ID Event02"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
@@ -112,14 +112,6 @@ func (e *SpecIdEvent02) Write(w io.Writer) error {
 
 	_, err := w.Write(e.VendorInfo)
 	return err
-}
-
-func (e *SpecIdEvent02) Type() NoActionEventType {
-	return SpecId
-}
-
-func (e *SpecIdEvent02) Signature() string {
-	return "Spec ID Event02"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
@@ -197,7 +189,7 @@ func (e *SpecIdEvent03) Write(w io.Writer) error {
 	}
 
 	var signature [16]byte
-	copy(signature[:], []byte(e.Signature()))
+	copy(signature[:], []byte("Spec ID Event03"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
@@ -222,14 +214,6 @@ func (e *SpecIdEvent03) Write(w io.Writer) error {
 	}
 	_, err := w.Write(e.VendorInfo)
 	return err
-}
-
-func (e *SpecIdEvent03) Type() NoActionEventType {
-	return SpecId
-}
-
-func (e *SpecIdEvent03) Signature() string {
-	return "Spec ID Event03"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
@@ -286,20 +270,12 @@ func (e *StartupLocalityEventData) String() string {
 
 func (e *StartupLocalityEventData) Write(w io.Writer) error {
 	var signature [16]byte
-	copy(signature[:], []byte(e.Signature()))
+	copy(signature[:], []byte("StartupLocality"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
 
 	return binary.Write(w, binary.LittleEndian, e.StartupLocality)
-}
-
-func (e *StartupLocalityEventData) Type() NoActionEventType {
-	return StartupLocality
-}
-
-func (e *StartupLocalityEventData) Signature() string {
-	return "StartupLocality"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
@@ -327,7 +303,7 @@ func (e *SP800_155_PlatformIdEventData) String() string {
 
 func (e *SP800_155_PlatformIdEventData) Write(w io.Writer) error {
 	var signature [16]byte
-	copy(signature[:], []byte(e.Signature()))
+	copy(signature[:], []byte("SP800-155 Event"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
@@ -337,14 +313,6 @@ func (e *SP800_155_PlatformIdEventData) Write(w io.Writer) error {
 	}
 	_, err := w.Write(e.ReferenceManifestGuid[:])
 	return err
-}
-
-func (e *SP800_155_PlatformIdEventData) Type() NoActionEventType {
-	return BiosIntegrityMeasurement
-}
-
-func (e *SP800_155_PlatformIdEventData) Signature() string {
-	return "SP800-155 Event"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf

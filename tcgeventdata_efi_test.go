@@ -60,16 +60,6 @@ func (s *tcgeventdataEfiSuite) TestSpecIdEvent02WriteWithVendorInfo(c *C) {
 	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "53706563204944204576656e74303200000000000201020203626172"))
 }
 
-func (s *tcgeventdataEfiSuite) TestSpecIdEvent02Type(c *C) {
-	var event SpecIdEvent02
-	c.Check(event.Type(), Equals, SpecId)
-}
-
-func (s *tcgeventdataEfiSuite) TestSpecIdEvent02Signature(c *C) {
-	var event SpecIdEvent02
-	c.Check(event.Signature(), Equals, "Spec ID Event02")
-}
-
 func (s *tcgeventdataEfiSuite) TestSpecIdEvent03String(c *C) {
 	event := SpecIdEvent03{
 		PlatformClass:    0,
@@ -115,16 +105,6 @@ func (s *tcgeventdataEfiSuite) TestSpecIdEvent03WriteWithVendorInfo(c *C) {
 	w := new(bytes.Buffer)
 	c.Check(event.Write(w), IsNil)
 	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "53706563204944204576656e74303300000000000002000202000000040014000b00200003626172"))
-}
-
-func (s *tcgeventdataEfiSuite) TestSpecIdEvent03Type(c *C) {
-	var event SpecIdEvent03
-	c.Check(event.Type(), Equals, SpecId)
-}
-
-func (s *tcgeventdataEfiSuite) TestSpecIdEvent03Signature(c *C) {
-	var event SpecIdEvent02
-	c.Check(event.Signature(), Equals, "Spec ID Event02")
 }
 
 func (s *tcgeventdataEfiSuite) TestComputeEFIVariableDataDigest1(c *C) {
