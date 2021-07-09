@@ -107,7 +107,7 @@ func main() {
 		if verbose || hexDump {
 			switch {
 			case event.EventType == tcglog.EventTypeEFIVariableBoot:
-				varData, ok := event.Data.Decoded().(*tcglog.EFIVariableData)
+				varData, ok := event.Data.(*tcglog.EFIVariableData)
 				if ok && varData.VariableName == efi.GlobalVariable {
 					if varData.UnicodeName == "BootOrder" {
 						r := bytes.NewReader(varData.VariableData)
@@ -150,14 +150,14 @@ func main() {
 		}
 
 		if varDataHexDump {
-			varData, ok := event.Data.Decoded().(*tcglog.EFIVariableData)
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				fmt.Fprintf(&builder, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
 			}
 		}
 
 		if eslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
-			varData, ok := event.Data.Decoded().(*tcglog.EFIVariableData)
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				db, err := efi.ReadSignatureDatabase(bytes.NewReader(varData.VariableData))
 				if err == nil {
@@ -173,7 +173,7 @@ func main() {
 		}
 
 		if extractVarDataPrefix != "" {
-			varData, ok := event.Data.Decoded().(*tcglog.EFIVariableData)
+			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractVarDataPrefix, event.PCRIndex, i), varData.VariableData, 0644)
 			}

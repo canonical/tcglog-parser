@@ -39,6 +39,10 @@ var (
 // a hint as to what was measured as opposed to representing what was measured).
 type StringEventData string
 
+func (d StringEventData) Bytes() []byte {
+	return []byte(d)
+}
+
 func (d StringEventData) String() string {
 	return string(d)
 }
@@ -53,25 +57,28 @@ func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
 }
 
 // unknownNoActionEventData is the event data for a EV_NO_ACTION event with an unrecognized type.
-type unknownNoActionEventData string
+type unknownNoActionEventData struct {
+	rawEventData
+	signature string
+}
 
-func (e unknownNoActionEventData) String() string {
+func (e *unknownNoActionEventData) String() string {
 	return ""
 }
 
-func (e unknownNoActionEventData) Type() NoActionEventType {
+func (e *unknownNoActionEventData) Type() NoActionEventType {
 	return UnknownNoActionEvent
 }
 
-func (e unknownNoActionEventData) Signature() string {
-	return string(e)
+func (e *unknownNoActionEventData) Signature() string {
+	return e.signature
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4 "EV_NO_ACTION Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5 "EV_NO_ACTION Event Types")
-func decodeEventDataNoAction(data []byte) (DecodedEventData, error) {
+func decodeEventDataNoAction(data []byte) (EventData, error) {
 	r := bytes.NewReader(data)
 
 	// Signature field
@@ -83,37 +90,37 @@ func decodeEventDataNoAction(data []byte) (DecodedEventData, error) {
 
 	switch signature {
 	case "Spec ID Event00":
-		out, err := decodeSpecIdEvent00(r)
+		out, err := decodeSpecIdEvent00(data, r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event00 data: %w", err)
 		}
 		return out, nil
 	case "Spec ID Event02":
-		out, err := decodeSpecIdEvent02(r)
+		out, err := decodeSpecIdEvent02(data, r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event02 data: %w", err)
 		}
 		return out, nil
 	case "Spec ID Event03":
-		out, err := decodeSpecIdEvent03(r)
+		out, err := decodeSpecIdEvent03(data, r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event03 data: %w", err)
 		}
 		return out, nil
 	case "SP800-155 Event":
-		out, err := decodeBIMReferenceManifestEvent(r)
+		out, err := decodeBIMReferenceManifestEvent(data, r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode SP800-155 Event data: %w", err)
 		}
 		return out, nil
 	case "StartupLocality":
-		out, err := decodeStartupLocalityEvent(r)
+		out, err := decodeStartupLocalityEvent(data, r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode StartupLocality data: %w", err)
 		}
 		return out, nil
 	default:
-		return unknownNoActionEventData(signature), nil
+		return &unknownNoActionEventData{rawEventData: data, signature: signature}, nil
 	}
 }
 
@@ -129,6 +136,7 @@ func decodeEventDataHostPlatformSpecificCompactHash(data []byte) StringEventData
 
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.
 type SeparatorEventData struct {
+	rawEventData
 	IsError bool // The event indicates an error condition
 }
 
@@ -162,13 +170,13 @@ func decodeEventDataSeparator(data []byte, digests DigestMap) *SeparatorEventDat
 		break
 	}
 
-	return &SeparatorEventData{IsError: isError}
+	return &SeparatorEventData{rawEventData: data, IsError: isError}
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap) (out DecodedEventData, err error) {
+func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap) (out EventData, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		out, err = decodeEventDataNoAction(data)

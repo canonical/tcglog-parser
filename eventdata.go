@@ -9,35 +9,27 @@ import (
 	"fmt"
 )
 
-type DecodedEventData interface {
-	fmt.Stringer
-}
-
 // EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
 // contents can be inspected programatically.
 //
 // If an error is encountered when decoding the data associated with an event, the event data will implement the error interface
 // which can be used for obtaining information about the decoding error.
-type EventData struct {
-	bytes   []byte
-	decoded DecodedEventData
+type EventData interface {
+	fmt.Stringer
+
+	// Bytes is the raw event data bytes as they appear in the event log.
+	Bytes() []byte
 }
 
-// Bytes is the raw event data bytes as they appear in the event log.
-func (e *EventData) Bytes() []byte {
-	return e.bytes
-}
+type rawEventData []byte
 
-func (e *EventData) Decoded() DecodedEventData {
-	return e.decoded
-}
-
-func (e *EventData) String() string {
-	return e.decoded.String()
+func (b rawEventData) Bytes() []byte {
+	return []byte(b)
 }
 
 // invalidEventData corresponds to an event data blob that failed to decode correctly.
 type invalidEventData struct {
+	rawEventData
 	err error
 }
 
@@ -54,7 +46,11 @@ func (e *invalidEventData) Unwrap() error {
 }
 
 // opaqueEventData is event data whose format is unknown or implementation defined.
-type opaqueEventData struct{}
+type opaqueEventData []byte
+
+func (d opaqueEventData) Bytes() []byte {
+	return []byte(d)
+}
 
 func (d opaqueEventData) String() string {
 	return ""
@@ -67,7 +63,7 @@ func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
 	return h.Sum(nil)
 }
 
-func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) DecodedEventData {
+func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) EventData {
 	if options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9) {
 		if out := decodeEventDataGRUB(data, pcrIndex, eventType); out != nil {
 			return out
@@ -83,12 +79,12 @@ func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digest
 
 	out, err := decodeEventDataTCG(data, pcrIndex, eventType, digests)
 	if err != nil {
-		return &invalidEventData{err: err}
+		return &invalidEventData{rawEventData: data, err: err}
 	}
 
 	if out != nil {
 		return out
 	}
 
-	return opaqueEventData{}
+	return opaqueEventData(data)
 }

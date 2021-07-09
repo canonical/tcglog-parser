@@ -12,10 +12,13 @@ import (
 
 // SystemdEFIStubCommandline represents a kernel commandline measured by the
 // systemd EFI stub linux loader.
-type SystemdEFIStubCommandline string
+type SystemdEFIStubCommandline struct {
+	rawEventData
+	Str string
+}
 
-func (e SystemdEFIStubCommandline) String() string {
-	return string(e)
+func (e *SystemdEFIStubCommandline) String() string {
+	return "kernel commandline: " + e.Str
 }
 
 // ComputeSystemdEFIStubCommandlineDigest computes the digest measured by the systemd EFI stub
@@ -34,7 +37,7 @@ func ComputeSystemdEFIStubCommandlineDigest(alg crypto.Hash, commandline string)
 	return h.Sum(nil)
 }
 
-func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) DecodedEventData {
+func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) *SystemdEFIStubCommandline {
 	if eventType != EventTypeIPL {
 		return nil
 	}
@@ -46,5 +49,5 @@ func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) DecodedEven
 	utf16Str := make([]uint16, len(data)/2)
 	binary.Read(reader, binary.LittleEndian, &utf16Str)
 
-	return SystemdEFIStubCommandline(convertUtf16ToString(utf16Str))
+	return &SystemdEFIStubCommandline{rawEventData: data, Str: convertUtf16ToString(utf16Str)}
 }

@@ -64,6 +64,7 @@ func extractUTF16Buffer(r io.ReadSeeker, nchars uint64) ([]uint16, error) {
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 1.2.
 type SpecIdEvent02 struct {
+	rawEventData
 	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
@@ -87,8 +88,8 @@ func (e *SpecIdEvent02) Signature() string {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeSpecIdEvent02(r io.Reader) (out *SpecIdEvent02, err error) {
-	out = &SpecIdEvent02{}
+func decodeSpecIdEvent02(data []byte, r io.Reader) (out *SpecIdEvent02, err error) {
+	out = &SpecIdEvent02{rawEventData: data}
 	if err := binary.Read(r, binary.LittleEndian, &out.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
@@ -129,6 +130,7 @@ type EFISpecIdEventAlgorithmSize struct {
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 2.0.
 type SpecIdEvent03 struct {
+	rawEventData
 	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
@@ -163,8 +165,8 @@ func (e *SpecIdEvent03) Signature() string {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func decodeSpecIdEvent03(r io.Reader) (out *SpecIdEvent03, err error) {
-	out = &SpecIdEvent03{}
+func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err error) {
+	out = &SpecIdEvent03{rawEventData: data}
 	if err := binary.Read(r, binary.LittleEndian, &out.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
@@ -213,32 +215,36 @@ func decodeSpecIdEvent03(r io.Reader) (out *SpecIdEvent03, err error) {
 }
 
 // startupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
-type startupLocalityEventData uint8
-
-func (e startupLocalityEventData) String() string {
-	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", uint8(e))
+type startupLocalityEventData struct {
+	rawEventData
+	startupLocality uint8
 }
 
-func (e startupLocalityEventData) Type() NoActionEventType {
+func (e *startupLocalityEventData) String() string {
+	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.startupLocality)
+}
+
+func (e *startupLocalityEventData) Type() NoActionEventType {
 	return StartupLocality
 }
 
-func (e startupLocalityEventData) Signature() string {
+func (e *startupLocalityEventData) Signature() string {
 	return "StartupLocality"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(r io.Reader) (startupLocalityEventData, error) {
+func decodeStartupLocalityEvent(data []byte, r io.Reader) (*startupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return startupLocalityEventData(locality), nil
+	return &startupLocalityEventData{rawEventData: data, startupLocality: locality}, nil
 }
 
 type bimReferenceManifestEventData struct {
+	rawEventData
 	vendorId uint32
 	guid     efi.GUID
 }
@@ -259,7 +265,7 @@ func (e *bimReferenceManifestEventData) Signature() string {
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(r io.Reader) (*bimReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*bimReferenceManifestEventData, error) {
 	var d struct {
 		VendorId uint32
 		Guid     efi.GUID
@@ -268,12 +274,13 @@ func decodeBIMReferenceManifestEvent(r io.Reader) (*bimReferenceManifestEventDat
 		return nil, err
 	}
 
-	return &bimReferenceManifestEventData{vendorId: d.VendorId, guid: d.Guid}, nil
+	return &bimReferenceManifestEventData{rawEventData: data, vendorId: d.VendorId, guid: d.Guid}, nil
 }
 
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
 // EFI variable.
 type EFIVariableData struct {
+	rawEventData
 	VariableName efi.GUID
 	UnicodeName  string
 	VariableData []byte
@@ -300,7 +307,7 @@ func ComputeEFIVariableDataDigest(alg crypto.Hash, name string, guid efi.GUID, d
 func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableData, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIVariableData{}
+	d := &EFIVariableData{rawEventData: data}
 
 	variableName, err := efi.ReadGUID(r)
 	if err != nil {
@@ -333,6 +340,7 @@ func decodeEventDataEFIVariable(data []byte, eventType EventType) (*EFIVariableD
 }
 
 type EFIImageLoadEvent struct {
+	rawEventData
 	LocationInMemory efi.PhysicalAddress
 	LengthInMemory   uint64
 	LinkTimeAddress  uint64
@@ -366,6 +374,7 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 	}
 
 	return &EFIImageLoadEvent{
+		rawEventData:     data,
 		LocationInMemory: e.LocationInMemory,
 		LengthInMemory:   e.LengthInMemory,
 		LinkTimeAddress:  e.LinkTimeAddress,
@@ -374,6 +383,7 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 
 // EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT events.
 type EFIGPTData struct {
+	rawEventData
 	Hdr        efi.PartitionTableHeader
 	Partitions []*efi.PartitionEntry
 }
@@ -394,7 +404,7 @@ func (e *EFIGPTData) String() string {
 func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIGPTData{}
+	d := &EFIGPTData{rawEventData: data}
 
 	// UEFI_GPT_DATA.UEFIPartitionHeader
 	hdr, err := efi.ReadPartitionTableHeader(r, false)

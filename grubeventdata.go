@@ -37,6 +37,7 @@ func grubEventTypeString(t GrubStringEventType) string {
 
 // GrubStringEventData represents the data associated with an event measured by GRUB.
 type GrubStringEventData struct {
+	rawEventData
 	Type GrubStringEventType
 	Str  string
 }
@@ -45,7 +46,7 @@ func (e *GrubStringEventData) String() string {
 	return fmt.Sprintf("%s{ %s }", grubEventTypeString(e.Type), e.Str)
 }
 
-func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) DecodedEventData {
+func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) EventData {
 	if eventType != EventTypeIPL {
 		return nil
 	}
@@ -55,9 +56,9 @@ func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) De
 		str := string(data)
 		switch {
 		case strings.HasPrefix(str, kernelCmdlinePrefix):
-			return &GrubStringEventData{KernelCmdline, strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}
+			return &GrubStringEventData{rawEventData: data, Type: KernelCmdline, Str: strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}
 		case strings.HasPrefix(str, grubCmdPrefix):
-			return &GrubStringEventData{GrubCmd, strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}
+			return &GrubStringEventData{rawEventData: data, Type: GrubCmd, Str: strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}
 		default:
 			return nil
 		}

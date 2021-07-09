@@ -15,6 +15,7 @@ import (
 // SpecIdEvent00 corresponds to the TCG_PCClientSpecIdEventStruct type and is the
 // event data for a Specification ID Version EV_NO_ACTION event for BIOS platforms.
 type SpecIdEvent00 struct {
+	rawEventData
 	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
@@ -37,8 +38,8 @@ func (e *SpecIdEvent00) Signature() string {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //  (section 11.3.4.1 "Specification Event")
-func decodeSpecIdEvent00(r io.Reader) (out *SpecIdEvent00, err error) {
-	out = &SpecIdEvent00{}
+func decodeSpecIdEvent00(data []byte, r io.Reader) (out *SpecIdEvent00, err error) {
+	out = &SpecIdEvent00{rawEventData: data}
 	if err := binary.Read(r, binary.LittleEndian, &out.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}

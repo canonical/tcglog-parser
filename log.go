@@ -83,10 +83,7 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
-		Data: &EventData{
-			bytes:   event,
-			decoded: decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
-		},
+		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
 	}, nil
 }
 
@@ -176,10 +173,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 		PCRIndex:  header.PCRIndex,
 		EventType: header.EventType,
 		Digests:   digests,
-		Data: &EventData{
-			bytes:   event,
-			decoded: decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
-		},
+		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
 	}, nil
 }
 
@@ -216,7 +210,7 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 	var spec Spec = SpecUnknown
 	var digestSizes []EFISpecIdEventAlgorithmSize
 
-	switch d := event.Data.Decoded().(type) {
+	switch d := event.Data.(type) {
 	case *SpecIdEvent00:
 		spec = SpecPCClient
 	case *SpecIdEvent02:

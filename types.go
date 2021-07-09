@@ -113,8 +113,8 @@ func (l AlgorithmIdList) Contains(a tpm2.HashAlgorithmId) bool {
 
 // Event corresponds to a single event in an event log.
 type Event struct {
-	PCRIndex  PCRIndex   // PCR index to which this event was measured
-	EventType EventType  // The type of this event
-	Digests   DigestMap  // The digests corresponding to this event for the supported algorithms
-	Data      *EventData // The data recorded with this event
+	PCRIndex  PCRIndex  // PCR index to which this event was measured
+	EventType EventType // The type of this event
+	Digests   DigestMap // The digests corresponding to this event for the supported algorithms
+	Data      EventData // The data recorded with this event
 }
