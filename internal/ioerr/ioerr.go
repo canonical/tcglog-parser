@@ -70,17 +70,23 @@ func EOFIsUnexpected(args ...interface{}) error {
 		format := args[0].(string)
 		idx := parsePercentW(format)
 		if idx >= 0 {
-			if err, isErr := args[idx].(error); isErr && err == io.EOF {
-				args[idx] = io.ErrUnexpectedEOF
+			if err, isErr := args[idx+1].(error); isErr && err == io.EOF {
+				args[idx+1] = io.ErrUnexpectedEOF
 			}
 		}
-		return xerrors.Errorf(format, args...)
+		return xerrors.Errorf(format, args[1:]...)
 	case len(args) == 1:
-		err := args[0].(error)
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
+		switch err := args[0].(type) {
+		case error:
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
+			return err
+		case nil:
+			return nil
+		default:
+			panic("invalid type")
 		}
-		return err
 	default:
 		panic("no arguments")
 	}
