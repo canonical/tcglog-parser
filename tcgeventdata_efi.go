@@ -550,3 +550,12 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 
 	return d, nil
 }
+
+// ComputeEFIGPTDataDigest computes a UEFI_GPT_DATA digest from the supplied data.
+func ComputeEFIGPTDataDigest(alg crypto.Hash, data *EFIGPTData) ([]byte, error) {
+	h := alg.New()
+	if err := data.Write(h); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
+}
