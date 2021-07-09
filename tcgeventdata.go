@@ -8,12 +8,17 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
-	"math"
 	"strings"
+
+	"github.com/canonical/go-tpm2"
 
 	"golang.org/x/xerrors"
 )
+
+var separatorErrorDigests = make(map[tpm2.HashAlgorithmId]tpm2.Digest)
 
 // NoActionEventType corresponds to the type of a EV_NO_ACTION event.
 type NoActionEventType int
@@ -30,10 +35,6 @@ type NoActionEventData interface {
 	Type() NoActionEventType
 	Spec() string
 }
-
-var (
-	validNormalSeparatorValues = [...]uint32{0, math.MaxUint32}
-)
 
 // StringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides
 // a hint as to what was measured as opposed to representing what was measured).
@@ -137,14 +138,21 @@ func decodeEventDataHostPlatformSpecificCompactHash(data []byte) StringEventData
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.
 type SeparatorEventData struct {
 	rawEventData
-	IsError bool // The event indicates an error condition
+	Value uint32 // The separator value measured to the TPM
+}
+
+// IsError indicates that this event was associated with an error condition.
+// The value returned from Bytes() contains an implementation defined indication
+// of the actual error.
+func (e *SeparatorEventData) IsError() bool {
+	return e.Value == SeparatorEventErrorValue
 }
 
 func (e *SeparatorEventData) String() string {
-	if !e.IsError {
+	if !e.IsError() {
 		return ""
 	}
-	return "*ERROR*"
+	return fmt.Sprintf("ERROR: 0x%x", e.rawEventData)
 }
 
 // ComputeSeparatorEventDigest computes the digest associated with a seaprator event. The value
@@ -161,16 +169,38 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
 //  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
 //   "Procedure for Pre-OS to OS-Present Transition")
-func decodeEventDataSeparator(data []byte, digests DigestMap) *SeparatorEventData {
-	var isError bool
-	for alg, digest := range digests {
-		h := alg.NewHash()
-		binary.Write(h, binary.LittleEndian, SeparatorEventErrorValue)
-		isError = bytes.Equal(digest, h.Sum(nil))
-		break
+func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventData, error) {
+	var alg tpm2.HashAlgorithmId
+	for a, _ := range digests {
+		if !alg.Supported() || a.Size() > alg.Size() {
+			alg = a
+		}
 	}
 
-	return &SeparatorEventData{rawEventData: data, IsError: isError}
+	errorDigest, ok := separatorErrorDigests[alg]
+	if !ok {
+		h := alg.NewHash()
+		binary.Write(h, binary.LittleEndian, SeparatorEventErrorValue)
+		separatorErrorDigests[alg] = h.Sum(nil)
+		errorDigest = separatorErrorDigests[alg]
+	}
+
+	if bytes.Equal(digests[alg], errorDigest) {
+		return &SeparatorEventData{rawEventData: data, Value: SeparatorEventErrorValue}, nil
+	}
+
+	if len(data) < binary.Size(uint32(0)) {
+		return nil, errors.New("data too small")
+	}
+
+	value := binary.LittleEndian.Uint32(data)
+	switch value {
+	case SeparatorEventNormalValue, SeparatorEventErrorValue, SeparatorEventAltNormalValue:
+	default:
+		return nil, fmt.Errorf("invalid separator value: %d", value)
+	}
+
+	return &SeparatorEventData{rawEventData: data, Value: value}, nil
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
@@ -181,7 +211,7 @@ func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, dig
 	case EventTypeNoAction:
 		out, err = decodeEventDataNoAction(data)
 	case EventTypeSeparator:
-		return decodeEventDataSeparator(data, digests), nil
+		return decodeEventDataSeparator(data, digests)
 	case EventTypeAction, EventTypeEFIAction:
 		return decodeEventDataAction(data), nil
 	case EventTypeCompactHash:

@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -292,13 +291,7 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
 		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
 	case tcglog.EventTypeSeparator:
-		var value uint32
-		if e.Data.(*tcglog.SeparatorEventData).IsError {
-			value = tcglog.SeparatorEventErrorValue
-		} else {
-			value = binary.LittleEndian.Uint32(e.Data.Bytes())
-		}
-		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), value)
+		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), e.Data.(*tcglog.SeparatorEventData).Value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
 		return tcglog.ComputeStringEventDigest(alg.GetHash(), string(e.Data.(tcglog.StringEventData)))
 	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
