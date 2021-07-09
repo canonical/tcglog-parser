@@ -48,9 +48,9 @@ func (d StringEventData) String() string {
 	return string(d)
 }
 
-// ComputeStringEventDigest computes the digest associated with the supplied string. The
-// function assumes that the string is ASCII encoded and measured without a terminating
-// NULL byte.
+// ComputeStringEventDigest computes the digest associated with the supplied string, for
+// events where the digest is a tagged hash of the string. The function assumes that the
+// string is ASCII encoded and measured without a terminating NULL byte.
 func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
 	h := alg.New()
 	io.WriteString(h, str)

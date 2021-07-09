@@ -214,50 +214,52 @@ func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err erro
 	return out, nil
 }
 
-// startupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
-type startupLocalityEventData struct {
+// StartupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
+type StartupLocalityEventData struct {
 	rawEventData
-	startupLocality uint8
+	StartupLocality uint8
 }
 
-func (e *startupLocalityEventData) String() string {
-	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.startupLocality)
+func (e *StartupLocalityEventData) String() string {
+	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.StartupLocality)
 }
 
-func (e *startupLocalityEventData) Type() NoActionEventType {
+func (e *StartupLocalityEventData) Type() NoActionEventType {
 	return StartupLocality
 }
 
-func (e *startupLocalityEventData) Signature() string {
+func (e *StartupLocalityEventData) Signature() string {
 	return "StartupLocality"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(data []byte, r io.Reader) (*startupLocalityEventData, error) {
+func decodeStartupLocalityEvent(data []byte, r io.Reader) (*StartupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
 		return nil, err
 	}
 
-	return &startupLocalityEventData{rawEventData: data, startupLocality: locality}, nil
+	return &StartupLocalityEventData{rawEventData: data, StartupLocality: locality}, nil
 }
 
-type bimReferenceManifestEventData struct {
+// SP800_155_PlatformIdEventData corresponds to the event data for a SP800-155-Event
+// EV_NO_ACTION event
+type SP800_155_PlatformIdEventData struct {
 	rawEventData
-	vendorId uint32
-	guid     efi.GUID
+	VendorId              uint32
+	ReferenceManifestGuid efi.GUID
 }
 
-func (e *bimReferenceManifestEventData) String() string {
-	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.vendorId, &e.guid)
+func (e *SP800_155_PlatformIdEventData) String() string {
+	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.VendorId, e.ReferenceManifestGuid)
 }
 
-func (e *bimReferenceManifestEventData) Type() NoActionEventType {
+func (e *SP800_155_PlatformIdEventData) Type() NoActionEventType {
 	return BiosIntegrityMeasurement
 }
 
-func (e *bimReferenceManifestEventData) Signature() string {
+func (e *SP800_155_PlatformIdEventData) Signature() string {
 	return "SP800-155 Event"
 }
 
@@ -265,7 +267,7 @@ func (e *bimReferenceManifestEventData) Signature() string {
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*bimReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*SP800_155_PlatformIdEventData, error) {
 	var d struct {
 		VendorId uint32
 		Guid     efi.GUID
@@ -274,7 +276,7 @@ func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*bimReferenceMan
 		return nil, err
 	}
 
-	return &bimReferenceManifestEventData{rawEventData: data, vendorId: d.VendorId, guid: d.Guid}, nil
+	return &SP800_155_PlatformIdEventData{rawEventData: data, VendorId: d.VendorId, ReferenceManifestGuid: d.Guid}, nil
 }
 
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an

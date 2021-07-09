@@ -45,18 +45,19 @@ func (e *invalidEventData) Unwrap() error {
 	return e.err
 }
 
-// opaqueEventData is event data whose format is unknown or implementation defined.
-type opaqueEventData []byte
+// OpaqueEventData is event data whose format is unknown or implementation defined.
+type OpaqueEventData []byte
 
-func (d opaqueEventData) Bytes() []byte {
+func (d OpaqueEventData) Bytes() []byte {
 	return []byte(d)
 }
 
-func (d opaqueEventData) String() string {
+func (d OpaqueEventData) String() string {
 	return ""
 }
 
-// ComputeEventDigest computes the digest associated with the supplied event data bytes.
+// ComputeEventDigest computes the digest associated with the supplied event data bytes,
+// for events where the digest is a tagged hash of the event data.
 func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
 	h := alg.New()
 	h.Write(data)
@@ -86,5 +87,5 @@ func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digest
 		return out
 	}
 
-	return opaqueEventData(data)
+	return OpaqueEventData(data)
 }
