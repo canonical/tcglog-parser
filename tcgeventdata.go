@@ -8,34 +8,12 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"strings"
 
-	"github.com/canonical/go-tpm2"
-
 	"golang.org/x/xerrors"
 )
-
-type invalidSpecIdEventError struct {
-	err error
-}
-
-func (e invalidSpecIdEventError) Error() string {
-	return e.err.Error()
-}
-
-func (e invalidSpecIdEventError) Unwrap() error {
-	return e.err
-}
-
-// EFISpecIdEventAlgorithmSize represents a digest algorithm and its length and corresponds to the
-// TCG_EfiSpecIdEventAlgorithmSize type.
-type EFISpecIdEventAlgorithmSize struct {
-	AlgorithmId tpm2.HashAlgorithmId
-	DigestSize  uint16
-}
 
 // NoActionEventType corresponds to the type of a EV_NO_ACTION event.
 type NoActionEventType int
@@ -51,107 +29,6 @@ const (
 type NoActionEventData interface {
 	Type() NoActionEventType
 	Spec() string
-}
-
-// SpecIdEvent corresponds to the TCG_PCClientSpecIdEventStruct, TCG_EfiSpecIdEventStruct, and TCG_EfiSpecIdEvent types and is the
-// event data for a Specification ID Version EV_NO_ACTION event.
-type SpecIdEvent struct {
-	signature        string
-	Spec             Spec
-	PlatformClass    uint32
-	SpecVersionMinor uint8
-	SpecVersionMajor uint8
-	SpecErrata       uint8
-	UintnSize        uint8
-	DigestSizes      []EFISpecIdEventAlgorithmSize // The digest algorithms contained within this log
-	VendorInfo       []byte
-}
-
-func (e *SpecIdEvent) String() string {
-	var builder bytes.Buffer
-	switch e.Spec {
-	case SpecPCClient:
-		builder.WriteString("PCClientSpecIdEvent")
-	case SpecEFI_1_2, SpecEFI_2:
-		builder.WriteString("EfiSpecIDEvent")
-	}
-
-	fmt.Fprintf(&builder, "{ spec=%d, platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, "+
-		"specErrata=%d", e.Spec, e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
-	if e.Spec == SpecEFI_2 {
-		builder.WriteString(", digestSizes=[")
-		for i, algSize := range e.DigestSizes {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			fmt.Fprintf(&builder, "{ algorithmId=0x%04x, digestSize=%d }",
-				uint16(algSize.AlgorithmId), algSize.DigestSize)
-		}
-		builder.WriteString("]")
-	}
-	builder.WriteString(" }")
-	return builder.String()
-}
-
-func (e *SpecIdEvent) Type() NoActionEventType {
-	return SpecId
-}
-
-func (e *SpecIdEvent) Signature() string {
-	return e.signature
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 11.3.4.1 "Specification Event")
-func parsePCClientSpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
-	eventData.Spec = SpecPCClient
-
-	// TCG_PCClientSpecIdEventStruct.vendorInfoSize
-	var vendorInfoSize uint8
-	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
-		return xerrors.Errorf("cannot read vendor info size: %w", err)
-	}
-
-	// TCG_PCClientSpecIdEventStruct.vendorInfo
-	eventData.VendorInfo = make([]byte, vendorInfoSize)
-	if _, err := io.ReadFull(r, eventData.VendorInfo); err != nil {
-		return xerrors.Errorf("cannot read vendor info: %w", err)
-	}
-
-	return nil
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 11.3.4.1 "Specification Event")
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
-//  (section 7.4 "EV_NO_ACTION Event Types")
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//  (secion 9.4.5.1 "Specification ID Version Event")
-func decodeSpecIdEvent(r io.Reader, signature string, helper func(io.Reader, *SpecIdEvent) error) (*SpecIdEvent, error) {
-	var common struct {
-		PlatformClass    uint32
-		SpecVersionMinor uint8
-		SpecVersionMajor uint8
-		SpecErrata       uint8
-		UintnSize        uint8
-	}
-	if err := binary.Read(r, binary.LittleEndian, &common); err != nil {
-		return nil, invalidSpecIdEventError{xerrors.Errorf("cannot read common fields: %w", err)}
-	}
-
-	eventData := &SpecIdEvent{
-		signature:        signature,
-		PlatformClass:    common.PlatformClass,
-		SpecVersionMinor: common.SpecVersionMinor,
-		SpecVersionMajor: common.SpecVersionMajor,
-		SpecErrata:       common.SpecErrata,
-		UintnSize:        common.UintnSize}
-
-	if err := helper(r, eventData); err != nil {
-		return nil, invalidSpecIdEventError{err}
-	}
-
-	return eventData, nil
 }
 
 var (
@@ -206,31 +83,31 @@ func decodeEventDataNoAction(data []byte) (DecodedEventData, error) {
 
 	switch signature {
 	case "Spec ID Event00":
-		out, err := decodeSpecIdEvent(r, signature, parsePCClientSpecIdEvent)
+		out, err := decodeSpecIdEvent00(r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event00 data: %w", err)
 		}
 		return out, nil
 	case "Spec ID Event02":
-		out, err := decodeSpecIdEvent(r, signature, parseEFI_1_2_SpecIdEvent)
+		out, err := decodeSpecIdEvent02(r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event02 data: %w", err)
 		}
 		return out, nil
 	case "Spec ID Event03":
-		out, err := decodeSpecIdEvent(r, signature, parseEFI_2_SpecIdEvent)
+		out, err := decodeSpecIdEvent03(r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode Spec ID Event03 data: %w", err)
 		}
 		return out, nil
 	case "SP800-155 Event":
-		out, err := decodeBIMReferenceManifestEvent(r, signature)
+		out, err := decodeBIMReferenceManifestEvent(r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode SP800-155 Event data: %w", err)
 		}
 		return out, nil
 	case "StartupLocality":
-		out, err := decodeStartupLocalityEvent(r, signature)
+		out, err := decodeStartupLocalityEvent(r)
 		if err != nil {
 			return nil, xerrors.Errorf("cannot decode StartupLocality data: %w", err)
 		}

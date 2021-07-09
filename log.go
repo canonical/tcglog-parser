@@ -184,10 +184,6 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 }
 
 func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
-	if event.Data.Decoded().(*SpecIdEvent).Spec != SpecEFI_2 {
-		return
-	}
-
 	for _, alg := range algorithms {
 		if alg == tpm2.HashAlgorithmSHA1 {
 			continue
@@ -199,11 +195,6 @@ func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
 
 		event.Digests[alg] = make(Digest, alg.Size())
 	}
-}
-
-func isSpecIdEvent(event *Event) (out bool) {
-	_, out = event.Data.Decoded().(*SpecIdEvent)
-	return
 }
 
 // Log corresponds to a parsed event log.
@@ -226,8 +217,12 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 	var digestSizes []EFISpecIdEventAlgorithmSize
 
 	switch d := event.Data.Decoded().(type) {
-	case *SpecIdEvent:
-		spec = d.Spec
+	case *SpecIdEvent00:
+		spec = SpecPCClient
+	case *SpecIdEvent02:
+		spec = SpecEFI_1_2
+	case *SpecIdEvent03:
+		spec = SpecEFI_2
 		digestSizes = d.DigestSizes
 	}
 
@@ -246,7 +241,7 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 		algorithms = AlgorithmIdList{tpm2.HashAlgorithmSHA1}
 	}
 
-	if isSpecIdEvent(event) {
+	if spec == SpecEFI_2 {
 		fixupSpecIdEvent(event, algorithms)
 	}
 

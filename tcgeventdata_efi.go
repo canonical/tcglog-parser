@@ -15,8 +15,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/canonical/go-efilib"
+	"github.com/canonical/go-tpm2"
 
 	"golang.org/x/xerrors"
+
+	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
 var (
@@ -57,100 +60,187 @@ func extractUTF16Buffer(r io.ReadSeeker, nchars uint64) ([]uint16, error) {
 	return out, nil
 }
 
+// SpecIdEvent02 corresponds to the TCG_EfiSpecIdEventStruct type and is the
+// event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
+// for TPM family 1.2.
+type SpecIdEvent02 struct {
+	PlatformClass    uint32
+	SpecVersionMinor uint8
+	SpecVersionMajor uint8
+	SpecErrata       uint8
+	UintnSize        uint8
+	VendorInfo       []byte
+}
+
+func (e *SpecIdEvent02) String() string {
+	return fmt.Sprintf("EfiSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d, uintnSize=%d }",
+		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
+}
+
+func (e *SpecIdEvent02) Type() NoActionEventType {
+	return SpecId
+}
+
+func (e *SpecIdEvent02) Signature() string {
+	return "Spec ID Event02"
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func parseEFI_1_2_SpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
-	eventData.Spec = SpecEFI_1_2
+func decodeSpecIdEvent02(r io.Reader) (out *SpecIdEvent02, err error) {
+	out = &SpecIdEvent02{}
+	if err := binary.Read(r, binary.LittleEndian, &out.PlatformClass); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.SpecVersionMinor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.SpecVersionMajor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.SpecErrata); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.UintnSize); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
 
-	// TCG_EfiSpecIdEventStruct.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
-		return xerrors.Errorf("cannot read vendor info size: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
-	// TCG_EfiSpecIdEventStruct.vendorInfo
-	eventData.VendorInfo = make([]byte, vendorInfoSize)
-	if _, err := io.ReadFull(r, eventData.VendorInfo); err != nil {
-		return xerrors.Errorf("cannot read vendor info: %w", err)
+	out.VendorInfo = make([]byte, vendorInfoSize)
+	if _, err := io.ReadFull(r, out.VendorInfo); err != nil {
+		return nil, err
 	}
 
-	return nil
+	return out, nil
+}
+
+// EFISpecIdEventAlgorithmSize represents a digest algorithm and its length and corresponds to the
+// TCG_EfiSpecIdEventAlgorithmSize type.
+type EFISpecIdEventAlgorithmSize struct {
+	AlgorithmId tpm2.HashAlgorithmId
+	DigestSize  uint16
+}
+
+// SpecIdEvent03 corresponds to the TCG_EfiSpecIdEvent type and is the
+// event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
+// for TPM family 2.0.
+type SpecIdEvent03 struct {
+	PlatformClass    uint32
+	SpecVersionMinor uint8
+	SpecVersionMajor uint8
+	SpecErrata       uint8
+	UintnSize        uint8
+	DigestSizes      []EFISpecIdEventAlgorithmSize // The digest algorithms contained within this log
+	VendorInfo       []byte
+}
+
+func (e *SpecIdEvent03) String() string {
+	var builder bytes.Buffer
+	fmt.Fprintf(&builder, "EfiSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d, uintnSize=%d, digestSizes=[",
+		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
+	for i, algSize := range e.DigestSizes {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		fmt.Fprintf(&builder, "{ algorithmId=0x%04x, digestSize=%d }",
+			uint16(algSize.AlgorithmId), algSize.DigestSize)
+	}
+	builder.WriteString("] }")
+	return builder.String()
+}
+
+func (e *SpecIdEvent03) Type() NoActionEventType {
+	return SpecId
+}
+
+func (e *SpecIdEvent03) Signature() string {
+	return "Spec ID Event03"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (secion 9.4.5.1 "Specification ID Version Event")
-func parseEFI_2_SpecIdEvent(r io.Reader, eventData *SpecIdEvent) error {
-	eventData.Spec = SpecEFI_2
+func decodeSpecIdEvent03(r io.Reader) (out *SpecIdEvent03, err error) {
+	out = &SpecIdEvent03{}
+	if err := binary.Read(r, binary.LittleEndian, &out.PlatformClass); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.SpecVersionMinor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.SpecVersionMajor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.SpecErrata); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &out.UintnSize); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
 
-	// TCG_EfiSpecIdEvent.numberOfAlgorithms
 	var numberOfAlgorithms uint32
 	if err := binary.Read(r, binary.LittleEndian, &numberOfAlgorithms); err != nil {
-		return xerrors.Errorf("cannot read number of digest algorithms: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	if numberOfAlgorithms < 1 {
-		return errors.New("numberOfAlgorithms is zero")
+		return nil, errors.New("numberOfAlgorithms is zero")
 	}
 
-	// TCG_EfiSpecIdEvent.digestSizes
-	eventData.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
-	if err := binary.Read(r, binary.LittleEndian, eventData.DigestSizes); err != nil {
-		return xerrors.Errorf("cannot read digest algorithm sizes: %w", err)
+	out.DigestSizes = make([]EFISpecIdEventAlgorithmSize, numberOfAlgorithms)
+	if err := binary.Read(r, binary.LittleEndian, out.DigestSizes); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	for _, d := range eventData.DigestSizes {
+	for _, d := range out.DigestSizes {
 		if d.AlgorithmId.Supported() && d.AlgorithmId.Size() != int(d.DigestSize) {
-			return fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
+			return nil, fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
 		}
 	}
-
-	// TCG_EfiSpecIdEvent.vendorInfoSize
 	var vendorInfoSize uint8
 	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
-		return xerrors.Errorf("cannot read vendor info size: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
-	// TCG_EfiSpecIdEvent.vendorInfo
-	eventData.VendorInfo = make([]byte, vendorInfoSize)
-	if _, err := io.ReadFull(r, eventData.VendorInfo); err != nil {
-		return xerrors.Errorf("cannot read vendor info: %w", err)
+	out.VendorInfo = make([]byte, vendorInfoSize)
+	if _, err := io.ReadFull(r, out.VendorInfo); err != nil {
+		return nil, err
 	}
 
-	return nil
+	return out, nil
 }
 
 // startupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
-type startupLocalityEventData struct {
-	signature string
-	locality  uint8
+type startupLocalityEventData uint8
+
+func (e startupLocalityEventData) String() string {
+	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", uint8(e))
 }
 
-func (e *startupLocalityEventData) String() string {
-	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.locality)
-}
-
-func (e *startupLocalityEventData) Type() NoActionEventType {
+func (e startupLocalityEventData) Type() NoActionEventType {
 	return StartupLocality
 }
 
-func (e *startupLocalityEventData) Signature() string {
-	return e.signature
+func (e startupLocalityEventData) Signature() string {
+	return "StartupLocality"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(r io.Reader, signature string) (*startupLocalityEventData, error) {
+func decodeStartupLocalityEvent(r io.Reader) (startupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return &startupLocalityEventData{signature: signature, locality: locality}, nil
+	return startupLocalityEventData(locality), nil
 }
 
 type bimReferenceManifestEventData struct {
-	signature string
-	vendorId  uint32
-	guid      efi.GUID
+	vendorId uint32
+	guid     efi.GUID
 }
 
 func (e *bimReferenceManifestEventData) String() string {
@@ -162,14 +252,14 @@ func (e *bimReferenceManifestEventData) Type() NoActionEventType {
 }
 
 func (e *bimReferenceManifestEventData) Signature() string {
-	return e.signature
+	return "SP800-155 Event"
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //  (section 7.4 "EV_NO_ACTION Event Types")
-func decodeBIMReferenceManifestEvent(r io.Reader, signature string) (*bimReferenceManifestEventData, error) {
+func decodeBIMReferenceManifestEvent(r io.Reader) (*bimReferenceManifestEventData, error) {
 	var d struct {
 		VendorId uint32
 		Guid     efi.GUID
@@ -178,7 +268,7 @@ func decodeBIMReferenceManifestEvent(r io.Reader, signature string) (*bimReferen
 		return nil, err
 	}
 
-	return &bimReferenceManifestEventData{signature: signature, vendorId: d.VendorId, guid: d.Guid}, nil
+	return &bimReferenceManifestEventData{vendorId: d.VendorId, guid: d.Guid}, nil
 }
 
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
