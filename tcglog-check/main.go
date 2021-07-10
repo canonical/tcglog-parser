@@ -62,10 +62,9 @@ var (
 	tpmPath       string
 	pcrs          = internal.PCRArgList{0, 1, 2, 3, 4, 5, 6, 7}
 
-	ignoreIncorrectEfiBootvar bool
-	ignoreDataDecodeErrors    bool
-	requiredAlgs              requiredAlgsArg
-	bootImageSearchPaths      bootImageSearchPathsArg
+	ignoreDataDecodeErrors bool
+	requiredAlgs           requiredAlgsArg
+	bootImageSearchPaths   bootImageSearchPathsArg
 )
 
 func init() {
@@ -76,9 +75,6 @@ func init() {
 	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
 	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
 
-	flag.BoolVar(&ignoreIncorrectEfiBootvar, "ignore-incorrect-efi-bootvar", false,
-		"Don't exit with an error if the EV_EFI_VARIABLE_BOOT events don't contain the entire corresponding "+
-			"UEFI_VARIABLE_DATA structure, but instead only contain the variable payload")
 	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
 		"Don't exit with an error if any event data fails to decode correctly")
 	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
@@ -158,14 +154,6 @@ func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
 
 	fmt.Println("")
 }
-
-type efiBootVariableBehaviour int
-
-const (
-	efiBootVariableBehaviourUnknown efiBootVariableBehaviour = iota
-	efiBootVariableBehaviourOK
-	efiBootVariableBehaviourIncorrect
-)
 
 func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
 	for _, i := range l {
@@ -282,7 +270,7 @@ func (e *checkedEvent) dataDecoderErr() error {
 	return nil
 }
 
-func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQuirk bool) []byte {
+func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId) []byte {
 	if err := e.dataDecoderErr(); err != nil {
 		return nil
 	}
@@ -294,14 +282,12 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), e.Data.(*tcglog.SeparatorEventData).Value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
 		return tcglog.ComputeStringEventDigest(alg.GetHash(), string(e.Data.(tcglog.StringEventData)))
-	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableBoot, tcglog.EventTypeEFIVariableAuthority:
+	case tcglog.EventTypeEFIVariableDriverConfig, tcglog.EventTypeEFIVariableAuthority, tcglog.EventTypeEFIVariableBoot2:
 		data := e.Data.(*tcglog.EFIVariableData)
-		if e.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableQuirk {
-			h := alg.GetHash().New()
-			h.Write(data.VariableData)
-			return h.Sum(nil)
-		}
 		return tcglog.ComputeEFIVariableDataDigest(alg.GetHash(), data.UnicodeName, data.VariableName, data.VariableData)
+	case tcglog.EventTypeEFIVariableBoot:
+		data := e.Data.(*tcglog.EFIVariableData)
+		return tcglog.ComputeEventDigest(alg.GetHash(), data.VariableData)
 	case tcglog.EventTypeEFIGPTEvent:
 		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
 	case tcglog.EventTypeIPL:
@@ -319,40 +305,15 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId, efiBootVariableQ
 func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 	out = &checkedEvent{Event: event}
 
-Outer:
 	for alg, digest := range out.Digests {
-		efiBootVariableBehaviourTry := c.efiBootVariableBehaviour
+		expectedDigest := out.expectedDigest(alg)
+		if expectedDigest == nil {
+			break
+		}
 
-	Inner:
-		for {
-			expectedDigest := out.expectedDigest(alg, efiBootVariableBehaviourTry == efiBootVariableBehaviourIncorrect)
-			if expectedDigest == nil {
-				break Outer
-			}
-
-			switch {
-			case bytes.Equal(digest, expectedDigest) && out.EventType == tcglog.EventTypeEFIVariableBoot && c.efiBootVariableBehaviour == efiBootVariableBehaviourUnknown:
-				// Valid digest, and this is the first EV_EFI_VARIABLE_BOOT event,
-				// so record the measurement behaviour.
-				c.efiBootVariableBehaviour = efiBootVariableBehaviourTry
-				if efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown {
-					c.efiBootVariableBehaviour = efiBootVariableBehaviourOK
-				}
-				fallthrough
-			case bytes.Equal(digest, expectedDigest):
-				// Valid digest
-				break Inner
-			case out.EventType == tcglog.EventTypeEFIVariableBoot && efiBootVariableBehaviourTry == efiBootVariableBehaviourUnknown:
-				// Invalid digest
-				// This is the first EV_EFI_VARIABLE_BOOT event, and this test was done assuming that the measured bytes
-				// would include the entire EFI_VARIABLE_DATA structure. Repeat the test with only the variable data, which
-				// is how EDK2 measures these.
-				efiBootVariableBehaviourTry = efiBootVariableBehaviourIncorrect
-			default:
-				// Invalid digest. Record the expected digest on the event.
-				out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: expectedDigest})
-				break Inner
-			}
+		if !bytes.Equal(digest, expectedDigest) {
+			// Invalid digest. Record the expected digest on the event.
+			out.incorrectDigestValues = append(out.incorrectDigestValues, incorrectDigestValue{algorithm: alg, expected: expectedDigest})
 		}
 	}
 
@@ -392,7 +353,6 @@ Outer:
 type logChecker struct {
 	indexTracker                map[tcglog.PCRIndex]uint
 	expectedPCRValues           map[tcglog.PCRIndex]tcglog.DigestMap
-	efiBootVariableBehaviour    efiBootVariableBehaviour
 	events                      []*checkedEvent
 	seenIncorrectDigests        bool
 	seenIncorrectPeImageDigests bool
@@ -521,14 +481,6 @@ func run() error {
 	c := &logChecker{}
 	c.run(log)
 
-	switch {
-	case c.efiBootVariableBehaviour == efiBootVariableBehaviourIncorrect && ignoreIncorrectEfiBootvar:
-		fmt.Printf("- INFO: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
-	case c.efiBootVariableBehaviour == efiBootVariableBehaviourIncorrect:
-		fmt.Printf("*** FAIL ***: EV_EFI_VARIABLE_BOOT events only contain measurements of variable data rather than the entire UEFI_VARIABLE_DATA structure\n\n")
-		failed = true
-	}
-
 	var dataDecoderErrs []string
 	for _, e := range c.events {
 		err := e.dataDecoderErr()
@@ -554,10 +506,15 @@ func run() error {
 
 	if c.seenIncorrectDigests {
 		failed = true
+		hasBootVar := false
 		fmt.Printf("*** FAIL ***: The following events have digests that aren't consistent with the data recorded with them in the log:\n")
 		for _, e := range c.events {
 			if len(e.incorrectDigestValues) == 0 {
 				continue
+			}
+
+			if e.EventType == tcglog.EventTypeEFIVariableBoot {
+				hasBootVar = true
 			}
 
 			for _, d := range e.incorrectDigestValues {
@@ -566,7 +523,17 @@ func run() error {
 		}
 		fmt.Printf("This is unexpected for these event types, and might indicate a bug in the firmware of bootloader code responsible " +
 			"for performing these measurements. Knowledge of the format of the data being measured is required in order to pre-compute " +
-			"digests for these events or by a remote verifier for attestation purposes.\n\n")
+			"digests for these events or by a remote verifier for attestation purposes.\n")
+		if hasBootVar {
+			fmt.Printf("Note that some firmware implementations measure a tagged hash of the event data for EV_EFI_VARIABLE_BOOT " +
+				"events, but earlier versions of the TCG PC Client Platform Firmware Profile Specification are a bit ambiguous " +
+				"about whether this is correct or whether only a tagged hash of the variable data should be measured. " +
+				"EDK2 only measures a tagged hash of the variable data, and the 1.05 revision of the TCG PC Client Platform " +
+				"Firmware Profile Specification is more explicit - it says that only a tagged hash of the variable data must " +
+				"be measured. It also deprecates EV_EFI_VARIABLE_BOOT in favour of EV_EFI_VARIABLE_BOOT2 which specifies that " +
+				"a tagged hash of the event data must be measured.\n")
+		}
+		fmt.Printf("\n")
 	}
 
 	if c.seenIncorrectPeImageDigests {
