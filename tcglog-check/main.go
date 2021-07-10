@@ -453,7 +453,7 @@ func run() error {
 		EnableGrub:           withGrub,
 		EnableSystemdEFIStub: withSdEfiStub,
 		SystemdEFIStubPCR:    tcglog.PCRIndex(sdEfiStubPcr)}
-	log, err := tcglog.ParseLog(f, &options)
+	log, err := tcglog.ReadLog(f, &options)
 	if err != nil {
 		return xerrors.Errorf("cannot parse log: %w", err)
 	}

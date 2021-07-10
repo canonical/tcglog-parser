@@ -72,9 +72,9 @@ type Log struct {
 	Events     []*Event        // The list of events in the log
 }
 
-// ParseLog parses an event log read from r, using the supplied options. If an error occurs during parsing, this may return an
+// ReadLog parses an event log read from r, using the supplied options. If an error occurs during parsing, this may return an
 // incomplete list of events with the error.
-func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
+func ReadLog(r io.Reader, options *LogOptions) (*Log, error) {
 	event, err := ReadEvent(r, options)
 	if err != nil {
 		return nil, err

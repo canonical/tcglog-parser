@@ -85,7 +85,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log, err := tcglog.ParseLog(file, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
+	log, err := tcglog.ReadLog(file, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse log file: %v\n", err)
 		os.Exit(1)
