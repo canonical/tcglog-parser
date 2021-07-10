@@ -42,9 +42,9 @@ func (d StringEventData) Bytes() []byte {
 // ComputeStringEventDigest computes the digest associated with the supplied string, for
 // events where the digest is a tagged hash of the string. The function assumes that the
 // string is ASCII encoded and measured without a terminating NULL byte.
-func ComputeStringEventDigest(alg crypto.Hash, str StringEventData) []byte {
+func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
 	h := alg.New()
-	str.Write(h)
+	io.WriteString(h, str)
 	return h.Sum(nil)
 }
 

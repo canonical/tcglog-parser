@@ -72,9 +72,9 @@ func (d OpaqueEventData) Write(w io.Writer) error {
 
 // ComputeEventDigest computes the digest associated with the supplied event data bytes,
 // for events where the digest is a tagged hash of the event data.
-func ComputeEventDigest(alg crypto.Hash, data OpaqueEventData) []byte {
+func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
 	h := alg.New()
-	data.Write(h)
+	h.Write(data)
 	return h.Sum(nil)
 }
 
