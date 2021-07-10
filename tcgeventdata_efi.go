@@ -283,7 +283,7 @@ func (e *StartupLocalityEventData) Write(w io.Writer) error {
 func decodeStartupLocalityEvent(data []byte, r io.Reader) (*StartupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
-		return nil, err
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return &StartupLocalityEventData{rawEventData: data, StartupLocality: locality}, nil
@@ -325,7 +325,7 @@ func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*SP800_155_Platf
 		Guid     efi.GUID
 	}
 	if err := binary.Read(r, binary.LittleEndian, &d); err != nil {
-		return nil, err
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return &SP800_155_PlatformIdEventData{rawEventData: data, VendorId: d.VendorId, ReferenceManifestGuid: d.Guid}, nil
@@ -379,29 +379,29 @@ func decodeEventDataEFIVariable(data []byte) (*EFIVariableData, error) {
 
 	variableName, err := efi.ReadGUID(r)
 	if err != nil {
-		return nil, xerrors.Errorf("cannot read variable name: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	d.VariableName = variableName
 
 	var unicodeNameLength uint64
 	if err := binary.Read(r, binary.LittleEndian, &unicodeNameLength); err != nil {
-		return nil, xerrors.Errorf("cannot read unicode name length: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	var variableDataLength uint64
 	if err := binary.Read(r, binary.LittleEndian, &variableDataLength); err != nil {
-		return nil, xerrors.Errorf("cannot read variable data length: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	utf16Name, err := extractUTF16Buffer(r, unicodeNameLength)
 	if err != nil {
-		return nil, xerrors.Errorf("cannot extract unicode name buffer: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	d.UnicodeName = convertUtf16ToString(utf16Name)
 
 	d.VariableData = make([]byte, variableDataLength)
 	if _, err := io.ReadFull(r, d.VariableData); err != nil {
-		return nil, xerrors.Errorf("cannot read variable data: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return d, nil
@@ -453,13 +453,13 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 
 	var e rawEFIImageLoadEventHdr
 	if err := binary.Read(r, binary.LittleEndian, &e); err != nil {
-		return nil, err
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	lr := io.LimitReader(r, int64(e.LengthOfDevicePath))
 	path, err := efi.ReadDevicePath(lr)
 	if err != nil {
-		return nil, xerrors.Errorf("cannot decode device path: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return &EFIImageLoadEvent{
@@ -527,14 +527,14 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 	// UEFI_GPT_DATA.UEFIPartitionHeader
 	hdr, err := efi.ReadPartitionTableHeader(r, false)
 	if err != nil {
-		return nil, xerrors.Errorf("cannot read partition table header: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	d.Hdr = *hdr
 
 	// UEFI_GPT_DATA.NumberOfPartitions
 	var numberOfParts uint64
 	if err := binary.Read(r, binary.LittleEndian, &numberOfParts); err != nil {
-		return nil, xerrors.Errorf("cannot read number of partitions: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	if numberOfParts > math.MaxUint32 {
@@ -544,7 +544,7 @@ func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
 	// UEFI_GPT_DATA.Partitions
 	partitions, err := efi.ReadPartitionEntries(r, uint32(numberOfParts), hdr.SizeOfPartitionEntry)
 	if err != nil {
-		return nil, xerrors.Errorf("cannot read partition entries: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	d.Partitions = partitions
 

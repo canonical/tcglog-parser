@@ -16,6 +16,8 @@ import (
 	"github.com/canonical/go-tpm2"
 
 	"golang.org/x/xerrors"
+
+	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
 var separatorErrorDigests = make(map[tpm2.HashAlgorithmId]tpm2.Digest)
@@ -56,7 +58,7 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 	// Signature field
 	var sig [16]byte
 	if _, err := io.ReadFull(r, sig[:]); err != nil {
-		return nil, xerrors.Errorf("cannot read signature: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	signature := strings.TrimRight(string(sig[:]), "\x00")
 

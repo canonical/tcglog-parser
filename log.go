@@ -11,7 +11,7 @@ import (
 
 	"github.com/canonical/go-tpm2"
 
-	"golang.org/x/xerrors"
+	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
 // LogOptions allows the behaviour of Log to be controlled.
@@ -23,13 +23,6 @@ type LogOptions struct {
 
 type parser interface {
 	readNextEvent() (*Event, error)
-}
-
-func eofUnexpected(err error) error {
-	if err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-	return err
 }
 
 func isPCRIndexInRange(index PCRIndex) bool {
@@ -52,10 +45,7 @@ type parser_1_2 struct {
 func (p *parser_1_2) readNextEvent() (*Event, error) {
 	var header eventHeader_1_2
 	if err := binary.Read(p.r, binary.LittleEndian, &header); err != nil {
-		if err == io.EOF {
-			return nil, err
-		}
-		return nil, xerrors.Errorf("cannot read event header: %w", err)
+		return nil, ioerr.PassRawEOF("cannot read event header: %w", err)
 	}
 
 	if !isPCRIndexInRange(header.PCRIndex) {
@@ -63,20 +53,20 @@ func (p *parser_1_2) readNextEvent() (*Event, error) {
 	}
 
 	digest := make(Digest, tpm2.HashAlgorithmSHA1.Size())
-	if _, err := p.r.Read(digest); err != nil {
-		return nil, xerrors.Errorf("cannot read SHA-1 digest: %w", eofUnexpected(err))
+	if _, err := io.ReadFull(p.r, digest); err != nil {
+		return nil, ioerr.EOFIsUnexpected("cannot read SHA-1 digest: %w", err)
 	}
 	digests := make(DigestMap)
 	digests[tpm2.HashAlgorithmSHA1] = digest
 
 	var eventSize uint32
 	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, xerrors.Errorf("cannot read event size: %w", eofUnexpected(err))
+		return nil, ioerr.EOFIsUnexpected("cannot read event size: %w", err)
 	}
 
 	event := make([]byte, eventSize)
 	if _, err := io.ReadFull(p.r, event); err != nil {
-		return nil, xerrors.Errorf("cannot read event data: %w", eofUnexpected(err))
+		return nil, ioerr.EOFIsUnexpected("cannot read event data: %w", err)
 	}
 
 	return &Event{
@@ -104,10 +94,7 @@ type parser_2 struct {
 func (p *parser_2) readNextEvent() (*Event, error) {
 	var header eventHeader_2
 	if err := binary.Read(p.r, binary.LittleEndian, &header); err != nil {
-		if err == io.EOF {
-			return nil, err
-		}
-		return nil, xerrors.Errorf("cannot read event header: %w", err)
+		return nil, ioerr.PassRawEOF("cannot read event header: %w", err)
 	}
 
 	if !isPCRIndexInRange(header.PCRIndex) {
@@ -119,7 +106,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 	for i := uint32(0); i < header.Count; i++ {
 		var algorithmId tpm2.HashAlgorithmId
 		if err := binary.Read(p.r, binary.LittleEndian, &algorithmId); err != nil {
-			return nil, xerrors.Errorf("cannot read algorithm ID: %w", eofUnexpected(err))
+			return nil, ioerr.EOFIsUnexpected("cannot read algorithm ID: %w", err)
 		}
 
 		var digestSize uint16
@@ -137,7 +124,7 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 
 		digest := make(Digest, digestSize)
 		if _, err := io.ReadFull(p.r, digest); err != nil {
-			return nil, xerrors.Errorf("cannot read digest for algorithm %v: %w", algorithmId, eofUnexpected(err))
+			return nil, ioerr.EOFIsUnexpected("cannot read digest for algorithm %v: %w", algorithmId, err)
 		}
 
 		if _, exists := digests[algorithmId]; exists {
@@ -161,12 +148,12 @@ func (p *parser_2) readNextEvent() (*Event, error) {
 
 	var eventSize uint32
 	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, xerrors.Errorf("cannot read event size: %w", eofUnexpected(err))
+		return nil, ioerr.EOFIsUnexpected("cannot read event size: %w", err)
 	}
 
 	event := make([]byte, eventSize)
 	if _, err := io.ReadFull(p.r, event); err != nil {
-		return nil, xerrors.Errorf("cannot read event data: %w", eofUnexpected(err))
+		return nil, ioerr.EOFIsUnexpected("cannot read event data: %w", err)
 	}
 
 	return &Event{
