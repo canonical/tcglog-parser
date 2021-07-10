@@ -51,7 +51,15 @@ func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) *SystemdEFI
 		return nil
 	}
 
-	// data is a UTF-16 string in little-endian form terminated with a single zero byte.
+	// data is a UTF-16 string in little-endian form terminated with a single zero byte,
+	// so we should have an odd number of bytes.
+	if len(data)%2 != 1 {
+		return nil
+	}
+	if data[len(data)-1] != 0x00 {
+		return nil
+	}
+
 	// Omit the zero byte added by the EFI stub and then convert to native byte order.
 	reader := bytes.NewReader(data[:len(data)-1])
 
