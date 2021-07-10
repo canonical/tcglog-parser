@@ -22,8 +22,7 @@ import (
 
 var separatorErrorDigests = make(map[tpm2.HashAlgorithmId]tpm2.Digest)
 
-// StringEventData corresponds to event data that is an ASCII string. The event data may be informational (it provides
-// a hint as to what was measured as opposed to representing what was measured).
+// StringEventData corresponds to event data that is an non-NULL terminated ASCII string.
 type StringEventData string
 
 func (d StringEventData) String() string {
