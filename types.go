@@ -10,9 +10,6 @@ import (
 	"github.com/canonical/go-tpm2"
 )
 
-// Spec corresponds to the TCG specification that an event log conforms to.
-type Spec uint
-
 // PCRIndex corresponds to the index of a PCR on the TPM.
 type PCRIndex uint32
 

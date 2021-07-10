@@ -44,26 +44,6 @@ const (
 )
 
 const (
-	// SpecUnknown indicates that the specification to which the log conforms is unknown because it doesn't
-	// start with a spec ID event.
-	SpecUnknown Spec = iota
-
-	// SpecPCClient indicates that the log conforms to "TCG PC Client Specific Implementation Specification
-	// for Conventional BIOS".
-	// See https://www.trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-	SpecPCClient
-
-	// SpecEFI_1_2 indicates that the log conforms to "TCG EFI Platform Specification For TPM Family 1.1 or
-	// 1.2".
-	// See https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
-	SpecEFI_1_2
-
-	// SpecEFI_2 indicates that the log conforms to "TCG PC Client Platform Firmware Profile Specification"
-	// See https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-	SpecEFI_2
-)
-
-const (
 	SeparatorEventNormalValue    uint32 = 0
 	SeparatorEventErrorValue     uint32 = 1
 	SeparatorEventAltNormalValue uint32 = math.MaxUint32
