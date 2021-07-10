@@ -5,14 +5,29 @@
 package tcglog
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/canonical/go-tpm2"
 
+	"golang.org/x/xerrors"
+
 	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
+
+type eventHeader struct {
+	PCRIndex  PCRIndex
+	EventType EventType
+}
+
+type eventHeaderCryptoAgile struct {
+	eventHeader
+	Count uint32
+}
 
 // Event corresponds to a single event in an event log.
 type Event struct {
@@ -22,14 +37,85 @@ type Event struct {
 	Data      EventData // The data recorded with this event
 }
 
+func (e *Event) Write(w io.Writer) error {
+	digest, ok := e.Digests[tpm2.HashAlgorithmSHA1]
+	if !ok {
+		return errors.New("missing SHA-1 digest")
+	}
+	if len(digest) != tpm2.HashAlgorithmSHA1.Size() {
+		return errors.New("invalid digest size")
+	}
+
+	data := new(bytes.Buffer)
+	if err := e.Data.Write(data); err != nil {
+		return xerrors.Errorf("cannot serialize event data: %w", err)
+	}
+
+	hdr := eventHeader{
+		PCRIndex:  e.PCRIndex,
+		EventType: e.EventType}
+	if err := binary.Write(w, binary.LittleEndian, &hdr); err != nil {
+		return err
+	}
+
+	if _, err := w.Write(digest); err != nil {
+		return err
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint32(data.Len())); err != nil {
+		return err
+	}
+	_, err := w.Write(data.Bytes())
+	return err
+}
+
+func (e *Event) WriteCryptoAgile(w io.Writer) error {
+	var algs []tpm2.HashAlgorithmId
+	for alg, digest := range e.Digests {
+		if !alg.Supported() {
+			continue
+		}
+		if len(digest) != alg.Size() {
+			return fmt.Errorf("invalid digest size for %v", alg)
+		}
+		algs = append(algs, alg)
+	}
+
+	sort.Slice(algs, func(i, j int) bool { return algs[i] < algs[j] })
+
+	data := new(bytes.Buffer)
+	if err := e.Data.Write(data); err != nil {
+		return xerrors.Errorf("cannot serialize event data: %w", err)
+	}
+
+	hdr := eventHeaderCryptoAgile{
+		eventHeader: eventHeader{
+			PCRIndex:  e.PCRIndex,
+			EventType: e.EventType},
+		Count: uint32(len(algs))}
+	if err := binary.Write(w, binary.LittleEndian, &hdr); err != nil {
+		return err
+	}
+
+	for _, alg := range algs {
+		if err := binary.Write(w, binary.LittleEndian, alg); err != nil {
+			return err
+		}
+		if _, err := w.Write(e.Digests[alg]); err != nil {
+			return err
+		}
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint32(data.Len())); err != nil {
+		return err
+	}
+	_, err := w.Write(data.Bytes())
+	return err
+}
+
 func isPCRIndexInRange(index PCRIndex) bool {
 	const maxPCRIndex PCRIndex = 31
 	return index <= maxPCRIndex
-}
-
-type eventHeader struct {
-	PCRIndex  PCRIndex
-	EventType EventType
 }
 
 func ReadEvent(r io.Reader, options *LogOptions) (*Event, error) {
@@ -65,11 +151,6 @@ func ReadEvent(r io.Reader, options *LogOptions) (*Event, error) {
 		Digests:   digests,
 		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, options),
 	}, nil
-}
-
-type eventHeaderCryptoAgile struct {
-	eventHeader
-	Count uint32
 }
 
 func ReadEventCryptoAgile(r io.Reader, digestSizes []EFISpecIdEventAlgorithmSize, options *LogOptions) (*Event, error) {
