@@ -207,7 +207,7 @@ func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, dig
 		if pcrIndex == 6 {
 			return decodeEventDataHostPlatformSpecificCompactHash(data), nil
 		}
-	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority:
+	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority, EventTypeEFIVariableBoot2:
 		out, err = decodeEventDataEFIVariable(data)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
 		out, err = decodeEventDataEFIImageLoad(data)

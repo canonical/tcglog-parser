@@ -38,9 +38,14 @@ const (
 	EventTypeEFIGPTEvent                EventType = 0x80000006 // EV_EFI_GPT_EVENT
 	EventTypeEFIAction                  EventType = 0x80000007 // EV_EFI_ACTION
 	EventTypeEFIPlatformFirmwareBlob    EventType = 0x80000008 // EV_EFI_PLATFORM_FIRMWARE_BLOB
-	EventTypeEFIHandoffTables           EventType = 0x80000009 // EF_EFI_HANDOFF_TABLES
-	EventTypeEFIHCRTMEvent              EventType = 0x80000010 // EF_EFI_HCRTM_EVENT
+	EventTypeEFIHandoffTables           EventType = 0x80000009 // EV_EFI_HANDOFF_TABLES
+	EventTypeEFIPlatformFirmwareBlob2   EventType = 0x8000000a // EV_EFI_PLATFORM_FIRMWARE_BLOB2
+	EventTypeEFIHandoffTables2          EventType = 0x8000000b // EV_EFI_HANDOFF_TABLES2
+	EventTypeEFIVariableBoot2           EventType = 0x8000000c // EV_EFI_VARIABLE_BOOT2
+	EventTypeEFIHCRTMEvent              EventType = 0x80000010 // EV_EFI_HCRTM_EVENT
 	EventTypeEFIVariableAuthority       EventType = 0x800000e0 // EV_EFI_VARIABLE_AUTHORITY
+	EventTypeEFISPDMFirmwareBlob        EventType = 0x800000e1 // EV_EFI_SPDM_FIRMWARE_BLOB
+	EventTypeEFISPDMFirmwareConfig      EventType = 0x800000e2 // EV_EFI_SPDM_FIRMWARE_CONFIG
 )
 
 const (

@@ -78,10 +78,20 @@ func (e EventType) String() string {
 		return "EV_EFI_PLATFORM_FIRMWARE_BLOB"
 	case EventTypeEFIHandoffTables:
 		return "EV_EFI_HANDOFF_TABLES"
+	case EventTypeEFIPlatformFirmwareBlob2:
+		return "EV_EFI_PLATFORM_FIRMWARE_BLOB2"
+	case EventTypeEFIHandoffTables2:
+		return "EV_EFI_HANDOFF_TABLES2"
+	case EventTypeEFIVariableBoot2:
+		return "EV_EFI_VARIABLE_BOOT2"
 	case EventTypeEFIHCRTMEvent:
 		return "EV_EFI_HCRTM_EVENT"
 	case EventTypeEFIVariableAuthority:
 		return "EV_EFI_VARIABLE_AUTHORITY"
+	case EventTypeEFISPDMFirmwareBlob:
+		return "EV_EFI_SPDM_FIRMWARE_BLOB"
+	case EventTypeEFISPDMFirmwareConfig:
+		return "EV_EFI_SPDM_FIRMWARE_CONFIG"
 	default:
 		return fmt.Sprintf("%08x", uint32(e))
 	}
