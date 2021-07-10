@@ -198,7 +198,7 @@ func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventDa
 func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap) (out EventData, err error) {
 	switch eventType {
 	case EventTypeNoAction:
-		out, err = decodeEventDataNoAction(data)
+		return decodeEventDataNoAction(data)
 	case EventTypeSeparator:
 		return decodeEventDataSeparator(data, digests)
 	case EventTypeAction, EventTypeEFIAction:
@@ -208,11 +208,11 @@ func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, dig
 			return decodeEventDataHostPlatformSpecificCompactHash(data), nil
 		}
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority, EventTypeEFIVariableBoot2:
-		out, err = decodeEventDataEFIVariable(data)
+		return decodeEventDataEFIVariable(data)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
-		out, err = decodeEventDataEFIImageLoad(data)
+		return decodeEventDataEFIImageLoad(data)
 	case EventTypeEFIGPTEvent:
-		out, err = decodeEventDataEFIGPT(data)
+		return decodeEventDataEFIGPT(data)
 	default:
 	}
 

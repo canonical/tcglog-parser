@@ -8,6 +8,8 @@ import (
 	"crypto"
 	"fmt"
 	"io"
+	"unicode"
+	"unicode/utf8"
 )
 
 // EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
@@ -58,7 +60,22 @@ func (e *invalidEventData) Unwrap() error {
 type OpaqueEventData []byte
 
 func (d OpaqueEventData) String() string {
-	return ""
+	// This blob is opaque, but try to print something if it's filled
+	// with printable characters.
+	data := d
+	var s []byte
+	for len(data) > 0 {
+		r, sz := utf8.DecodeRune(data)
+		if r == 0 {
+			break
+		}
+		if !unicode.IsPrint(r) {
+			return ""
+		}
+		s = append(s, data[:sz]...)
+		data = data[sz:]
+	}
+	return string(s)
 }
 
 func (d OpaqueEventData) Bytes() []byte {
