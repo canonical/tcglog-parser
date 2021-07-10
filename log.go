@@ -5,13 +5,9 @@
 package tcglog
 
 import (
-	"encoding/binary"
-	"fmt"
 	"io"
 
 	"github.com/canonical/go-tpm2"
-
-	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
 // LogOptions allows the behaviour of Log to be controlled.
@@ -19,149 +15,6 @@ type LogOptions struct {
 	EnableGrub           bool     // Enable support for interpreting events recorded by GRUB
 	EnableSystemdEFIStub bool     // Enable support for interpreting events recorded by systemd's EFI linux loader stub
 	SystemdEFIStubPCR    PCRIndex // Specify the PCR that systemd's EFI linux loader stub measures to
-}
-
-type parser interface {
-	readNextEvent() (*Event, error)
-}
-
-func isPCRIndexInRange(index PCRIndex) bool {
-	const maxPCRIndex PCRIndex = 31
-	return index <= maxPCRIndex
-}
-
-type eventHeader_1_2 struct {
-	PCRIndex  PCRIndex
-	EventType EventType
-}
-
-type parser_1_2 struct {
-	r       io.Reader
-	options *LogOptions
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 11.1.1 "TCG_PCClientPCREventStruct Structure")
-func (p *parser_1_2) readNextEvent() (*Event, error) {
-	var header eventHeader_1_2
-	if err := binary.Read(p.r, binary.LittleEndian, &header); err != nil {
-		return nil, ioerr.PassRawEOF("cannot read event header: %w", err)
-	}
-
-	if !isPCRIndexInRange(header.PCRIndex) {
-		return nil, fmt.Errorf("log entry has an out-of-range PCR index (%d)", header.PCRIndex)
-	}
-
-	digest := make(Digest, tpm2.HashAlgorithmSHA1.Size())
-	if _, err := io.ReadFull(p.r, digest); err != nil {
-		return nil, ioerr.EOFIsUnexpected("cannot read SHA-1 digest: %w", err)
-	}
-	digests := make(DigestMap)
-	digests[tpm2.HashAlgorithmSHA1] = digest
-
-	var eventSize uint32
-	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, ioerr.EOFIsUnexpected("cannot read event size: %w", err)
-	}
-
-	event := make([]byte, eventSize)
-	if _, err := io.ReadFull(p.r, event); err != nil {
-		return nil, ioerr.EOFIsUnexpected("cannot read event data: %w", err)
-	}
-
-	return &Event{
-		PCRIndex:  header.PCRIndex,
-		EventType: header.EventType,
-		Digests:   digests,
-		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
-	}, nil
-}
-
-type eventHeader_2 struct {
-	PCRIndex  PCRIndex
-	EventType EventType
-	Count     uint32
-}
-
-type parser_2 struct {
-	r        io.Reader
-	options  *LogOptions
-	algSizes []EFISpecIdEventAlgorithmSize
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//  (section 9.2.2 "TCG_PCR_EVENT2 Structure")
-func (p *parser_2) readNextEvent() (*Event, error) {
-	var header eventHeader_2
-	if err := binary.Read(p.r, binary.LittleEndian, &header); err != nil {
-		return nil, ioerr.PassRawEOF("cannot read event header: %w", err)
-	}
-
-	if !isPCRIndexInRange(header.PCRIndex) {
-		return nil, fmt.Errorf("log entry has an out-of-range PCR index (%d)", header.PCRIndex)
-	}
-
-	digests := make(DigestMap)
-
-	for i := uint32(0); i < header.Count; i++ {
-		var algorithmId tpm2.HashAlgorithmId
-		if err := binary.Read(p.r, binary.LittleEndian, &algorithmId); err != nil {
-			return nil, ioerr.EOFIsUnexpected("cannot read algorithm ID: %w", err)
-		}
-
-		var digestSize uint16
-		var j int
-		for j = 0; j < len(p.algSizes); j++ {
-			if p.algSizes[j].AlgorithmId == algorithmId {
-				digestSize = p.algSizes[j].DigestSize
-				break
-			}
-		}
-
-		if j == len(p.algSizes) {
-			return nil, fmt.Errorf("event contains a digest for an unrecognized algorithm (%v)", algorithmId)
-		}
-
-		digest := make(Digest, digestSize)
-		if _, err := io.ReadFull(p.r, digest); err != nil {
-			return nil, ioerr.EOFIsUnexpected("cannot read digest for algorithm %v: %w", algorithmId, err)
-		}
-
-		if _, exists := digests[algorithmId]; exists {
-			return nil, fmt.Errorf("event contains more than one digest value for algorithm %v", algorithmId)
-		}
-		digests[algorithmId] = digest
-	}
-
-	for _, s := range p.algSizes {
-		if _, exists := digests[s.AlgorithmId]; !exists {
-			return nil, fmt.Errorf("event is missing a digest value for algorithm %v", s.AlgorithmId)
-		}
-	}
-
-	for alg, _ := range digests {
-		if alg.Supported() {
-			continue
-		}
-		delete(digests, alg)
-	}
-
-	var eventSize uint32
-	if err := binary.Read(p.r, binary.LittleEndian, &eventSize); err != nil {
-		return nil, ioerr.EOFIsUnexpected("cannot read event size: %w", err)
-	}
-
-	event := make([]byte, eventSize)
-	if _, err := io.ReadFull(p.r, event); err != nil {
-		return nil, ioerr.EOFIsUnexpected("cannot read event data: %w", err)
-	}
-
-	return &Event{
-		PCRIndex:  header.PCRIndex,
-		EventType: header.EventType,
-		Digests:   digests,
-		Data:      decodeEventData(event, header.PCRIndex, header.EventType, digests, p.options),
-	}, nil
 }
 
 func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
@@ -222,8 +75,7 @@ type Log struct {
 // ParseLog parses an event log read from r, using the supplied options. If an error occurs during parsing, this may return an
 // incomplete list of events with the error.
 func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
-	var parser parser = &parser_1_2{r: r, options: options}
-	event, err := parser.readNextEvent()
+	event, err := ReadEvent(r, options)
 	if err != nil {
 		return nil, err
 	}
@@ -261,9 +113,6 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 				algorithms = append(algorithms, s.AlgorithmId)
 			}
 		}
-		parser = &parser_2{r: r,
-			options:  options,
-			algSizes: digestSizes}
 	} else {
 		algorithms = AlgorithmIdList{tpm2.HashAlgorithmSHA1}
 	}
@@ -275,7 +124,14 @@ func ParseLog(r io.Reader, options *LogOptions) (*Log, error) {
 	log := &Log{Spec: spec, Algorithms: algorithms, Events: []*Event{event}}
 
 	for {
-		event, err := parser.readNextEvent()
+		var event *Event
+		var err error
+		if spec.IsEFI_2() {
+			event, err = ReadEventCryptoAgile(r, digestSizes, options)
+		} else {
+			event, err = ReadEvent(r, options)
+		}
+
 		switch {
 		case err == io.EOF:
 			return log, nil
