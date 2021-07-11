@@ -41,7 +41,7 @@ func WriteLog(w io.Writer, events []*Event) error {
 	}
 
 	for i, event := range events {
-		if cryptoAgile {
+		if cryptoAgile && i > 0 {
 			for _, digest := range digestSizes {
 				if _, ok := event.Digests[digest.AlgorithmId]; !ok {
 					return fmt.Errorf("event %d has missing digest for algorithm %v", i, digest.AlgorithmId)

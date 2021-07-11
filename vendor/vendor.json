@@ -41,6 +41,14 @@
 			"versionExact": "main"
 		},
 		{
+			"checksumSHA1": "5zGeHDBvsYpgEyZ91hgSF0zLxyU=",
+			"path": "github.com/canonical/go-sp800.108-kdf",
+			"revision": "ead800bbf9a0ff709ebd9f3067d6f28dc700d1b5",
+			"revisionTime": "2021-03-15T10:40:21Z",
+			"version": "main",
+			"versionExact": "main"
+		},
+		{
 			"checksumSHA1": "inZOuvF07VvZnsj1HvApM8Uf7qY=",
 			"path": "github.com/canonical/go-tpm2",
 			"revision": "fb781d04d0dea72f916cc68b637b7be6bcb3ccd4",
