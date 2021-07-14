@@ -72,8 +72,10 @@ type Log struct {
 	Events     []*Event        // The list of events in the log
 }
 
-// ReadLog parses an event log read from r, using the supplied options. If an error occurs during parsing, this may return an
-// incomplete list of events with the error.
+// ReadLog reads an event log read from r using the supplied options. The log must
+// be in the format defined in one of the PC Client Platform Firmware Profile
+// specifications. If an error occurs during parsing, this may return an incomplete
+// list of events with the error.
 func ReadLog(r io.Reader, options *LogOptions) (*Log, error) {
 	event, err := ReadEvent(r, options)
 	if err != nil {

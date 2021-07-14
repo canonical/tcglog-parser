@@ -12,6 +12,17 @@ import (
 	"golang.org/x/xerrors"
 )
 
+// WriteLog writes an event log to w from the supplied events, in a
+// format that can be read again by ReadLog. The first event must be
+// a Specification ID event. If the Specification ID event specifies
+// a crypto-agile log, the digest algorithms must all be supported by
+// go and the specified sizes must all be correct. Each of the
+// supplied events must contain a digest for each algorithm. For a
+// non crypto-agile log, each of the supplied events must contain
+// a SHA-1 digest.
+//
+// This function is only useful for generating reproducible data for
+// use in tests.
 func WriteLog(w io.Writer, events []*Event) error {
 	if len(events) == 0 {
 		return nil
