@@ -7,81 +7,38 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
+	"github.com/jessevdk/go-flags"
 
 	"golang.org/x/xerrors"
 
 	"github.com/canonical/tcglog-parser"
-	"github.com/canonical/tcglog-parser/internal"
+	internal_flags "github.com/canonical/tcglog-parser/internal/flags"
 )
 
-type requiredAlgsArg tcglog.AlgorithmIdList
+type options struct {
+	WithGrub               bool                             `long:"with-grub" description:"Validate log entries measured by GRUB to PCR 8"`
+	WithSystemdEFIStub     *tcglog.PCRIndex                 `long:"with-systemd-efi-stub" description:"Validate log entries measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
+	Pcrs                   internal_flags.PCRRange          `short:"p" long:"pcrs" description:"Validate log entries associated with the specified PCRs. Can be specified multiple times" default:"0-7"`
+	TpmPath                string                           `long:"tpm-path" description:"Validate log entries associated with the specified TPM" default:"/dev/tpm0"`
+	IgnoreDataDecodeErrors bool                             `long:"ignore-data-decode-errors" description:"Don't exit with an error if any event data fails to decode correctly"`
+	RequiredAlgs           []internal_flags.HashAlgorithmId `long:"require-alg" description:"Require the specified algorithms to be present in the log. Can be specified multiple times" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
+	BootImageSearchPaths   []string                         `long:"boot-image-search-path" description:"Specify a path to search for images executed during boot and measured to PCR 4 with EV_EFI_BOOT_SERVICES_APPLICATION events. Can be specified multiple times" default:"/boot" default:"/cdrom/EFI" default:"/cdrom/casper"`
 
-func (l *requiredAlgsArg) String() string {
-	return fmt.Sprintf("%v", *l)
+	Positional struct {
+		LogPath string `positional-arg-name:"log-path"`
+	} `positional-args:"true"`
 }
 
-func (l *requiredAlgsArg) Set(value string) error {
-	algs := strings.Split(value, ",")
-	for _, alg := range algs {
-		a, err := internal.ParseAlgorithm(alg)
-		if err != nil {
-			return err
-		}
-		*l = append(*l, a)
-	}
-	return nil
-}
-
-type bootImageSearchPathsArg []string
-
-func (a *bootImageSearchPathsArg) String() string {
-	return strings.Join(*a, ",")
-}
-
-func (a *bootImageSearchPathsArg) Set(value string) error {
-	*a = append(*a, value)
-	return nil
-}
-
-var (
-	withGrub      bool
-	withSdEfiStub bool
-	sdEfiStubPcr  int
-	noDefaultPcrs bool
-	tpmPath       string
-	pcrs          = internal.PCRArgList{0, 1, 2, 3, 4, 5, 6, 7}
-
-	ignoreDataDecodeErrors bool
-	requiredAlgs           requiredAlgsArg
-	bootImageSearchPaths   bootImageSearchPathsArg
-)
-
-func init() {
-	flag.BoolVar(&withGrub, "with-grub", false, "Validate log entries made by GRUB in to PCR's 8 and 9")
-	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
-	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
-	flag.BoolVar(&noDefaultPcrs, "no-default-pcrs", false, "Omit the default PCRs")
-	flag.StringVar(&tpmPath, "tpm-path", "/dev/tpm0", "Validate log entries associated with the specified TPM")
-	flag.Var(&pcrs, "pcrs", "Validate log entries for the specified PCRs. Can be specified multiple times")
-
-	flag.BoolVar(&ignoreDataDecodeErrors, "ignore-data-decode-errors", false,
-		"Don't exit with an error if any event data fails to decode correctly")
-	flag.Var(&requiredAlgs, "required-algs", "Require the specified algorithms to be present in the log")
-	flag.Var(&bootImageSearchPaths, "boot-image-search-path", "Specify the path to search for images executed during "+
-		"boot and measured to PCR 4 with EV_EFI_BOOT_SERVICES_APPLICATION events. Can be specified multiple "+
-		"times. Default is /boot, /cdrom/EFI and /cdrom/casper")
-}
+var opts options
 
 type peImageHashes struct {
 	peHash   []byte
@@ -91,17 +48,13 @@ type peImageHashes struct {
 var peImageDataCache map[tpm2.HashAlgorithmId]map[string]*peImageHashes
 
 func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
-	if len(bootImageSearchPaths) == 0 {
-		bootImageSearchPaths = bootImageSearchPathsArg{"/boot", "/cdrom/EFI", "/cdrom/casper"}
-	}
-
 	peImageDataCache = make(map[tpm2.HashAlgorithmId]map[string]*peImageHashes)
 	for _, alg := range algorithms {
 		peImageDataCache[alg] = make(map[string]*peImageHashes)
 	}
 
-	dirs := make([]string, len(bootImageSearchPaths))
-	copy(dirs, bootImageSearchPaths)
+	dirs := make([]string, len(opts.BootImageSearchPaths))
+	copy(dirs, opts.BootImageSearchPaths)
 	for len(dirs) > 0 {
 		dir := dirs[0]
 		dirs = dirs[1:]
@@ -167,10 +120,10 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdL
 
 	var selections tpm2.PCRSelectionList
 	for _, alg := range algorithms {
-		selections = append(selections, tpm2.PCRSelection{Hash: alg, Select: pcrIndexListToSelect(pcrs)})
+		selections = append(selections, tpm2.PCRSelection{Hash: alg, Select: pcrIndexListToSelect(opts.Pcrs)})
 	}
 
-	for _, i := range pcrs {
+	for _, i := range opts.Pcrs {
 		result[i] = tcglog.DigestMap{}
 	}
 
@@ -189,7 +142,7 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdL
 
 func readPCRsFromTPM1Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
 	result := make(map[tcglog.PCRIndex]tcglog.DigestMap)
-	for _, i := range pcrs {
+	for _, i := range opts.Pcrs {
 		in, err := mu.MarshalToBytes(uint32(i))
 		if err != nil {
 			return nil, fmt.Errorf("cannot read PCR values due to a marshalling error: %v", err)
@@ -221,7 +174,7 @@ func getTPMDeviceVersion(tpm *tpm2.TPMContext) int {
 }
 
 func readPCRs(algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
-	tcti, err := tpm2.OpenTPMDevice(tpmPath)
+	tcti, err := tpm2.OpenTPMDevice(opts.TpmPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open TPM device: %v", err)
 	}
@@ -372,7 +325,7 @@ func (c *logChecker) simulatePCRExtend(event *checkedEvent) {
 }
 
 func (c *logChecker) processEvent(event *tcglog.Event) {
-	if !pcrs.Contains(event.PCRIndex) {
+	if !opts.Pcrs.Contains(event.PCRIndex) {
 		return
 	}
 
@@ -393,7 +346,7 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 func (c *logChecker) run(log *tcglog.Log) {
 	c.indexTracker = make(map[tcglog.PCRIndex]uint)
 	c.expectedPCRValues = make(map[tcglog.PCRIndex]tcglog.DigestMap)
-	for _, pcr := range pcrs {
+	for _, pcr := range opts.Pcrs {
 		c.expectedPCRValues[pcr] = tcglog.DigestMap{}
 
 		for _, alg := range log.Algorithms {
@@ -407,60 +360,42 @@ func (c *logChecker) run(log *tcglog.Log) {
 }
 
 func run() error {
-	flag.Parse()
-
-	args := flag.Args()
-	if len(args) > 1 {
-		return errors.New("too many arguments")
+	if _, err := flags.Parse(&opts); err != nil {
+		return err
 	}
 
-	logPath := ""
-	if len(args) == 1 {
-		logPath = args[0]
-	}
-
-	if !noDefaultPcrs {
-		if withGrub {
-			pcrs = append(pcrs, 8, 9)
-		}
-		if withSdEfiStub {
-			pcrs = append(pcrs, tcglog.PCRIndex(sdEfiStubPcr))
-		}
-	} else {
-		pcrs = pcrs[8:]
-	}
-
-	sort.SliceStable(pcrs, func(i, j int) bool { return pcrs[i] < pcrs[j] })
+	logPath := opts.Positional.LogPath
 
 	if logPath == "" {
-		if filepath.Dir(tpmPath) != "/dev" {
+		if filepath.Dir(opts.TpmPath) != "/dev" {
 			return errors.New("expected TPM path to be a device node in /dev")
 		}
-		logPath = fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", filepath.Base(tpmPath))
+		logPath = fmt.Sprintf("/sys/kernel/security/%s/binary_bios_measurements", filepath.Base(opts.TpmPath))
 	} else {
-		tpmPath = ""
+		opts.TpmPath = ""
 	}
 
 	f, err := os.Open(logPath)
 	if err != nil {
-		return xerrors.Errorf("cannot open log: %w", err)
+		return err
 	}
 	defer f.Close()
 
 	failed := false
 
-	options := tcglog.LogOptions{
-		EnableGrub:           withGrub,
-		EnableSystemdEFIStub: withSdEfiStub,
-		SystemdEFIStubPCR:    tcglog.PCRIndex(sdEfiStubPcr)}
-	log, err := tcglog.ReadLog(f, &options)
+	logOpts := tcglog.LogOptions{EnableGrub: opts.WithGrub}
+	if opts.WithSystemdEFIStub != nil {
+		logOpts.EnableSystemdEFIStub = true
+		logOpts.SystemdEFIStubPCR = *opts.WithSystemdEFIStub
+	}
+	log, err := tcglog.ReadLog(f, &logOpts)
 	if err != nil {
-		return xerrors.Errorf("cannot parse log: %w", err)
+		return xerrors.Errorf("cannot read log: %w", err)
 	}
 
 	missingAlg := false
-	for _, alg := range requiredAlgs {
-		if log.Algorithms.Contains(alg) {
+	for _, alg := range opts.RequiredAlgs {
+		if log.Algorithms.Contains(tpm2.HashAlgorithmId(alg)) {
 			continue
 		}
 
@@ -470,7 +405,7 @@ func run() error {
 			fmt.Printf("*** FAIL ***: The log is missing the following required algorithms:\n")
 		}
 
-		fmt.Printf("\t- %s\n", alg)
+		fmt.Printf("\t- %s\n", tpm2.HashAlgorithmId(alg))
 	}
 	if missingAlg {
 		fmt.Printf("\n")
@@ -491,7 +426,7 @@ func run() error {
 		dataDecoderErrs = append(dataDecoderErrs, fmt.Sprintf("\t- Event %d in PCR %d (type: %s): %v\n", e.index, e.PCRIndex, e.EventType, err))
 	}
 	if len(dataDecoderErrs) > 0 {
-		if !ignoreDataDecodeErrors {
+		if !opts.IgnoreDataDecodeErrors {
 			fmt.Printf("*** FAIL ***")
 			failed = true
 		} else {
@@ -561,12 +496,12 @@ func run() error {
 			"measuring bootloader is using the 1.2 version of the TCG EFI Protocol Specification rather than the 2.0 "+
 			"version (which could be because it is not provided by the firmware). It could also be because the measuring "+
 			"bootloader does not pass the appropriate flag to the firmware to indicate that a PE image is being measured.\n\n",
-			strings.Join(bootImageSearchPaths, ","))
+			strings.Join(opts.BootImageSearchPaths, ","))
 	}
 
-	if tpmPath == "" {
+	if opts.TpmPath == "" {
 		fmt.Printf("- INFO: Expected PCR values from log:\n")
-		for _, i := range pcrs {
+		for _, i := range opts.Pcrs {
 			for _, alg := range log.Algorithms {
 				fmt.Printf("\tPCR %d, bank %s: %x\n", i, alg, c.expectedPCRValues[i][alg])
 			}
@@ -578,7 +513,7 @@ func run() error {
 		}
 
 		seenLogConsistencyError := false
-		for _, i := range pcrs {
+		for _, i := range opts.Pcrs {
 			for _, alg := range log.Algorithms {
 				if bytes.Equal(c.expectedPCRValues[i][alg], tpmPCRValues[i][alg]) {
 					continue
@@ -608,7 +543,15 @@ func run() error {
 }
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		switch e := err.(type) {
+		case *flags.Error:
+			// flags already prints this
+			if e.Type != flags.ErrHelp {
+				os.Exit(1)
+			}
+		default:
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }

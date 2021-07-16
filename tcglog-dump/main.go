@@ -1,4 +1,4 @@
-// Copyright 2019 Canonical Ltd.
+// Copyright 2019-2021 Canonical Ltd.
 // Licensed under the LGPLv3 with static-linking exception.
 // See LICENCE file for details.
 
@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,85 +15,69 @@ import (
 	"strings"
 
 	"github.com/canonical/go-efilib"
+	"github.com/canonical/go-tpm2"
+	"github.com/jessevdk/go-flags"
+
 	"github.com/canonical/tcglog-parser"
-	"github.com/canonical/tcglog-parser/internal"
+	internal_flags "github.com/canonical/tcglog-parser/internal/flags"
 )
 
-var (
-	alg                  string
-	verbose              bool
-	hexDump              bool
-	varDataHexDump       bool
-	eslDump              bool
-	extractDataPrefix    string
-	extractVarDataPrefix string
-	withGrub             bool
-	withSdEfiStub        bool
-	sdEfiStubPcr         int
-	pcrs                 internal.PCRArgList
-)
+type options struct {
+	Alg                internal_flags.HashAlgorithmId `long:"alg" description:"Hash algorithm to display" default:"sha1" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
+	Verbose            bool                           `short:"v" long:"verbose" description:"Display summary of event data"`
+	Hexdump            bool                           `long:"hexdump" description:"Display hexdump of event data"`
+	VardataHexdump     bool                           `long:"vardatahexdump" description:"Display hexdump of EFI variable data"`
+	EslDump            bool                           `long:"esldump" description:"Display a dump of EFI signature lists"`
+	ExtractData        string                         `long:"extract-data" description:"Extract event data to individual files named with the supplied prefix (format: <prefix>-<pcr>-<num>)" optional:"true" optional-value:"data"`
+	ExtractVarData     string                         `long:"extract-vardata" description:"Extract EFI variable data to individual files named with the supplied prefix (format: <prefix>-<pcr>-<num>" optional:"true" optional-value:"vardata"`
+	WithGrub           bool                           `long:"with-grub" description:"Decode event data measured by GRUB to PCRs 8 and 9"`
+	WithSystemdEFIStub *tcglog.PCRIndex               `long:"with-systemd-efi-stub" description:"Decode event data measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
+	Pcrs               internal_flags.PCRRange        `short:"p" long:"pcrs" description:"Display events associated with the specified PCRs. Can be specified multiple times"`
 
-func init() {
-	flag.StringVar(&alg, "alg", "sha1", "Name of the hash algorithm to display")
-	flag.BoolVar(&verbose, "verbose", false, "Display details of event data")
-	flag.BoolVar(&verbose, "v", false, "Display details of event data (shorthand)")
-	flag.BoolVar(&hexDump, "hexdump", false, "Display hexdump of event data")
-	flag.BoolVar(&hexDump, "x", false, "Display hexdump of event data (shorthand)")
-	flag.BoolVar(&varDataHexDump, "vardatahexdump", false, "Display hexdump of EFI variable data")
-	flag.BoolVar(&eslDump, "esldump", false, "Display a dump of EFI signature lists")
-	flag.StringVar(&extractDataPrefix, "extract-data", "", "Extract event data to individual files named with the specified prefix (format: <prefix>-<pcr>-<num>")
-	flag.StringVar(&extractVarDataPrefix, "extract-vardata", "", "Extract EFI variable data to individual files named with the specified prefix (format: <prefix>-<pcr>-<num>")
-	flag.BoolVar(&withGrub, "with-grub", false, "Interpret measurements made by GRUB to PCR's 8 and 9")
-	flag.BoolVar(&withSdEfiStub, "with-systemd-efi-stub", false, "Interpret measurements made by systemd's EFI stub Linux loader")
-	flag.IntVar(&sdEfiStubPcr, "systemd-efi-stub-pcr", 8, "Specify the PCR that systemd's EFI stub Linux loader measures to")
-	flag.Var(&pcrs, "pcrs", "Display events associated with the specified PCRs. Can be specified multiple times")
+	Positional struct {
+		LogPath string `positional-arg-name:"log-path"`
+	} `positional-args:"true"`
 }
+
+var opts options
 
 func shouldDisplayEvent(event *tcglog.Event) bool {
-	if len(pcrs) == 0 {
+	if len(opts.Pcrs) == 0 {
 		return true
 	}
-	return pcrs.Contains(event.PCRIndex)
+	return opts.Pcrs.Contains(event.PCRIndex)
 }
 
-func main() {
-	flag.Parse()
-
-	algorithmId, err := internal.ParseAlgorithm(alg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+func run() error {
+	if _, err := flags.Parse(&opts); err != nil {
+		return err
 	}
 
-	args := flag.Args()
-	if len(args) > 1 {
-		fmt.Fprintf(os.Stderr, "Too many arguments\n")
-		os.Exit(1)
-	}
-
-	var path string
-	if len(args) == 1 {
-		path = args[0]
-	} else {
+	path := opts.Positional.LogPath
+	if path == "" {
 		path = "/sys/kernel/security/tpm0/binary_bios_measurements"
 	}
 
-	file, err := os.Open(path)
+	f, err := os.Open(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open log file: %v\n", err)
-		os.Exit(1)
+		return err
+	}
+	defer f.Close()
+
+	logOpts := tcglog.LogOptions{EnableGrub: opts.WithGrub}
+	if opts.WithSystemdEFIStub != nil {
+		logOpts.EnableSystemdEFIStub = true
+		logOpts.SystemdEFIStubPCR = *opts.WithSystemdEFIStub
 	}
 
-	log, err := tcglog.ReadLog(file, &tcglog.LogOptions{EnableGrub: withGrub, EnableSystemdEFIStub: withSdEfiStub, SystemdEFIStubPCR: tcglog.PCRIndex(sdEfiStubPcr)})
+	log, err := tcglog.ReadLog(f, &logOpts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse log file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("cannot read log: %v", err)
 	}
 
-	if !log.Algorithms.Contains(algorithmId) {
-		fmt.Fprintf(os.Stderr,
-			"The log doesn't contain entries for the %s digest algorithm\n", algorithmId)
-		os.Exit(1)
+	alg := tpm2.HashAlgorithmId(opts.Alg)
+	if !log.Algorithms.Contains(alg) {
+		return fmt.Errorf("the log does not contain entries for the %v digest algorithm", alg)
 	}
 
 	for i, event := range log.Events {
@@ -102,11 +85,11 @@ func main() {
 			continue
 		}
 
-		var builder bytes.Buffer
-		fmt.Fprintf(&builder, "%2d %x %s", event.PCRIndex, event.Digests[algorithmId], event.EventType)
-		if verbose || hexDump {
+		str := new(bytes.Buffer)
+		fmt.Fprintf(str, "%2d %x %s", event.PCRIndex, event.Digests[alg], event.EventType)
+		if opts.Verbose || opts.Hexdump {
 			switch {
-			case event.EventType == tcglog.EventTypeEFIVariableBoot:
+			case event.EventType == tcglog.EventTypeEFIVariableBoot || event.EventType == tcglog.EventTypeEFIVariableBoot2:
 				varData, ok := event.Data.(*tcglog.EFIVariableData)
 				if ok && varData.VariableName == efi.GlobalVariable {
 					if varData.UnicodeName == "BootOrder" {
@@ -122,61 +105,78 @@ func main() {
 							order = append(order, fmt.Sprintf("%04x", n))
 						}
 						if err != nil && err != io.EOF {
-							fmt.Fprintf(&builder, " [ Invalid BootOrder: %v ]", err)
+							fmt.Fprintf(str, " [ Invalid BootOrder: %v ]", err)
 						} else {
-							fmt.Fprintf(&builder, " [ BootOrder: %s ]", strings.Join(order, ","))
+							fmt.Fprintf(str, " [ BootOrder: %s ]", strings.Join(order, ","))
 						}
 					} else {
 						opt, err := efi.ReadLoadOption(bytes.NewReader(varData.VariableData))
 						if err != nil {
-							fmt.Fprintf(&builder, " [ Invalid load option for %s: %v ]", varData.UnicodeName, err)
+							fmt.Fprintf(str, " [ Invalid load option for %s: %v ]", varData.UnicodeName, err)
 						} else {
-							fmt.Fprintf(&builder, " [ %s: %s ]", varData.UnicodeName, opt)
+							fmt.Fprintf(str, " [ %s: %s ]", varData.UnicodeName, opt)
 						}
 					}
 				} else {
-					fmt.Fprintf(&builder, " [ %s ]", event.Data.String())
+					fmt.Fprintf(str, " [ %s ]", event.Data.String())
 				}
 			default:
 				data := event.Data.String()
 				if data != "" {
-					fmt.Fprintf(&builder, " [ %s ]", data)
+					fmt.Fprintf(str, " [ %s ]", data)
 				}
 			}
 		}
 
-		if hexDump {
-			fmt.Fprintf(&builder, "\n\tEvent data:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
+		if opts.Hexdump {
+			fmt.Fprintf(str, "\n\tEvent data:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
 		}
 
-		if varDataHexDump {
+		if opts.VardataHexdump {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				fmt.Fprintf(&builder, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
+				fmt.Fprintf(str, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
 			}
 		}
 
-		if eslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
+		if opts.EslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				db, err := efi.ReadSignatureDatabase(bytes.NewReader(varData.VariableData))
 				if err == nil {
-					fmt.Fprintf(&builder, "\n\tSignature database contents:%s", strings.Replace(db.String(), "\n", "\n\t", -1))
+					fmt.Fprintf(str, "\n\tSignature database contents:%s", strings.Replace(db.String(), "\n", "\n\t", -1))
 				}
 			}
 		}
 
-		fmt.Println(builder.String())
+		fmt.Println(str.String())
 
-		if extractDataPrefix != "" {
-			ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractDataPrefix, event.PCRIndex, i), event.Data.Bytes(), 0644)
+		if opts.ExtractData != "" {
+			ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", opts.ExtractData, event.PCRIndex, i), event.Data.Bytes(), 0644)
 		}
 
-		if extractVarDataPrefix != "" {
+		if opts.ExtractVarData != "" {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", extractVarDataPrefix, event.PCRIndex, i), varData.VariableData, 0644)
+				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", opts.ExtractVarData, event.PCRIndex, i), varData.VariableData, 0644)
 			}
+		}
+	}
+
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		switch e := err.(type) {
+		case *flags.Error:
+			// flags already prints this
+			if e.Type != flags.ErrHelp {
+				os.Exit(1)
+			}
+		default:
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}
 }
