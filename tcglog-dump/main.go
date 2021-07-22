@@ -25,11 +25,11 @@ import (
 type options struct {
 	Alg                internal_flags.HashAlgorithmId `long:"alg" description:"Hash algorithm to display" default:"sha1" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
 	Verbose            bool                           `short:"v" long:"verbose" description:"Display summary of event data"`
-	Hexdump            bool                           `long:"hexdump" description:"Display hexdump of event data"`
-	VardataHexdump     bool                           `long:"vardatahexdump" description:"Display hexdump of EFI variable data"`
-	EslDump            bool                           `long:"esldump" description:"Display a dump of EFI signature lists"`
-	ExtractData        string                         `long:"extract-data" description:"Extract event data to individual files named with the supplied prefix (format: <prefix>-<pcr>-<num>)" optional:"true" optional-value:"data"`
-	ExtractVarData     string                         `long:"extract-vardata" description:"Extract EFI variable data to individual files named with the supplied prefix (format: <prefix>-<pcr>-<num>" optional:"true" optional-value:"vardata"`
+	Hexdump            bool                           `long:"hexdump" description:"Display hexdump of event data associated with each event"`
+	VarHexdump         bool                           `long:"varhexdump" description:"Display hexdump of variable data for events associated with the measurement of EFI variables"`
+	EslSummary         bool                           `long:"eslsummary" description:"Display a summary of EFI signature lists for EV_EFI_VARIABLE_DRIVER_CONFIG events"`
+	ExtractData        string                         `long:"extract-data" description:"Extract event data associated with each event to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"data"`
+	ExtractVars        string                         `long:"extract-vars" description:"Extract variable data for events associated with the measurement of EFI variables to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"var"`
 	WithGrub           bool                           `long:"with-grub" description:"Decode event data measured by GRUB to PCRs 8 and 9"`
 	WithSystemdEFIStub *tcglog.PCRIndex               `long:"with-systemd-efi-stub" description:"Decode event data measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
 	Pcrs               internal_flags.PCRRange        `short:"p" long:"pcrs" description:"Display events associated with the specified PCRs. Can be specified multiple times"`
@@ -132,14 +132,14 @@ func run() error {
 			fmt.Fprintf(str, "\n\tEvent data:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
 		}
 
-		if opts.VardataHexdump {
+		if opts.VarHexdump {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				fmt.Fprintf(str, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
 			}
 		}
 
-		if opts.EslDump && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
+		if opts.EslSummary && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
 				db, err := efi.ReadSignatureDatabase(bytes.NewReader(varData.VariableData))
@@ -152,13 +152,13 @@ func run() error {
 		fmt.Println(str.String())
 
 		if opts.ExtractData != "" {
-			ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", opts.ExtractData, event.PCRIndex, i), event.Data.Bytes(), 0644)
+			ioutil.WriteFile(fmt.Sprintf("%s-%d", opts.ExtractData, i), event.Data.Bytes(), 0644)
 		}
 
-		if opts.ExtractVarData != "" {
+		if opts.ExtractVars != "" {
 			varData, ok := event.Data.(*tcglog.EFIVariableData)
 			if ok {
-				ioutil.WriteFile(fmt.Sprintf("%s-%d-%d", opts.ExtractVarData, event.PCRIndex, i), varData.VariableData, 0644)
+				ioutil.WriteFile(fmt.Sprintf("%s-%d", opts.ExtractVars, i), varData.VariableData, 0644)
 			}
 		}
 	}
