@@ -160,7 +160,7 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventData, error) {
 	var alg tpm2.HashAlgorithmId
 	for a, _ := range digests {
-		if !alg.Supported() || a.Size() > alg.Size() {
+		if !alg.IsValid() || a.Size() > alg.Size() {
 			alg = a
 		}
 	}

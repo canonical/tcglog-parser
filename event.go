@@ -72,7 +72,7 @@ func (e *Event) Write(w io.Writer) error {
 func (e *Event) WriteCryptoAgile(w io.Writer) error {
 	var algs []tpm2.HashAlgorithmId
 	for alg, digest := range e.Digests {
-		if !alg.Supported() {
+		if !alg.IsValid() {
 			continue
 		}
 		if len(digest) != alg.Size() {
@@ -202,7 +202,7 @@ func ReadEventCryptoAgile(r io.Reader, digestSizes []EFISpecIdEventAlgorithmSize
 	}
 
 	for alg, _ := range digests {
-		if alg.Supported() {
+		if alg.IsValid() {
 			continue
 		}
 		delete(digests, alg)

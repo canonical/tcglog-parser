@@ -241,7 +241,7 @@ func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err erro
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	for _, d := range out.DigestSizes {
-		if d.AlgorithmId.Supported() && d.AlgorithmId.Size() != int(d.DigestSize) {
+		if d.AlgorithmId.IsValid() && d.AlgorithmId.Size() != int(d.DigestSize) {
 			return nil, fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
 		}
 	}

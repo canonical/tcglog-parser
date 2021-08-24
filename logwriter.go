@@ -40,7 +40,7 @@ func WriteLog(w io.Writer, events []*Event) error {
 		cryptoAgile = true
 		digestSizes = d.DigestSizes
 		for _, digest := range digestSizes {
-			if !digest.AlgorithmId.Supported() {
+			if !digest.AlgorithmId.IsValid() {
 				return fmt.Errorf("unsupported algorithm %v", digest.AlgorithmId)
 			}
 			if digest.DigestSize != uint16(digest.AlgorithmId.Size()) {

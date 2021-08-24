@@ -49,10 +49,10 @@
 			"versionExact": "main"
 		},
 		{
-			"checksumSHA1": "inZOuvF07VvZnsj1HvApM8Uf7qY=",
+			"checksumSHA1": "F9XBK2/JyHlXZTcEEdFUxyO9UOk=",
 			"path": "github.com/canonical/go-tpm2",
-			"revision": "fb781d04d0dea72f916cc68b637b7be6bcb3ccd4",
-			"revisionTime": "2020-08-24T18:49:43Z"
+			"revision": "3e2b334e4aa6bc83175ebe0d0cc9524140737632",
+			"revisionTime": "2021-08-24T13:09:21Z"
 		},
 		{
 			"checksumSHA1": "bT/rC7K8St3lNRXf/XJGpB4wNJU=",
@@ -61,10 +61,10 @@
 			"revisionTime": "2020-08-24T18:49:43Z"
 		},
 		{
-			"checksumSHA1": "fGle5W3B2jSAsLeOQnRbGG7uyV8=",
+			"checksumSHA1": "XhX0jJCdJOvsn4pIOL0H8J9YV54=",
 			"path": "github.com/canonical/go-tpm2/mu",
-			"revision": "fb781d04d0dea72f916cc68b637b7be6bcb3ccd4",
-			"revisionTime": "2020-08-24T18:49:43Z"
+			"revision": "3e2b334e4aa6bc83175ebe0d0cc9524140737632",
+			"revisionTime": "2021-08-24T13:09:21Z"
 		},
 		{
 			"checksumSHA1": "7gaY8AK3cmTK9H0yfMq/vmRDulA=",

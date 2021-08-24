@@ -111,7 +111,7 @@ func ReadLog(r io.Reader, options *LogOptions) (*Log, error) {
 
 	if spec.IsEFI_2() {
 		for _, s := range digestSizes {
-			if s.AlgorithmId.Supported() {
+			if s.AlgorithmId.IsValid() {
 				algorithms = append(algorithms, s.AlgorithmId)
 			}
 		}
