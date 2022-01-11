@@ -15,7 +15,7 @@ import (
 
 	"github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
-	"github.com/canonical/go-tpm2/mu"
+	"github.com/canonical/go-tpm2/linux"
 	"github.com/jessevdk/go-flags"
 
 	"golang.org/x/xerrors"
@@ -115,8 +115,19 @@ func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
 	return
 }
 
-func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
-	result := make(map[tcglog.PCRIndex]tcglog.DigestMap)
+func readPCRs(algorithms tcglog.AlgorithmIdList) (result map[tcglog.PCRIndex]tcglog.DigestMap, err error) {
+	tcti, err := linux.OpenDevice(opts.TpmPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not open TPM device: %v", err)
+	}
+	tpm := tpm2.NewTPMContext(tcti)
+	defer tpm.Close()
+
+	if !tpm.IsTPM2() {
+		return nil, errors.New("not a valid TPM2 device")
+	}
+
+	result = make(map[tcglog.PCRIndex]tcglog.DigestMap)
 
 	var selections tpm2.PCRSelectionList
 	for _, alg := range algorithms {
@@ -137,58 +148,8 @@ func readPCRsFromTPM2Device(tpm *tpm2.TPMContext, algorithms tcglog.AlgorithmIdL
 			result[tcglog.PCRIndex(i)][s.Hash] = tcglog.Digest(digests[s.Hash][i])
 		}
 	}
+
 	return result, nil
-}
-
-func readPCRsFromTPM1Device(tpm *tpm2.TPMContext) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
-	result := make(map[tcglog.PCRIndex]tcglog.DigestMap)
-	for _, i := range opts.Pcrs {
-		in, err := mu.MarshalToBytes(uint32(i))
-		if err != nil {
-			return nil, fmt.Errorf("cannot read PCR values due to a marshalling error: %v", err)
-		}
-		rc, _, out, err := tpm.RunCommandBytes(tpm2.StructTag(0x00c1), tpm2.CommandCode(0x00000015), in)
-		if err != nil {
-			return nil, fmt.Errorf("cannot read PCR values: %v", err)
-		}
-		if rc != tpm2.Success {
-			return nil, fmt.Errorf("cannot read PCR values: unexpected response code (0x%08x)", rc)
-		}
-		result[i] = tcglog.DigestMap{}
-		result[i][tpm2.HashAlgorithmSHA1] = out
-	}
-	return result, nil
-}
-
-func getTPMDeviceVersion(tpm *tpm2.TPMContext) int {
-	if isTpm2, _ := tpm.IsTPM2(); isTpm2 {
-		return 2
-	}
-
-	payload, _ := mu.MarshalToBytes(uint32(0x00000005), uint32(4), uint32(0x00000103))
-	if rc, _, _, err := tpm.RunCommandBytes(tpm2.StructTag(0x00c1), tpm2.CommandCode(0x00000065), payload); err == nil && rc == tpm2.Success {
-		return 1
-	}
-
-	return 0
-}
-
-func readPCRs(algorithms tcglog.AlgorithmIdList) (map[tcglog.PCRIndex]tcglog.DigestMap, error) {
-	tcti, err := tpm2.OpenTPMDevice(opts.TpmPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not open TPM device: %v", err)
-	}
-	tpm, _ := tpm2.NewTPMContext(tcti)
-	defer tpm.Close()
-
-	switch getTPMDeviceVersion(tpm) {
-	case 2:
-		return readPCRsFromTPM2Device(tpm, algorithms)
-	case 1:
-		return readPCRsFromTPM1Device(tpm)
-	}
-
-	return nil, errors.New("not a valid TPM device")
 }
 
 type incorrectDigestValue struct {
