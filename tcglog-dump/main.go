@@ -80,13 +80,33 @@ func run() error {
 		return fmt.Errorf("the log does not contain entries for the %v digest algorithm", alg)
 	}
 
+	longestEventType := len("TYPE")
+	if opts.Verbose || opts.Hexdump {
+		for _, event := range log.Events {
+			if !shouldDisplayEvent(event) {
+				continue
+			}
+
+			n := len(event.EventType.String())
+			if n > longestEventType {
+				longestEventType = n
+			}
+		}
+	}
+
+	fmt.Printf("PCR %-*s %-*s", alg.Size()*2, "DIGEST", longestEventType, "TYPE")
+	if opts.Verbose || opts.Hexdump {
+		fmt.Printf(" DETAILS")
+	}
+	fmt.Printf("\n")
+
 	for i, event := range log.Events {
 		if !shouldDisplayEvent(event) {
 			continue
 		}
 
 		str := new(bytes.Buffer)
-		fmt.Fprintf(str, "%2d %x %s", event.PCRIndex, event.Digests[alg], event.EventType)
+		fmt.Fprintf(str, "%3d %x %-*s", event.PCRIndex, event.Digests[alg], longestEventType, event.EventType.String())
 		if opts.Verbose || opts.Hexdump {
 			switch {
 			case event.EventType == tcglog.EventTypeEFIVariableBoot || event.EventType == tcglog.EventTypeEFIVariableBoot2:
