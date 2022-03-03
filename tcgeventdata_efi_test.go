@@ -210,12 +210,12 @@ func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventString(c *C) {
 				PartitionNumber: 1,
 				PartitionStart:  0x800,
 				PartitionSize:   0x100000,
-				Signature:       efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60}),
+				Signature:       efi.GUIDHardDriveSignature(efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60})),
 				MBRType:         efi.GPT},
 			efi.FilePathDevicePathNode("\\EFI\\ubuntu\\shimx64.efi")}}
 	c.Check(event.String(), Equals, "UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x000000006556c018, ImageLengthInMemory: 955072, "+
 		"ImageLinkTimeAddress: 0x0000000000000000, "+
-		"DevicePath: \\PciRoot(0x0)\\Pci(0x1d,0x0)\\Pci(0x0,0x0)\\NVMe(0x1-0x00-0x00-0x00-0x00-0x00-0x00-0x00-0x00)\\HD(1,GPT,66de947b-fdb2-4525-b752-30d66bb2b960,0x0000000000000800,0x0000000000100000)\\\\EFI\\ubuntu\\shimx64.efi }")
+		"DevicePath: \\PciRoot(0x0)\\Pci(0x1d,0x0)\\Pci(0x0,0x0)\\NVMe(0x1,00-00-00-00-00-00-00-00)\\HD(1,GPT,66de947b-fdb2-4525-b752-30d66bb2b960)\\\\EFI\\ubuntu\\shimx64.efi }")
 }
 
 func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventWrite(c *C) {
@@ -239,7 +239,7 @@ func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventWrite(c *C) {
 				PartitionNumber: 1,
 				PartitionStart:  0x800,
 				PartitionSize:   0x100000,
-				Signature:       efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60}),
+				Signature:       efi.GUIDHardDriveSignature(efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60})),
 				MBRType:         efi.GPT},
 			efi.FilePathDevicePathNode("\\EFI\\ubuntu\\shimx64.efi")}}
 
@@ -293,7 +293,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIImageLoad2(c *C) {
 			PartitionNumber: 1,
 			PartitionStart:  0x800,
 			PartitionSize:   0x100000,
-			Signature:       efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60}),
+			Signature:       efi.GUIDHardDriveSignature(efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60})),
 			MBRType:         efi.GPT},
 		efi.FilePathDevicePathNode("\\EFI\\ubuntu\\shimx64.efi")})
 }
