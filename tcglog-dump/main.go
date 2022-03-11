@@ -6,10 +6,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -108,43 +106,9 @@ func run() error {
 		str := new(bytes.Buffer)
 		fmt.Fprintf(str, "%3d %x %-*s", event.PCRIndex, event.Digests[alg], longestEventType, event.EventType.String())
 		if opts.Verbose || opts.Hexdump {
-			switch {
-			case event.EventType == tcglog.EventTypeEFIVariableBoot || event.EventType == tcglog.EventTypeEFIVariableBoot2:
-				varData, ok := event.Data.(*tcglog.EFIVariableData)
-				if ok && varData.VariableName == efi.GlobalVariable {
-					if varData.UnicodeName == "BootOrder" {
-						r := bytes.NewReader(varData.VariableData)
-						var order []string
-						var err error
-						for {
-							var n uint16
-							err = binary.Read(r, binary.LittleEndian, &n)
-							if err != nil {
-								break
-							}
-							order = append(order, fmt.Sprintf("%04x", n))
-						}
-						if err != nil && err != io.EOF {
-							fmt.Fprintf(str, " [ Invalid BootOrder: %v ]", err)
-						} else {
-							fmt.Fprintf(str, " [ BootOrder: %s ]", strings.Join(order, ","))
-						}
-					} else {
-						opt, err := efi.ReadLoadOption(bytes.NewReader(varData.VariableData))
-						if err != nil {
-							fmt.Fprintf(str, " [ Invalid load option for %s: %v ]", varData.UnicodeName, err)
-						} else {
-							fmt.Fprintf(str, " [ %s: %s ]", varData.UnicodeName, opt)
-						}
-					}
-				} else {
-					fmt.Fprintf(str, " [ %s ]", event.Data.String())
-				}
-			default:
-				data := event.Data.String()
-				if data != "" {
-					fmt.Fprintf(str, " [ %s ]", data)
-				}
+			details := eventDetailsStringer(event).String()
+			if details != "" {
+				fmt.Fprintf(str, " [ %s ]", details)
 			}
 		}
 
