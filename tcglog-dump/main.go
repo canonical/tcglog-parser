@@ -92,7 +92,7 @@ func run() error {
 		}
 	}
 
-	fmt.Printf("PCR %-*s %-*s", alg.Size()*2, "DIGEST", longestEventType, "TYPE")
+	fmt.Printf("PCR %-*s %-*s", alg.Size()*2, "DIGEST", longestEventType + 2, "TYPE")
 	if opts.Verbose || opts.Hexdump {
 		fmt.Printf(" DETAILS")
 	}
@@ -108,7 +108,7 @@ func run() error {
 		if opts.Verbose || opts.Hexdump {
 			details := eventDetailsStringer(event).String()
 			if details != "" {
-				fmt.Fprintf(str, " [ %s ]", details)
+				fmt.Fprintf(str, " | %s", details)
 			}
 		}
 
