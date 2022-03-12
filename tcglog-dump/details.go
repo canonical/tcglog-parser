@@ -225,9 +225,13 @@ func eventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
 		return out
 	}
 	switch d := event.Data.(type) {
+	case *tcglog.GrubStringEventData:
+		return d
 	case tcglog.OpaqueEventData:
 		return d
 	case tcglog.StringEventData:
+		return d
+	case *tcglog.SystemdEFIStubCommandline:
 		return d
 	default:
 		if verbose {
