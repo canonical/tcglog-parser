@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/x509"
 	"encoding/binary"
 	"fmt"
@@ -36,8 +35,9 @@ func (s bootOrderStringer) String() string {
 }
 
 type bootOptionStringer struct {
-	name string
-	data []byte
+	verbose bool
+	name    string
+	data    []byte
 }
 
 func (s *bootOptionStringer) String() string {
@@ -46,7 +46,10 @@ func (s *bootOptionStringer) String() string {
 		return fmt.Sprintf("Invalid load option for %s: %v", s.name, err)
 	}
 
-	return fmt.Sprintf("%s: %v", s.name, opt)
+	if s.verbose {
+		return fmt.Sprintf("%s: %v", s.name, opt)
+	}
+	return fmt.Sprintf("%s: %s", s.name, opt.Description)
 }
 
 type variableDriverConfigBoolStringer struct {
@@ -66,23 +69,15 @@ func (s *variableDriverConfigBoolStringer) String() string {
 }
 
 type variableDriverConfigDbStringer struct {
-	name string
-	data []byte
+	verbose bool
+	name    string
+	data    []byte
 }
 
 func (s *variableDriverConfigDbStringer) String() string {
 	db, err := efi.ReadSignatureDatabase(bytes.NewReader(s.data))
 	if err != nil {
 		return fmt.Sprintf("Invalid signature database for %s: %v", s.name, err)
-	}
-	if len(db) == 1 && len(db[0].Signatures) == 1 && db[0].Type == efi.CertX509Guid {
-		cert, err := x509.ParseCertificate(db[0].Signatures[0].Data)
-		if err != nil {
-			return fmt.Sprintf("Invalid X509 certificate in signature database %s: %v", s.name, err)
-		}
-		h := crypto.SHA256.New()
-		h.Write(cert.RawTBSCertificate)
-		return fmt.Sprintf("%-4s subject=\"%v\" fingerprint=%x", s.name+":", cert.Subject, h.Sum(nil))
 	}
 
 	str := fmt.Sprintf("%-4s", s.name+":")
@@ -102,47 +97,142 @@ func (s *variableDriverConfigDbStringer) String() string {
 		str += fmt.Sprint(" entries(sha256)=", n)
 	}
 
+	if s.verbose {
+		return str + strings.Replace(db.String(), "\n", "\n\t", -1)
+	}
 	return str
 }
 
-func eventDetailsStringer(event *tcglog.Event) fmt.Stringer {
+type variableAuthorityStringer struct {
+	verbose      bool
+	variableName efi.GUID
+	unicodeName  string
+	data         []byte
+}
+
+func (s *variableAuthorityStringer) String() string {
+	var authority string
+
+	if s.verbose {
+		data := s.data
+
+		var guid efi.GUID
+		data = data[copy(guid[:], s.data):]
+
+		cert, err := x509.ParseCertificate(data)
+		if err != nil {
+			guid = efi.GUID{}
+			cert, err = x509.ParseCertificate(s.data)
+		}
+
+		if err == nil {
+			authority = fmt.Sprint("authority: \"", cert.Subject, "\", ")
+		}
+	}
+
+	if s.variableName == efi.ImageSecurityDatabaseGuid {
+		return authority + "source: \"" + s.unicodeName + "\""
+	}
+	return fmt.Sprintf("%ssource: guid=%v, name=\"%s\"", authority, s.variableName, s.unicodeName)
+}
+
+type sbatLevelStringer struct{}
+
+func (sbatLevelStringer) String() string { return "SbatLevel" }
+
+type simpleGptEventStringer struct {
+	data *tcglog.EFIGPTData
+}
+
+func (s *simpleGptEventStringer) String() string {
+	return fmt.Sprint("GUID: ", s.data.Hdr.DiskGUID)
+}
+
+func eventDetailsStringerInternal(event *tcglog.Event, verbose bool) fmt.Stringer {
 	switch {
+	//case event.EventType == tcglog.EventTypeNoAction && !verbose:
 	case event.EventType == tcglog.EventTypeEFIVariableBoot, event.EventType == tcglog.EventTypeEFIVariableBoot2:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
-			// Return the invalid event data
 			return event.Data
 		}
 		if varData.VariableName != efi.GlobalVariable {
-			// Unexpected GUID - just use the standard variable printer
-			return event.Data
+			// Unexpected GUID
+			return nil
 		}
 
 		if varData.UnicodeName == "BootOrder" {
 			return bootOrderStringer(varData.VariableData)
 		}
 
-		return &bootOptionStringer{varData.UnicodeName, varData.VariableData}
+		return &bootOptionStringer{verbose, varData.UnicodeName, varData.VariableData}
 	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
-			// Return the invalid event data
 			return event.Data
 		}
 		if varData.VariableName == efi.ImageSecurityDatabaseGuid {
-			return &variableDriverConfigDbStringer{varData.UnicodeName, varData.VariableData}
+			return &variableDriverConfigDbStringer{verbose, varData.UnicodeName, varData.VariableData}
 		}
 		if varData.VariableName != efi.GlobalVariable {
-			// Unexpected GUID - just use the standard variable printer
-			return event.Data
+			// Unexpected GUID
+			return nil
 		}
 		switch varData.UnicodeName {
 		case "SecureBoot", "DeployedMode", "AuditMode":
 			return &variableDriverConfigBoolStringer{varData.UnicodeName, varData.VariableData}
 		default:
-			return &variableDriverConfigDbStringer{varData.UnicodeName, varData.VariableData}
+			return &variableDriverConfigDbStringer{verbose, varData.UnicodeName, varData.VariableData}
 		}
+	case event.EventType == tcglog.EventTypeEFIVariableAuthority:
+		varData, ok := event.Data.(*tcglog.EFIVariableData)
+		if !ok {
+			return event.Data
+		}
+		if varData.VariableName == efi.MakeGUID(0x605dab50, 0xe046, 0x4300, 0xabb6, [...]uint8{0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23}) &&
+			varData.UnicodeName == "SbatLevel" {
+			return sbatLevelStringer{}
+		}
+
+		return &variableAuthorityStringer{verbose, varData.VariableName, varData.UnicodeName, varData.VariableData}
+	case event.EventType == tcglog.EventTypeEFIGPTEvent && !verbose:
+		data, ok := event.Data.(*tcglog.EFIGPTData)
+		if !ok {
+			return event.Data
+		}
+
+		return &simpleGptEventStringer{data}
+	case event.EventType == tcglog.EventTypeEFIBootServicesApplication, event.EventType == tcglog.EventTypeEFIBootServicesDriver,
+		event.EventType == tcglog.EventTypeEFIRuntimeServicesDriver:
+		if !verbose {
+			data, ok := event.Data.(*tcglog.EFIImageLoadEvent)
+			if !ok {
+				return event.Data
+			}
+			return data.DevicePath
+		}
+	}
+
+	return nil
+}
+
+type nullStringer struct{}
+
+func (s nullStringer) String() string { return "" }
+
+func eventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
+	if out := eventDetailsStringerInternal(event, verbose); out != nil {
+		return out
+	}
+	switch d := event.Data.(type) {
+	case tcglog.OpaqueEventData:
+		return d
+	case tcglog.StringEventData:
+		return d
 	default:
-		return event.Data
+		if verbose {
+			return event.Data
+		}
+		return nullStringer{}
 	}
 }

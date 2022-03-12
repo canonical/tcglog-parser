@@ -5,14 +5,10 @@
 package main
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strings"
 
-	"github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 	"github.com/jessevdk/go-flags"
 
@@ -22,10 +18,9 @@ import (
 
 type options struct {
 	Alg                internal_flags.HashAlgorithmId `long:"alg" description:"Hash algorithm to display" default:"sha1" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
-	Verbose            bool                           `short:"v" long:"verbose" description:"Display summary of event data"`
+	Verbose            []bool                         `short:"v" long:"verbose" description:"Display summary of event data"`
 	Hexdump            bool                           `long:"hexdump" description:"Display hexdump of event data associated with each event"`
 	VarHexdump         bool                           `long:"varhexdump" description:"Display hexdump of variable data for events associated with the measurement of EFI variables"`
-	EslSummary         bool                           `long:"eslsummary" description:"Display a summary of EFI signature lists for EV_EFI_VARIABLE_DRIVER_CONFIG events"`
 	ExtractData        string                         `long:"extract-data" description:"Extract event data associated with each event to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"data"`
 	ExtractVars        string                         `long:"extract-vars" description:"Extract variable data for events associated with the measurement of EFI variables to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"var"`
 	WithGrub           bool                           `long:"with-grub" description:"Decode event data measured by GRUB to PCRs 8 and 9"`
@@ -78,62 +73,35 @@ func run() error {
 		return fmt.Errorf("the log does not contain entries for the %v digest algorithm", alg)
 	}
 
-	longestEventType := len("TYPE")
-	if opts.Verbose || opts.Hexdump {
-		for _, event := range log.Events {
-			if !shouldDisplayEvent(event) {
-				continue
-			}
+	var formatter formatter
+	if len(opts.Verbose) < 2 && !opts.Hexdump && !opts.VarHexdump {
+		var longestEventType int
+		if len(opts.Verbose) > 0 {
+			for _, event := range log.Events {
+				if !shouldDisplayEvent(event) {
+					continue
+				}
 
-			n := len(event.EventType.String())
-			if n > longestEventType {
-				longestEventType = n
+				n := len(event.EventType.String())
+				if n > longestEventType {
+					longestEventType = n
+				}
 			}
 		}
+
+		formatter = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0, 3, alg.Size()*2, longestEventType)
+	} else {
+		formatter = newBlockFormatter(os.Stdout, alg, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
 	}
 
-	fmt.Printf("PCR %-*s %-*s", alg.Size()*2, "DIGEST", longestEventType + 2, "TYPE")
-	if opts.Verbose || opts.Hexdump {
-		fmt.Printf(" DETAILS")
-	}
-	fmt.Printf("\n")
+	formatter.printHeader()
 
 	for i, event := range log.Events {
 		if !shouldDisplayEvent(event) {
 			continue
 		}
 
-		str := new(bytes.Buffer)
-		fmt.Fprintf(str, "%3d %x %-*s", event.PCRIndex, event.Digests[alg], longestEventType, event.EventType.String())
-		if opts.Verbose || opts.Hexdump {
-			details := eventDetailsStringer(event).String()
-			if details != "" {
-				fmt.Fprintf(str, " | %s", details)
-			}
-		}
-
-		if opts.Hexdump {
-			fmt.Fprintf(str, "\n\tEvent data:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
-		}
-
-		if opts.VarHexdump {
-			varData, ok := event.Data.(*tcglog.EFIVariableData)
-			if ok {
-				fmt.Fprintf(str, "\n\tEFI variable data:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
-			}
-		}
-
-		if opts.EslSummary && event.EventType == tcglog.EventTypeEFIVariableDriverConfig {
-			varData, ok := event.Data.(*tcglog.EFIVariableData)
-			if ok {
-				db, err := efi.ReadSignatureDatabase(bytes.NewReader(varData.VariableData))
-				if err == nil {
-					fmt.Fprintf(str, "\n\tSignature database contents:%s", strings.Replace(db.String(), "\n", "\n\t", -1))
-				}
-			}
-		}
-
-		fmt.Println(str.String())
+		formatter.printEvent(event)
 
 		if opts.ExtractData != "" {
 			ioutil.WriteFile(fmt.Sprintf("%s-%d", opts.ExtractData, i), event.Data.Bytes(), 0644)
