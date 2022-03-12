@@ -75,21 +75,7 @@ func run() error {
 
 	var formatter formatter
 	if len(opts.Verbose) < 2 && !opts.Hexdump && !opts.VarHexdump {
-		var longestEventType int
-		if len(opts.Verbose) > 0 {
-			for _, event := range log.Events {
-				if !shouldDisplayEvent(event) {
-					continue
-				}
-
-				n := len(event.EventType.String())
-				if n > longestEventType {
-					longestEventType = n
-				}
-			}
-		}
-
-		formatter = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0, 3, alg.Size()*2, longestEventType)
+		formatter = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0)
 	} else {
 		formatter = newBlockFormatter(os.Stdout, alg, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
 	}
@@ -114,6 +100,8 @@ func run() error {
 			}
 		}
 	}
+
+	formatter.flush()
 
 	return nil
 }

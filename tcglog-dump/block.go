@@ -26,7 +26,7 @@ type blockFormatter struct {
 	varHexdump bool
 }
 
-func (f *blockFormatter) printHeader() {}
+func (*blockFormatter) printHeader() {}
 
 func (f *blockFormatter) printEvent(event *tcglog.Event) {
 	fmt.Fprintf(f.dst, "\nPCR: %d\n", event.PCRIndex)
@@ -50,6 +50,8 @@ func (f *blockFormatter) printEvent(event *tcglog.Event) {
 		}
 	}
 }
+
+func (*blockFormatter) flush() {}
 
 func newBlockFormatter(f *os.File, alg tpm2.HashAlgorithmId, verbosity int, hexdump, varHexdump bool) formatter {
 	return &blockFormatter{

@@ -148,7 +148,7 @@ func (s *simpleGptEventStringer) String() string {
 	return fmt.Sprint("GUID: ", s.data.Hdr.DiskGUID)
 }
 
-func eventDetailsStringerInternal(event *tcglog.Event, verbose bool) fmt.Stringer {
+func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
 	switch {
 	//case event.EventType == tcglog.EventTypeNoAction && !verbose:
 	case event.EventType == tcglog.EventTypeEFIVariableBoot, event.EventType == tcglog.EventTypeEFIVariableBoot2:
@@ -221,7 +221,7 @@ type nullStringer struct{}
 func (s nullStringer) String() string { return "" }
 
 func eventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
-	if out := eventDetailsStringerInternal(event, verbose); out != nil {
+	if out := customEventDetailsStringer(event, verbose); out != nil {
 		return out
 	}
 	switch d := event.Data.(type) {

@@ -6,63 +6,58 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/canonical/go-tpm2"
 
 	"github.com/canonical/tcglog-parser"
 )
 
-const (
-	minPcrWidth    = len("PCR")
-	minDigestWidth = len("DIGEST")
-	minTypeWidth   = len("TYPE")
-)
+type tableStringer struct {
+	fmt.Stringer
+}
+
+func (s *tableStringer) String() string {
+	str := s.Stringer.String()
+	n := strings.IndexAny(str, "\n\t")
+	if n == -1 {
+		return str
+	}
+	return str[0:n] + " ..."
+}
 
 type tableFormatter struct {
-	dst io.Writer
+	dst *tabwriter.Writer
 
 	alg     tpm2.HashAlgorithmId
 	verbose bool
-
-	pcrWidth    int
-	digestWidth int
-	typeWidth   int
 }
 
 func (f *tableFormatter) printHeader() {
-	fmt.Fprintf(f.dst, "%-*s %-*s %-*s", f.pcrWidth, "PCR", f.digestWidth, "DIGEST", f.typeWidth, "TYPE")
+	fmt.Fprint(f.dst, "PCR\tDIGEST\tTYPE")
 	if f.verbose {
-		fmt.Fprintf(f.dst, " | DETAILS")
+		fmt.Fprint(f.dst, "\tDETAILS")
 	}
-	fmt.Fprintf(f.dst, "\n")
+	fmt.Fprint(f.dst, "\n")
 }
 
 func (f *tableFormatter) printEvent(event *tcglog.Event) {
-	fmt.Fprintf(f.dst, "%*d %-*x %-*s", f.pcrWidth, event.PCRIndex, f.digestWidth, event.Digests[f.alg], f.typeWidth, event.EventType.String())
+	fmt.Fprintf(f.dst, "%d\t%x\t%s", event.PCRIndex, event.Digests[f.alg], event.EventType)
 	if f.verbose {
-		fmt.Fprintf(f.dst, " | %s", eventDetailsStringer(event, false))
+		fmt.Fprintf(f.dst, "\t%s", &tableStringer{eventDetailsStringer(event, false)})
 	}
-	fmt.Fprintf(f.dst, "\n")
+	fmt.Fprint(f.dst, "\n")
 }
 
-func newTableFormatter(f *os.File, alg tpm2.HashAlgorithmId, verbose bool, pcrWidth, digestWidth, typeWidth int) formatter {
-	if pcrWidth < minPcrWidth {
-		pcrWidth = minPcrWidth
-	}
-	if digestWidth < minDigestWidth {
-		digestWidth = minDigestWidth
-	}
-	if typeWidth < minTypeWidth {
-		typeWidth = minTypeWidth
-	}
+func (f *tableFormatter) flush() {
+	f.dst.Flush()
+}
 
+func newTableFormatter(f *os.File, alg tpm2.HashAlgorithmId, verbose bool) formatter {
 	return &tableFormatter{
-		dst:         f,
-		alg:         alg,
-		verbose:     verbose,
-		pcrWidth:    pcrWidth,
-		digestWidth: digestWidth,
-		typeWidth:   typeWidth}
+		dst:     tabwriter.NewWriter(f, 0, 0, 2, ' ', 0),
+		alg:     alg,
+		verbose: verbose}
 }

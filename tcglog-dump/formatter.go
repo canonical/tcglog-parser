@@ -11,4 +11,5 @@ import (
 type formatter interface {
 	printHeader()
 	printEvent(event *tcglog.Event)
+	flush()
 }
