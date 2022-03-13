@@ -75,7 +75,11 @@ func run() error {
 
 	var formatter formatter
 	if len(opts.Verbose) < 2 && !opts.Hexdump && !opts.VarHexdump {
-		formatter = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0)
+		var err error
+		formatter, err = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0)
+		if err != nil {
+			return err
+		}
 	} else {
 		formatter = newBlockFormatter(os.Stdout, alg, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
 	}
