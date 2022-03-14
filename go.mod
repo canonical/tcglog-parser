@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/bsiegert/ranges v0.0.0-20111221115336-19303dc7aa63
-	github.com/canonical/go-efilib v0.3.0
+	github.com/canonical/go-efilib v0.3.1-0.20220314143719-95d50e8afc82
 	github.com/canonical/go-sp800.108-kdf v0.0.0-20210315104021-ead800bbf9a0 // indirect
 	github.com/canonical/go-sp800.90a-drbg v0.0.0-20210314144037-6eeb1040d6c3 // indirect
 	github.com/canonical/go-tpm2 v0.1.0

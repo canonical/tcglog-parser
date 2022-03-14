@@ -145,7 +145,7 @@ type simpleGptEventStringer struct {
 }
 
 func (s *simpleGptEventStringer) String() string {
-	return fmt.Sprint("GUID: ", s.data.Hdr.DiskGUID)
+	return fmt.Sprint("DiskGUID: ", s.data.Hdr.DiskGUID)
 }
 
 func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {

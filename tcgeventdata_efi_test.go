@@ -395,10 +395,14 @@ func (s *tcgeventdataEfiSuite) TestEFIGPTDataString(c *C) {
 				Attributes:          0,
 				PartitionName:       "",
 			}}}
-	c.Check(event.String(), Equals, "UEFI_GPT_DATA{ DiskGUID: a4ae73c2-0e2f-4513-bd3c-456da7f7f0fd, "+
-		"Partitions: [{ PartitionTypeGUID: c12a7328-f81f-11d2-ba4b-00a0c93ec93b, UniquePartitionGUID: 66de947b-fdb2-4525-b752-30d66bb2b960, PartitionName: \"EFI System Partition\" }, "+
-		"{ PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4, UniquePartitionGUID: 631b17dc-edb7-4d1d-a761-6dce3efce415, PartitionName: \"\" }, "+
-		"{ PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4, UniquePartitionGUID: c64af521-14f1-4ef2-adb5-20b59ca2335a, PartitionName: \"\" }] }")
+	c.Check(event.String(), Equals, "UEFI_GPT_DATA{\n"+
+		"\tHdr: EFI_PARTITION_TABLE_HEADER{ MyLBA: 0x1, AlternateLBA: 0xee7752af, FirstUsableLBA: 0x22, LastUsableLBA: 0xee77528e, DiskGUID: a4ae73c2-0e2f-4513-bd3c-456da7f7f0fd, PartitionEntryLBA: 0x2, NumberOfPartitionEntries: 128, SizeOfPartitionEntry: 0x80, PartitionEntryArrayCRC32: 0x0b4528f6 },\n"+
+		"\tPartitions: [\n"+
+		"\t\tEFI_PARTITION_ENTRY{ PartitionTypeGUID: c12a7328-f81f-11d2-ba4b-00a0c93ec93b, UniquePartitionGUID: 66de947b-fdb2-4525-b752-30d66bb2b960, StartingLBA: 0x800, EndingLBA: 0x1007ff, Attributes: 0x0000000000000000, PartitionName: \"EFI System Partition\" }\n"+
+		"\t\tEFI_PARTITION_ENTRY{ PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4, UniquePartitionGUID: 631b17dc-edb7-4d1d-a761-6dce3efce415, StartingLBA: 0x100800, EndingLBA: 0x26e7ff, Attributes: 0x0000000000000000, PartitionName: \"\" }\n"+
+		"\t\tEFI_PARTITION_ENTRY{ PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4, UniquePartitionGUID: c64af521-14f1-4ef2-adb5-20b59ca2335a, StartingLBA: 0x26e800, EndingLBA: 0xee774fff, Attributes: 0x0000000000000000, PartitionName: \"\" }\n"+
+		"\t]\n"+
+		"}")
 }
 
 func (s *tcgeventdataEfiSuite) TestEFIGPTDataWrite(c *C) {

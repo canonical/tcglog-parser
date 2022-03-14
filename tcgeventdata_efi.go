@@ -482,14 +482,11 @@ type EFIGPTData struct {
 
 func (e *EFIGPTData) String() string {
 	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "UEFI_GPT_DATA{ DiskGUID: %s, Partitions: [", e.Hdr.DiskGUID)
-	for i, part := range e.Partitions {
-		if i > 0 {
-			fmt.Fprintf(&builder, ", ")
-		}
-		fmt.Fprintf(&builder, "{ %s }", part)
+	fmt.Fprintf(&builder, "UEFI_GPT_DATA{\n\tHdr: %s,\n\tPartitions: [", &e.Hdr)
+	for _, part := range e.Partitions {
+		fmt.Fprintf(&builder, "\n\t\t%s", part)
 	}
-	fmt.Fprintf(&builder, "] }")
+	fmt.Fprintf(&builder, "\n\t]\n}")
 	return builder.String()
 }
 
