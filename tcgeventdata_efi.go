@@ -8,10 +8,12 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/canonical/go-efilib"
@@ -341,7 +343,8 @@ type EFIVariableData struct {
 }
 
 func (e *EFIVariableData) String() string {
-	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\" }", e.VariableName, e.UnicodeName)
+	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\", VariableData:\n\t%s}",
+		e.VariableName, e.UnicodeName, strings.Replace(hex.Dump(e.VariableData), "\n", "\n\t", -1))
 }
 
 func (e *EFIVariableData) Write(w io.Writer) error {

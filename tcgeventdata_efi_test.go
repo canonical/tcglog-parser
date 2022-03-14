@@ -155,7 +155,13 @@ func (s *tcgeventdataEfiSuite) TestEFIVariableDataString1(c *C) {
 		VariableName: efi.ImageSecurityDatabaseGuid,
 		UnicodeName:  "db",
 		VariableData: decodeHexString(c, "2616c4c14c509240aca941f9369343284c0000000000000030000000a3a8baa01d04a848bc87c36d121b5e3de3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")}
-	c.Check(event.String(), Equals, "UEFI_VARIABLE_DATA{ VariableName: d719b2cb-3d3a-4596-a3bc-dad00e67656f, UnicodeName: \"db\" }")
+	c.Check(event.String(), Equals, "UEFI_VARIABLE_DATA{ VariableName: d719b2cb-3d3a-4596-a3bc-dad00e67656f, UnicodeName: \"db\", VariableData:\n"+
+		"\t00000000  26 16 c4 c1 4c 50 92 40  ac a9 41 f9 36 93 43 28  |&...LP.@..A.6.C(|\n"+
+		"\t00000010  4c 00 00 00 00 00 00 00  30 00 00 00 a3 a8 ba a0  |L.......0.......|\n"+
+		"\t00000020  1d 04 a8 48 bc 87 c3 6d  12 1b 5e 3d e3 b0 c4 42  |...H...m..^=...B|\n"+
+		"\t00000030  98 fc 1c 14 9a fb f4 c8  99 6f b9 24 27 ae 41 e4  |.........o.$'.A.|\n"+
+		"\t00000040  64 9b 93 4c a4 95 99 1b  78 52 b8 55              |d..L....xR.U|\n"+
+		"\t}")
 }
 
 func (s *tcgeventdataEfiSuite) TestEFIVariableDataString2(c *C) {
@@ -163,7 +169,9 @@ func (s *tcgeventdataEfiSuite) TestEFIVariableDataString2(c *C) {
 		VariableName: efi.GlobalVariable,
 		UnicodeName:  "SecureBoot",
 		VariableData: []byte{0x01}}
-	c.Check(event.String(), Equals, "UEFI_VARIABLE_DATA{ VariableName: 8be4df61-93ca-11d2-aa0d-00e098032b8c, UnicodeName: \"SecureBoot\" }")
+	c.Check(event.String(), Equals, "UEFI_VARIABLE_DATA{ VariableName: 8be4df61-93ca-11d2-aa0d-00e098032b8c, UnicodeName: \"SecureBoot\", VariableData:\n"+
+		"\t00000000  01                                                |.|\n"+
+		"\t}")
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIVariable1(c *C) {
