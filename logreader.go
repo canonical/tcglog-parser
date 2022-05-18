@@ -17,20 +17,6 @@ type LogOptions struct {
 	SystemdEFIStubPCR    PCRIndex // Specify the PCR that systemd's EFI linux loader stub measures to
 }
 
-func fixupSpecIdEvent(event *Event, algorithms AlgorithmIdList) {
-	for _, alg := range algorithms {
-		if alg == tpm2.HashAlgorithmSHA1 {
-			continue
-		}
-
-		if _, ok := event.Digests[alg]; ok {
-			continue
-		}
-
-		event.Digests[alg] = make(Digest, alg.Size())
-	}
-}
-
 type PlatformType int
 
 const (
@@ -117,10 +103,6 @@ func ReadLog(r io.Reader, options *LogOptions) (*Log, error) {
 		}
 	} else {
 		algorithms = AlgorithmIdList{tpm2.HashAlgorithmSHA1}
-	}
-
-	if spec.IsEFI_2() {
-		fixupSpecIdEvent(event, algorithms)
 	}
 
 	log := &Log{Spec: spec, Algorithms: algorithms, Events: []*Event{event}}

@@ -81,7 +81,7 @@ func run() error {
 			return err
 		}
 	} else {
-		formatter = newBlockFormatter(os.Stdout, alg, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
+		formatter = newBlockFormatter(os.Stdout, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
 	}
 
 	formatter.printHeader()
