@@ -16,6 +16,19 @@ import (
 	"github.com/canonical/tcglog-parser"
 )
 
+var shimLockGuid = efi.MakeGUID(0x605dab50, 0xe046, 0x4300, 0xabb6, [...]uint8{0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23})
+
+type varDescriptor efi.VariableDescriptor
+
+func (d varDescriptor) String() string {
+	switch d.GUID {
+	case efi.GlobalVariable, efi.ImageSecurityDatabaseGuid, shimLockGuid:
+		return d.Name
+	default:
+		return fmt.Sprintf("%s-%s", d.Name, d.GUID)
+	}
+}
+
 type bootOrderVariableStringer []byte
 
 func (s bootOrderVariableStringer) String() string {
@@ -53,34 +66,34 @@ func (s *bootOptionVariableStringer) String() string {
 }
 
 type boolVariableStringer struct {
-	name string
+	desc varDescriptor
 	data []byte
 }
 
 func (s *boolVariableStringer) String() string {
 	switch {
 	case bytes.Equal(s.data, []byte{0}):
-		return s.name + ": 0"
+		return fmt.Sprintf("%s: 0", s.desc)
 	case bytes.Equal(s.data, []byte{1}):
-		return s.name + ": 1"
+		return fmt.Sprintf("%s: 1", s.desc)
 	default:
-		return "Invalid " + s.name + " payload"
+		return fmt.Sprintf("Invalid %s boolean payload", s.desc)
 	}
 }
 
 type dbVariableStringer struct {
-	verbose bool
-	name    string
+	desc    varDescriptor
 	data    []byte
+	verbose bool
 }
 
 func (s *dbVariableStringer) String() string {
 	db, err := efi.ReadSignatureDatabase(bytes.NewReader(s.data))
 	if err != nil {
-		return fmt.Sprintf("Invalid signature database for %s: %v", s.name, err)
+		return fmt.Sprintf("Invalid signature database for %s: %v", s.desc, err)
 	}
 
-	str := fmt.Sprintf("%-4s", s.name+":")
+	str := fmt.Sprintf("%s:", s.desc)
 
 	counts := make(map[efi.GUID]int)
 	for _, l := range db {
@@ -104,10 +117,9 @@ func (s *dbVariableStringer) String() string {
 }
 
 type variableAuthorityStringer struct {
-	verbose      bool
-	variableName efi.GUID
-	unicodeName  string
-	data         []byte
+	desc    varDescriptor
+	data    []byte
+	verbose bool
 }
 
 func (s *variableAuthorityStringer) String() string {
@@ -130,10 +142,7 @@ func (s *variableAuthorityStringer) String() string {
 		}
 	}
 
-	if s.variableName == efi.ImageSecurityDatabaseGuid {
-		return authority + "source: \"" + s.unicodeName + "\""
-	}
-	return fmt.Sprintf("%ssource: guid=%v, name=\"%s\"", authority, s.variableName, s.unicodeName)
+	return fmt.Sprintf("%ssource: %s", authority, s.desc)
 }
 
 type nameOnlyVariableStringer string
@@ -171,19 +180,13 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		if !ok {
 			return event.Data
 		}
-		if varData.VariableName == efi.ImageSecurityDatabaseGuid {
-			return &dbVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
+		if varData.VariableName == efi.GlobalVariable {
+			switch varData.UnicodeName {
+			case "SecureBoot", "DeployedMode", "AuditMode":
+				return &boolVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData}
+			}
 		}
-		if varData.VariableName != efi.GlobalVariable {
-			// Unexpected GUID
-			return nil
-		}
-		switch varData.UnicodeName {
-		case "SecureBoot", "DeployedMode", "AuditMode":
-			return &boolVariableStringer{varData.UnicodeName, varData.VariableData}
-		default:
-			return &dbVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
-		}
+		return &dbVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
 	case event.EventType == tcglog.EventTypeEFIVariableAuthority:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
@@ -195,7 +198,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 			return nameOnlyVariableStringer(varData.UnicodeName)
 		}
 
-		return &variableAuthorityStringer{verbose, varData.VariableName, varData.UnicodeName, varData.VariableData}
+		return &variableAuthorityStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
 	case event.EventType == tcglog.EventTypeEFIGPTEvent && !verbose:
 		data, ok := event.Data.(*tcglog.EFIGPTData)
 		if !ok {
