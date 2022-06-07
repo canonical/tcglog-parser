@@ -197,9 +197,16 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		if !ok {
 			return event.Data
 		}
+		if varData.VariableName == shimLockGuid {
+			// XXX: Ideally these events would have a type of EV_EFI_VARIABLE_DRIVER_CONFIG
+			switch varData.UnicodeName {
+			case "MokSBState":
+				return &boolVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData}
+			case "SbatLevel":
+				return stringVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData}
+			}
+		}
 		if varData.VariableName == shimLockGuid && varData.UnicodeName == "SbatLevel" {
-			// XXX: Ideally this event would have a type of EV_EFI_VARIABLE_DRIVER_CONFIG
-			return stringVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData}
 		}
 
 		return &variableAuthorityStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
