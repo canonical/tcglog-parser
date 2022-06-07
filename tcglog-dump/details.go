@@ -16,9 +16,9 @@ import (
 	"github.com/canonical/tcglog-parser"
 )
 
-type bootOrderStringer []byte
+type bootOrderVariableStringer []byte
 
-func (s bootOrderStringer) String() string {
+func (s bootOrderVariableStringer) String() string {
 	data := []byte(s)
 
 	if len(data)%2 != 0 {
@@ -34,13 +34,13 @@ func (s bootOrderStringer) String() string {
 	return "BootOrder: " + strings.Join(order, ",")
 }
 
-type bootOptionStringer struct {
+type bootOptionVariableStringer struct {
 	verbose bool
 	name    string
 	data    []byte
 }
 
-func (s *bootOptionStringer) String() string {
+func (s *bootOptionVariableStringer) String() string {
 	opt, err := efi.ReadLoadOption(bytes.NewReader(s.data))
 	if err != nil {
 		return fmt.Sprintf("Invalid load option for %s: %v", s.name, err)
@@ -52,12 +52,12 @@ func (s *bootOptionStringer) String() string {
 	return fmt.Sprintf("%s: %s", s.name, opt.Description)
 }
 
-type variableDriverConfigBoolStringer struct {
+type boolVariableStringer struct {
 	name string
 	data []byte
 }
 
-func (s *variableDriverConfigBoolStringer) String() string {
+func (s *boolVariableStringer) String() string {
 	switch {
 	case bytes.Equal(s.data, []byte{0}):
 		return s.name + ": 0"
@@ -68,13 +68,13 @@ func (s *variableDriverConfigBoolStringer) String() string {
 	}
 }
 
-type variableDriverConfigDbStringer struct {
+type dbVariableStringer struct {
 	verbose bool
 	name    string
 	data    []byte
 }
 
-func (s *variableDriverConfigDbStringer) String() string {
+func (s *dbVariableStringer) String() string {
 	db, err := efi.ReadSignatureDatabase(bytes.NewReader(s.data))
 	if err != nil {
 		return fmt.Sprintf("Invalid signature database for %s: %v", s.name, err)
@@ -136,9 +136,9 @@ func (s *variableAuthorityStringer) String() string {
 	return fmt.Sprintf("%ssource: guid=%v, name=\"%s\"", authority, s.variableName, s.unicodeName)
 }
 
-type sbatLevelStringer struct{}
+type nameOnlyVariableStringer string
 
-func (sbatLevelStringer) String() string { return "SbatLevel" }
+func (s nameOnlyVariableStringer) String() string { return string(s) }
 
 type simpleGptEventStringer struct {
 	data *tcglog.EFIGPTData
@@ -162,17 +162,17 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		if varData.UnicodeName == "BootOrder" {
-			return bootOrderStringer(varData.VariableData)
+			return bootOrderVariableStringer(varData.VariableData)
 		}
 
-		return &bootOptionStringer{verbose, varData.UnicodeName, varData.VariableData}
+		return &bootOptionVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
 	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
 			return event.Data
 		}
 		if varData.VariableName == efi.ImageSecurityDatabaseGuid {
-			return &variableDriverConfigDbStringer{verbose, varData.UnicodeName, varData.VariableData}
+			return &dbVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
 		}
 		if varData.VariableName != efi.GlobalVariable {
 			// Unexpected GUID
@@ -180,9 +180,9 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 		switch varData.UnicodeName {
 		case "SecureBoot", "DeployedMode", "AuditMode":
-			return &variableDriverConfigBoolStringer{varData.UnicodeName, varData.VariableData}
+			return &boolVariableStringer{varData.UnicodeName, varData.VariableData}
 		default:
-			return &variableDriverConfigDbStringer{verbose, varData.UnicodeName, varData.VariableData}
+			return &dbVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
 		}
 	case event.EventType == tcglog.EventTypeEFIVariableAuthority:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
@@ -191,7 +191,8 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 		if varData.VariableName == efi.MakeGUID(0x605dab50, 0xe046, 0x4300, 0xabb6, [...]uint8{0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23}) &&
 			varData.UnicodeName == "SbatLevel" {
-			return sbatLevelStringer{}
+			// XXX: Ideally this event would have a type of EV_EFI_VARIABLE_DRIVER_CONFIG
+			return nameOnlyVariableStringer(varData.UnicodeName)
 		}
 
 		return &variableAuthorityStringer{verbose, varData.VariableName, varData.UnicodeName, varData.VariableData}
