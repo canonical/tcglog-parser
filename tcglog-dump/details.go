@@ -212,8 +212,6 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 				return stringVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData}
 			}
 		}
-		if varData.VariableName == shimLockGuid && varData.UnicodeName == "SbatLevel" {
-		}
 
 		return &variableAuthorityStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
 	case event.EventType == tcglog.EventTypeEFIGPTEvent && !verbose:
