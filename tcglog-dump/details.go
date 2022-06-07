@@ -145,9 +145,14 @@ func (s *variableAuthorityStringer) String() string {
 	return fmt.Sprintf("%ssource: %s", authority, s.desc)
 }
 
-type nameOnlyVariableStringer string
+type stringVariableStringer struct {
+	desc varDescriptor
+	data []byte
+}
 
-func (s nameOnlyVariableStringer) String() string { return string(s) }
+func (s stringVariableStringer) String() string {
+	return fmt.Sprintf("%s: %s", s.desc, string(s.data))
+}
 
 type simpleGptEventStringer struct {
 	data *tcglog.EFIGPTData
@@ -192,10 +197,9 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		if !ok {
 			return event.Data
 		}
-		if varData.VariableName == efi.MakeGUID(0x605dab50, 0xe046, 0x4300, 0xabb6, [...]uint8{0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23}) &&
-			varData.UnicodeName == "SbatLevel" {
+		if varData.VariableName == shimLockGuid && varData.UnicodeName == "SbatLevel" {
 			// XXX: Ideally this event would have a type of EV_EFI_VARIABLE_DRIVER_CONFIG
-			return nameOnlyVariableStringer(varData.UnicodeName)
+			return stringVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData}
 		}
 
 		return &variableAuthorityStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
