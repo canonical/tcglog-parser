@@ -137,7 +137,7 @@ func (s *variableAuthorityStringer) String() string {
 			// with its vendor cert.
 			cert, err = x509.ParseCertificate(s.data)
 			if err != nil {
-				return fmt.Sprintf("Invalid authority event for %s - not a hash or X509 certificate: ", s.desc, err)
+				return fmt.Sprintf("Invalid authority event for %s - not a hash or X509 certificate: %v", s.desc, err)
 			}
 			if !s.verbose {
 				return fmt.Sprintf("subject: \"%s\", source: %s", cert.Subject, s.desc)
