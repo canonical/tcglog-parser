@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"crypto/x509"
 	"encoding/binary"
 	"fmt"
@@ -123,26 +124,31 @@ type variableAuthorityStringer struct {
 }
 
 func (s *variableAuthorityStringer) String() string {
-	var authority string
+	var owner efi.GUID
+	data := s.data[copy(owner[:], s.data):]
 
-	if s.verbose {
-		data := s.data
-
-		var guid efi.GUID
-		data = data[copy(guid[:], s.data):]
-
+	switch len(s.data) {
+	case 36, 44, 48, 64, 80:
+		return fmt.Sprintf("hash: %x, owner: %s, source: %s", data, owner, s.desc)
+	default:
 		cert, err := x509.ParseCertificate(data)
 		if err != nil {
-			guid = efi.GUID{}
+			// Shim doesn't log a EFI_SIGNATURE_DATA when doing verification
+			// with its vendor cert.
 			cert, err = x509.ParseCertificate(s.data)
+			if err != nil {
+				return fmt.Sprintf("Invalid authority event for %s - not a hash or X509 certificate: ", s.desc, err)
+			}
+			if !s.verbose {
+				return fmt.Sprintf("subject: \"%s\", source: %s", cert.Subject, s.desc)
+			}
+			return fmt.Sprintf("subject: \"%s\", fingerprint: %x, source: %s", cert.Subject, sha1.Sum(cert.Raw), s.desc)
 		}
-
-		if err == nil {
-			authority = fmt.Sprint("authority: \"", cert.Subject, "\", ")
+		if !s.verbose {
+			return fmt.Sprintf("subject: \"%s\", owner: %s, source: %s", cert.Subject, owner, s.desc)
 		}
+		return fmt.Sprintf("subject: \"%s\", fingerprint: %x, owner: %s, source: %s", cert.Subject, sha1.Sum(cert.Raw), owner, s.desc)
 	}
-
-	return fmt.Sprintf("%ssource: %s", authority, s.desc)
 }
 
 type stringVariableStringer struct {
