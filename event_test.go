@@ -62,6 +62,10 @@ func (s *eventSuite) TestReadEvent(c *C) {
 }
 
 func (s *eventSuite) TestEventWriteCryptoAgile(c *C) {
+	digestSizes := []EFISpecIdEventAlgorithmSize{
+		{AlgorithmId: tpm2.HashAlgorithmSHA1, DigestSize: 20},
+		{AlgorithmId: tpm2.HashAlgorithmSHA256, DigestSize: 32}}
+
 	data := EFIVariableData{
 		VariableName: efi.GlobalVariable,
 		UnicodeName:  "BootOrder",
@@ -76,7 +80,7 @@ func (s *eventSuite) TestEventWriteCryptoAgile(c *C) {
 		Data: &data}
 
 	w := new(bytes.Buffer)
-	c.Check(event.WriteCryptoAgile(w), IsNil)
+	c.Check(event.WriteCryptoAgile(w, digestSizes), IsNil)
 	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "01000000020000800200000004005fa6e9a74105c1e2297cce17c68288c84a8bda070b009d0689"+
 		"e46d7c710571256af5b8e8638f0dbc6b008f5ea4688c1c70f3005943e43800000061dfe48bca93d211aa0d00e098032b8c09000000000000000600000000000"+
 		"00042006f006f0074004f007200640065007200030000000100"))

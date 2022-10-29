@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/canonical/go-tpm2"
 
@@ -37,10 +36,16 @@ type Event struct {
 	Data      EventData // The data recorded with this event
 }
 
+// Write serializes this event in non crypto-agile form to w. If the event
+// does not contain a SHA-1 digest of the correct size, or it contains
+// more than one digest, an error will be returned.
 func (e *Event) Write(w io.Writer) error {
 	digest, ok := e.Digests[tpm2.HashAlgorithmSHA1]
 	if !ok {
 		return errors.New("missing SHA-1 digest")
+	}
+	if len(e.Digests) != 1 {
+		return errors.New("invalid number of digests")
 	}
 	if len(digest) != tpm2.HashAlgorithmSHA1.Size() {
 		return errors.New("invalid digest size")
@@ -69,19 +74,22 @@ func (e *Event) Write(w io.Writer) error {
 	return err
 }
 
-func (e *Event) WriteCryptoAgile(w io.Writer) error {
-	var algs []tpm2.HashAlgorithmId
-	for alg, digest := range e.Digests {
-		if !alg.IsValid() {
-			continue
-		}
-		if len(digest) != alg.Size() {
-			return fmt.Errorf("invalid digest size for %v", alg)
-		}
-		algs = append(algs, alg)
+// WriteCryptoAgile serializes this even in crypto-agile form to w. If the
+// event does not contain a digest of the correct size for each entry in
+// digestSizes, or it contains more digests, an error will be returned.
+func (e *Event) WriteCryptoAgile(w io.Writer, digestSizes []EFISpecIdEventAlgorithmSize) error {
+	if len(e.Digests) != len(digestSizes) {
+		return errors.New("invalid number of digests")
 	}
-
-	sort.Slice(algs, func(i, j int) bool { return algs[i] < algs[j] })
+	for _, d := range digestSizes {
+		digest, ok := e.Digests[d.AlgorithmId]
+		if !ok {
+			return fmt.Errorf("missing %v digest", d.AlgorithmId)
+		}
+		if len(digest) != int(d.DigestSize) {
+			return fmt.Errorf("invalid digest size for %v", d.AlgorithmId)
+		}
+	}
 
 	data := new(bytes.Buffer)
 	if err := e.Data.Write(data); err != nil {
@@ -92,16 +100,16 @@ func (e *Event) WriteCryptoAgile(w io.Writer) error {
 		eventHeader: eventHeader{
 			PCRIndex:  e.PCRIndex,
 			EventType: e.EventType},
-		Count: uint32(len(algs))}
+		Count: uint32(len(digestSizes))}
 	if err := binary.Write(w, binary.LittleEndian, &hdr); err != nil {
 		return err
 	}
 
-	for _, alg := range algs {
-		if err := binary.Write(w, binary.LittleEndian, alg); err != nil {
+	for _, d := range digestSizes {
+		if err := binary.Write(w, binary.LittleEndian, d.AlgorithmId); err != nil {
 			return err
 		}
-		if _, err := w.Write(e.Digests[alg]); err != nil {
+		if _, err := w.Write(e.Digests[d.AlgorithmId]); err != nil {
 			return err
 		}
 	}

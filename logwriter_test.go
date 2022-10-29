@@ -31,6 +31,6 @@ func (s *logwriterSuite) TestWriteLogCryptoAgile(c *C) {
 	c.Assert(err, IsNil)
 
 	w := new(bytes.Buffer)
-	c.Check(WriteLog(w, log.Events), IsNil)
+	c.Check(log.Write(w), IsNil)
 	c.Check(w.Bytes(), DeepEquals, expected.Bytes())
 }
