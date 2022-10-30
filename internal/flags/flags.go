@@ -42,6 +42,8 @@ func (h *HashAlgorithmId) UnmarshalFlag(value string) error {
 		*h = HashAlgorithmId(tpm2.HashAlgorithmSHA384)
 	case "sha512":
 		*h = HashAlgorithmId(tpm2.HashAlgorithmSHA512)
+	case "auto":
+		*h = HashAlgorithmId(tpm2.HashAlgorithmNull)
 	default:
 		return fmt.Errorf("unrecognized algorithm \"%s\"", value)
 	}

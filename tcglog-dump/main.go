@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -17,7 +18,7 @@ import (
 )
 
 type options struct {
-	Alg                internal_flags.HashAlgorithmId `long:"alg" description:"Hash algorithm to display" default:"sha1" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
+	Alg                internal_flags.HashAlgorithmId `long:"alg" description:"Hash algorithm to display" default:"auto" choice:"auto" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
 	Verbose            []bool                         `short:"v" long:"verbose" description:"Display summary of event data"`
 	Hexdump            bool                           `long:"hexdump" description:"Display hexdump of event data associated with each event"`
 	VarHexdump         bool                           `long:"varhexdump" description:"Display hexdump of variable data for events associated with the measurement of EFI variables"`
@@ -69,8 +70,16 @@ func run() error {
 	}
 
 	alg := tpm2.HashAlgorithmId(opts.Alg)
-	if !log.Algorithms.Contains(alg) {
-		return fmt.Errorf("the log does not contain entries for the %v digest algorithm", alg)
+	switch alg {
+	case tpm2.HashAlgorithmNull:
+		if len(log.Algorithms) == 0 {
+			return errors.New("the log contains no digest algorithms")
+		}
+		alg = log.Algorithms[0]
+	default:
+		if !log.Algorithms.Contains(alg) {
+			return fmt.Errorf("the log does not contain entries for the %v digest algorithm", alg)
+		}
 	}
 
 	var formatter formatter
