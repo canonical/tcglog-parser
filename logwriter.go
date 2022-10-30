@@ -14,9 +14,6 @@ import (
 // by ReadLog. If the log is a crypto-agile log, each of the supplied
 // events must contain a digest for each algorithm. For a non
 // crypto-agile log, each of the events must contain a SHA-1 digest.
-//
-// This function is only useful for generating reproducible data for
-// use in tests.
 func (l *Log) Write(w io.Writer) error {
 	if len(l.Events) == 0 {
 		return nil
