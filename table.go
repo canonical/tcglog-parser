@@ -89,7 +89,7 @@ func (f *tableFormatter) PrintHeader() {
 func (f *tableFormatter) PrintEvent(event *Event) {
 	fmt.Fprintf(f.dst, "%d\t%x\t%s", event.PCRIndex, event.Digests[f.alg], event.EventType)
 	if f.verbose {
-		fmt.Fprintf(f.dst, "\t%s", &tableStringer{eventDetailsStringer(event, false)})
+		fmt.Fprintf(f.dst, "\t%s", &tableStringer{EventDetailsStringer(event, false)})
 	}
 	fmt.Fprint(f.dst, "\n")
 }

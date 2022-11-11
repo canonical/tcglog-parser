@@ -48,7 +48,7 @@ func (f *blockFormatter) PrintEvent(event *Event) {
 		verbose = true
 	}
 	if f.verbosity > 0 {
-		fmt.Fprintf(f.dst, "DETAILS: %s\n", eventDetailsStringer(event, verbose))
+		fmt.Fprintf(f.dst, "DETAILS: %s\n", EventDetailsStringer(event, verbose))
 	}
 	if f.hexdump {
 		fmt.Fprintf(f.dst, "EVENT DATA:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))

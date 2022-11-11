@@ -237,7 +237,7 @@ type nullStringer struct{}
 
 func (s nullStringer) String() string { return "" }
 
-func eventDetailsStringer(event *Event, verbose bool) fmt.Stringer {
+func EventDetailsStringer(event *Event, verbose bool) fmt.Stringer {
 	if out := customEventDetailsStringer(event, verbose); out != nil {
 		return out
 	}
