@@ -2,7 +2,7 @@
 // Licensed under the LGPLv3 with static-linking exception.
 // See LICENCE file for details.
 
-package main
+package tcglog
 
 import (
 	"bytes"
@@ -15,8 +15,6 @@ import (
 
 	"github.com/canonical/go-tpm2"
 	"golang.org/x/sys/unix"
-
-	"github.com/canonical/tcglog-parser"
 )
 
 type terminalWriter struct {
@@ -80,7 +78,7 @@ type tableFormatter struct {
 	verbose bool
 }
 
-func (f *tableFormatter) printHeader() {
+func (f *tableFormatter) PrintHeader() {
 	fmt.Fprint(f.dst, "PCR\tDIGEST\tTYPE")
 	if f.verbose {
 		fmt.Fprint(f.dst, "\tDETAILS")
@@ -88,7 +86,7 @@ func (f *tableFormatter) printHeader() {
 	fmt.Fprint(f.dst, "\n")
 }
 
-func (f *tableFormatter) printEvent(event *tcglog.Event) {
+func (f *tableFormatter) PrintEvent(event *Event) {
 	fmt.Fprintf(f.dst, "%d\t%x\t%s", event.PCRIndex, event.Digests[f.alg], event.EventType)
 	if f.verbose {
 		fmt.Fprintf(f.dst, "\t%s", &tableStringer{eventDetailsStringer(event, false)})
@@ -96,11 +94,11 @@ func (f *tableFormatter) printEvent(event *tcglog.Event) {
 	fmt.Fprint(f.dst, "\n")
 }
 
-func (f *tableFormatter) flush() {
+func (f *tableFormatter) Flush() {
 	f.dst.Flush()
 }
 
-func newTableFormatter(f *os.File, alg tpm2.HashAlgorithmId, verbose bool) (formatter, error) {
+func NewTableFormatter(f *os.File, alg tpm2.HashAlgorithmId, verbose bool) (Formatter, error) {
 	var w io.Writer = f
 
 	sz, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ)

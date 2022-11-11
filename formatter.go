@@ -2,14 +2,10 @@
 // Licensed under the LGPLv3 with static-linking exception.
 // See LICENCE file for details.
 
-package main
+package tcglog
 
-import (
-	"github.com/canonical/tcglog-parser"
-)
-
-type formatter interface {
-	printHeader()
-	printEvent(event *tcglog.Event)
-	flush()
+type Formatter interface {
+	PrintHeader()
+	PrintEvent(event *Event)
+	Flush()
 }
