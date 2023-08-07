@@ -2,7 +2,7 @@
 // Licensed under the LGPLv3 with static-linking exception.
 // See LICENCE file for details.
 
-package main
+package tcglog
 
 import (
 	"bytes"
@@ -12,9 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/canonical/go-efilib"
-
-	"github.com/canonical/tcglog-parser"
+	efi "github.com/canonical/go-efilib"
 )
 
 var shimLockGuid = efi.MakeGUID(0x605dab50, 0xe046, 0x4300, 0xabb6, [...]uint8{0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23})
@@ -161,18 +159,18 @@ func (s stringVariableStringer) String() string {
 }
 
 type simpleGptEventStringer struct {
-	data *tcglog.EFIGPTData
+	data *EFIGPTData
 }
 
 func (s *simpleGptEventStringer) String() string {
 	return fmt.Sprint("DiskGUID: ", s.data.Hdr.DiskGUID)
 }
 
-func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
+func customEventDetailsStringer(event *Event, verbose bool) fmt.Stringer {
 	switch {
-	//case event.EventType == tcglog.EventTypeNoAction && !verbose:
-	case event.EventType == tcglog.EventTypeEFIVariableBoot, event.EventType == tcglog.EventTypeEFIVariableBoot2:
-		varData, ok := event.Data.(*tcglog.EFIVariableData)
+	//case event.EventType == EventTypeNoAction && !verbose:
+	case event.EventType == EventTypeEFIVariableBoot, event.EventType == EventTypeEFIVariableBoot2:
+		varData, ok := event.Data.(*EFIVariableData)
 		if !ok {
 			return event.Data
 		}
@@ -186,8 +184,8 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		return &bootOptionVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
-	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig:
-		varData, ok := event.Data.(*tcglog.EFIVariableData)
+	case event.EventType == EventTypeEFIVariableDriverConfig:
+		varData, ok := event.Data.(*EFIVariableData)
 		if !ok {
 			return event.Data
 		}
@@ -198,8 +196,8 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 			}
 		}
 		return &dbVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
-	case event.EventType == tcglog.EventTypeEFIVariableAuthority:
-		varData, ok := event.Data.(*tcglog.EFIVariableData)
+	case event.EventType == EventTypeEFIVariableAuthority:
+		varData, ok := event.Data.(*EFIVariableData)
 		if !ok {
 			return event.Data
 		}
@@ -214,17 +212,17 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		return &variableAuthorityStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
-	case event.EventType == tcglog.EventTypeEFIGPTEvent && !verbose:
-		data, ok := event.Data.(*tcglog.EFIGPTData)
+	case event.EventType == EventTypeEFIGPTEvent && !verbose:
+		data, ok := event.Data.(*EFIGPTData)
 		if !ok {
 			return event.Data
 		}
 
 		return &simpleGptEventStringer{data}
-	case event.EventType == tcglog.EventTypeEFIBootServicesApplication, event.EventType == tcglog.EventTypeEFIBootServicesDriver,
-		event.EventType == tcglog.EventTypeEFIRuntimeServicesDriver:
+	case event.EventType == EventTypeEFIBootServicesApplication, event.EventType == EventTypeEFIBootServicesDriver,
+		event.EventType == EventTypeEFIRuntimeServicesDriver:
 		if !verbose {
-			data, ok := event.Data.(*tcglog.EFIImageLoadEvent)
+			data, ok := event.Data.(*EFIImageLoadEvent)
 			if !ok {
 				return event.Data
 			}
@@ -239,18 +237,18 @@ type nullStringer struct{}
 
 func (s nullStringer) String() string { return "" }
 
-func eventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
+func EventDetailsStringer(event *Event, verbose bool) fmt.Stringer {
 	if out := customEventDetailsStringer(event, verbose); out != nil {
 		return out
 	}
 	switch d := event.Data.(type) {
-	case *tcglog.GrubStringEventData:
+	case *GrubStringEventData:
 		return d
-	case tcglog.OpaqueEventData:
+	case OpaqueEventData:
 		return d
-	case tcglog.StringEventData:
+	case StringEventData:
 		return d
-	case *tcglog.SystemdEFIStubCommandline:
+	case *SystemdEFIStubCommandline:
 		return d
 	default:
 		if verbose {

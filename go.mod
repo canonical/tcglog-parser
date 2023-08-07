@@ -8,8 +8,8 @@ require (
 	github.com/canonical/go-sp800.108-kdf v0.0.0-20210315104021-ead800bbf9a0 // indirect
 	github.com/canonical/go-sp800.90a-drbg v0.0.0-20210314144037-6eeb1040d6c3 // indirect
 	github.com/canonical/go-tpm2 v0.1.0
-	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/godbus/dbus v4.1.0+incompatible // indirect
+	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
+	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/mvo5/goconfigparser v0.0.0-20201015074339-50f22f44deb5 // indirect

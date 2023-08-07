@@ -82,25 +82,25 @@ func run() error {
 		}
 	}
 
-	var formatter formatter
+	var formatter tcglog.Formatter
 	if len(opts.Verbose) < 2 && !opts.Hexdump && !opts.VarHexdump {
 		var err error
-		formatter, err = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0)
+		formatter, err = tcglog.NewTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0)
 		if err != nil {
 			return err
 		}
 	} else {
-		formatter = newBlockFormatter(os.Stdout, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
+		formatter = tcglog.NewBlockFormatter(os.Stdout, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
 	}
 
-	formatter.printHeader()
+	formatter.PrintHeader()
 
 	for i, event := range log.Events {
 		if !shouldDisplayEvent(event) {
 			continue
 		}
 
-		formatter.printEvent(event)
+		formatter.PrintEvent(event)
 
 		if opts.ExtractData != "" {
 			ioutil.WriteFile(fmt.Sprintf("%s-%d", opts.ExtractData, i), event.Data.Bytes(), 0644)
@@ -114,7 +114,7 @@ func run() error {
 		}
 	}
 
-	formatter.flush()
+	formatter.Flush()
 
 	return nil
 }
