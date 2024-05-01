@@ -5,10 +5,17 @@
 package tcglog
 
 var (
-	DecodeEventDataEFIGPT         = decodeEventDataEFIGPT
-	DecodeEventDataEFIImageLoad   = decodeEventDataEFIImageLoad
-	DecodeEventDataEFIVariable    = decodeEventDataEFIVariable
-	DecodeEventDataNoAction       = decodeEventDataNoAction
-	DecodeEventDataSeparator      = decodeEventDataSeparator
-	DecodeEventDataSystemdEFIStub = decodeEventDataSystemdEFIStub
+	DecodeEventDataEFIGPT                   = decodeEventDataEFIGPT
+	DecodeEventDataEFIImageLoad             = decodeEventDataEFIImageLoad
+	DecodeEventDataEFIVariable              = decodeEventDataEFIVariable
+	DecodeEventDataAction                   = decodeEventDataAction
+	DecodeEventDataNoAction                 = decodeEventDataNoAction
+	DecodeEventDataSeparator                = decodeEventDataSeparator
+	DecodeEventDataSystemdEFIStub           = decodeEventDataSystemdEFIStub
+	DecodeEventDataCompactHash              = decodeEventDataCompactHash
+	DecodeEventDataPostCode                 = decodeEventDataPostCode
+	DecodeEventDataPostCode2                = decodeEventDataPostCode2
+	DecodeEventDataEFIPlatformFirmwareBlob  = decodeEventDataEFIPlatformFirmwareBlob
+	DecodeEventDataEFIPlatformFirmwareBlob2 = decodeEventDataEFIPlatformFirmwareBlob2
+	DecodeEventDataEFIHandoffTablePointers  = decodeEventDataEFIHandoffTablePointers
 )

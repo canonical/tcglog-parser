@@ -7,8 +7,10 @@ package tcglog
 import (
 	"bytes"
 	"fmt"
+	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
+	"unsafe"
 )
 
 func makeDefaultFormatter(s fmt.State, f rune) string {
@@ -47,4 +49,39 @@ func convertUtf16ToString(u []uint16) string {
 		utf8Str = append(utf8Str, utf8Char...)
 	}
 	return string(utf8Str)
+}
+
+func ptrSize() int {
+	sz := unsafe.Sizeof(uintptr(0))
+	switch sz {
+	case 4, 8:
+		return int(sz)
+	default:
+		panic("unexpected pointer size")
+	}
+}
+
+func isPrintableASCII(data []byte) bool {
+	if len(data) == 0 {
+		// Empty strings contain no printable ASCII
+		return false
+	}
+
+	for len(data) > 0 {
+		// Pop the next bytee
+		c := data[0]
+		data = data[1:]
+
+		// Try to decode the single byte. This will return RuneError
+		// if the supplied byte isn't ASCII.
+		r, _ := utf8.DecodeRune([]byte{c})
+		if r == utf8.RuneError {
+			return false
+		}
+		// Check printable
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
 }

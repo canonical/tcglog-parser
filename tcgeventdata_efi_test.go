@@ -10,7 +10,7 @@ import (
 	_ "crypto/sha1"
 	_ "crypto/sha256"
 
-	"github.com/canonical/go-efilib"
+	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 
 	. "gopkg.in/check.v1"
@@ -543,4 +543,93 @@ func (s *tcgeventdataEfiSuite) TestComputeEFIGPTDataDigestSHA1(c *C) {
 	digest, err := ComputeEFIGPTDataDigest(crypto.SHA1, &event)
 	c.Check(err, IsNil)
 	c.Check(digest, DeepEquals, decodeHexString(c, "4243b31b1b3a540afd2df40ab96f272bdab403f3"))
+}
+
+func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob(c *C) {
+	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
+	e, err := DecodeEventDataEFIPlatformFirmwareBlob(data)
+	c.Assert(err, IsNil)
+
+	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
+	c.Check(e.Bytes(), DeepEquals, data)
+
+	c.Check(uint64(e.BlobBase), Equals, uint64(4279701504))
+	c.Check(e.BlobLength, Equals, uint64(6619136))
+}
+
+func (s *tcgeventdataEfiSuite) TestPlatformFirmwareBlobWrite(c *C) {
+	ev := &EFIPlatformFirmwareBlob{
+		BlobBase:   uintptr(0xff171000),
+		BlobLength: 6619136,
+	}
+
+	w := new(bytes.Buffer)
+	c.Check(ev.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00})
+}
+
+func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob2(c *C) {
+	data := []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
+
+	e, err := DecodeEventDataEFIPlatformFirmwareBlob2(data)
+	c.Assert(err, IsNil)
+
+	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216}")
+	c.Check(e.Bytes(), DeepEquals, data)
+
+	c.Check(e.BlobDescription, Equals, "POST CODE")
+	c.Check(uint64(e.BlobBase), Equals, uint64(4290904064))
+	c.Check(e.BlobLength, Equals, uint64(393216))
+
+}
+
+func (s *tcgeventdataEfiSuite) TestPlatformFirmwareBlob2Write(c *C) {
+	ev := &EFIPlatformFirmwareBlob2{
+		BlobDescription: "POST CODE",
+		BlobBase:        uintptr(0xffc20000),
+		BlobLength:      393216,
+	}
+
+	w := new(bytes.Buffer)
+	c.Check(ev.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00})
+}
+
+func (s *tcgeventdataEfiSuite) TestDecodeEventDataHandoffTablePointers(c *C) {
+	data := []byte{
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf2, 0x16, 0xf9, 0x3f, 0x20, 0x62, 0x6f, 0x44,
+		0x8d, 0x98, 0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f, 0x98, 0x6b, 0x57, 0x66, 0x00, 0x00, 0x00, 0x00,
+	}
+	e, err := DecodeEventDataEFIHandoffTablePointers(data)
+	c.Assert(err, IsNil)
+
+	c.Check(e.String(), Equals,
+		`UEFI_HANDOFF_TABLE_POINTERS{
+	TableEntries: [
+		UEFI_CONFIGURATION_TABLE{VendorGuid: 3ff916f2-6220-446f-8d98-bf08fe7ccb9f, VendorTable: 0x66576b98}
+	]
+}`)
+	c.Check(e.Bytes(), DeepEquals, data)
+
+	c.Assert(len(e.TableEntries), Equals, 1)
+	c.Check(e.TableEntries[0].VendorGuid, Equals, efi.MakeGUID(0x3ff916f2, 0x6220, 0x446f, 0x8d98, [...]byte{0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f}))
+	c.Check(e.TableEntries[0].VendorTable, Equals, uintptr(0x66576b98))
+}
+
+func (s *tcgeventdataEfiSuite) TestHandoffTablePointersWrite(c *C) {
+	ev := EFIHandoffTablePointers{
+		TableEntries: []EFIConfigurationTable{
+			{
+				VendorGuid:  efi.MakeGUID(0x3ff916f2, 0x6220, 0x446f, 0x8d98, [...]byte{0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f}),
+				VendorTable: 0x66576b98,
+			},
+		},
+	}
+
+	w := new(bytes.Buffer)
+	c.Check(ev.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte{
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf2, 0x16, 0xf9, 0x3f, 0x20, 0x62, 0x6f, 0x44,
+		0x8d, 0x98, 0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f, 0x98, 0x6b, 0x57, 0x66, 0x00, 0x00, 0x00, 0x00,
+	})
 }

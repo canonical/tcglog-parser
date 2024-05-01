@@ -45,7 +45,7 @@ func (s *tcgeventdataSuite) TestStringEventDataWrite2(c *C) {
 	c.Check(w.Bytes(), DeepEquals, []byte("bar"))
 }
 
-func (s *tcgeventdataSuite) TestomputeStringEventDigest(c *C) {
+func (s *tcgeventdataSuite) TestComputeStringEventDigest(c *C) {
 	c.Check(ComputeStringEventDigest(crypto.SHA256, "foo"), DeepEquals, decodeHexString(c, "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"))
 	c.Check(ComputeStringEventDigest(crypto.SHA1, "bar"), DeepEquals, decodeHexString(c, "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"))
 }
@@ -233,4 +233,89 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent03WithVendorIn
 		{AlgorithmId: tpm2.HashAlgorithmSHA1, DigestSize: 20},
 		{AlgorithmId: tpm2.HashAlgorithmSHA256, DigestSize: 32}})
 	c.Check(event.VendorInfo, DeepEquals, []byte{0xa5, 0xa5, 0xa5, 0xa5})
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataActionGood(c *C) {
+	data := []byte(EFICallingEFIApplicationEvent)
+	e, err := DecodeEventDataAction(data)
+	c.Assert(err, IsNil)
+
+	c.Check(e.Bytes(), DeepEquals, data)
+	c.Check(e.String(), Equals, string(EFICallingEFIApplicationEvent))
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataActionBad(c *C) {
+	data := []byte{0x02, 0xf6, 0x01}
+	_, err := DecodeEventDataAction(data)
+	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashGood(c *C) {
+	data := []byte("Dell Configuration Information 1")
+	e, err := DecodeEventDataCompactHash(data)
+	c.Assert(err, IsNil)
+
+	c.Check(e.Bytes(), DeepEquals, data)
+	c.Check(e.String(), Equals, string("Dell Configuration Information 1"))
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashBad(c *C) {
+	data := []byte{0x02, 0xf6, 0x01}
+	_, err := DecodeEventDataCompactHash(data)
+	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataPostCodeString(c *C) {
+	data := []byte("POST CODE")
+	e, err := DecodeEventDataPostCode(data)
+	c.Assert(err, IsNil)
+
+	ev, ok := e.(StringEventData)
+	c.Assert(ok, Equals, true)
+
+	c.Check(ev.String(), Equals, "POST CODE")
+	c.Check(ev.Bytes(), DeepEquals, data)
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataPostCodeWithBlob(c *C) {
+	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
+	e, err := DecodeEventDataPostCode(data)
+	c.Assert(err, IsNil)
+
+	ev, ok := e.(*EFIPlatformFirmwareBlob)
+	c.Assert(ok, Equals, true)
+
+	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
+	c.Check(ev.Bytes(), DeepEquals, data)
+
+	c.Check(uint64(ev.BlobBase), Equals, uint64(4279701504))
+	c.Check(ev.BlobLength, Equals, uint64(6619136))
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataPostCode2String(c *C) {
+	data := []byte("SMM CODE")
+	e, err := DecodeEventDataPostCode2(data)
+	c.Assert(err, IsNil)
+
+	ev, ok := e.(StringEventData)
+	c.Assert(ok, Equals, true)
+
+	c.Check(ev.String(), Equals, "SMM CODE")
+	c.Check(ev.Bytes(), DeepEquals, data)
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataPostCode2WithBlob(c *C) {
+	data := []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
+	e, err := DecodeEventDataPostCode2(data)
+	c.Assert(err, IsNil)
+
+	ev, ok := e.(*EFIPlatformFirmwareBlob2)
+	c.Assert(ok, Equals, true)
+
+	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216}")
+	c.Check(ev.Bytes(), DeepEquals, data)
+
+	c.Check(ev.BlobDescription, Equals, "POST CODE")
+	c.Check(uint64(ev.BlobBase), Equals, uint64(4290904064))
+	c.Check(ev.BlobLength, Equals, uint64(393216))
 }

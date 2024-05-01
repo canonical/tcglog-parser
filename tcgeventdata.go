@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 
 	"github.com/canonical/go-tpm2"
@@ -23,6 +24,7 @@ import (
 var separatorErrorDigests = make(map[tpm2.HashAlgorithmId]tpm2.Digest)
 
 // StringEventData corresponds to event data that is an non-NULL terminated ASCII string.
+// It may or may not be informative.
 type StringEventData string
 
 func (d StringEventData) String() string {
@@ -39,8 +41,8 @@ func (d StringEventData) Bytes() []byte {
 }
 
 // ComputeStringEventDigest computes the digest associated with the supplied string, for
-// events where the digest is a tagged hash of the string. The function assumes that the
-// string is ASCII encoded and measured without a terminating NULL byte.
+// events where the data is not informative. The function assumes that the string is
+// ASCII encoded and measured without a terminating NULL byte.
 func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
 	h := alg.New()
 	io.WriteString(h, str)
@@ -48,9 +50,12 @@ func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 11.3.4 "EV_NO_ACTION Event Types")
+//
+//	(section 11.3.4 "EV_NO_ACTION Event Types")
+//
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//  (section 9.4.5 "EV_NO_ACTION Event Types")
+//
+//	(section 9.4.5 "EV_NO_ACTION Event Types")
 func decodeEventDataNoAction(data []byte) (EventData, error) {
 	r := bytes.NewReader(data)
 
@@ -99,12 +104,11 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
-func decodeEventDataAction(data []byte) StringEventData {
-	return StringEventData(data)
-}
-
-func decodeEventDataHostPlatformSpecificCompactHash(data []byte) StringEventData {
-	return StringEventData(data)
+func decodeEventDataAction(data []byte) (StringEventData, error) {
+	if !isPrintableASCII(data) {
+		return "", errors.New("data does not contain printable ASCII")
+	}
+	return StringEventData(data), nil
 }
 
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.
@@ -153,10 +157,13 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//  (section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+//
+//	(section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+//
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
-//  (section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
-//   "Procedure for Pre-OS to OS-Present Transition")
+//
+//	(section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//	 "Procedure for Pre-OS to OS-Present Transition")
 func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventData, error) {
 	var alg tpm2.HashAlgorithmId
 	for a, _ := range digests {
@@ -191,27 +198,113 @@ func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventDa
 	return &SeparatorEventData{rawEventData: data, Value: value}, nil
 }
 
+func decodeEventDataCompactHash(data []byte) (StringEventData, error) {
+	if !isPrintableASCII(data) {
+		return "", errors.New("data does not contain printable ASCII")
+	}
+	return StringEventData(data), nil
+}
+
+func decodeEventDataPostCode(data []byte) (EventData, error) {
+	if isPrintableASCII(data) {
+		return StringEventData(data), nil
+	}
+	return decodeEventDataEFIPlatformFirmwareBlob(data)
+}
+
+func decodeEventDataPostCode2(data []byte) (EventData, error) {
+	if isPrintableASCII(data) {
+		return StringEventData(data), nil
+	}
+	return decodeEventDataEFIPlatformFirmwareBlob2(data)
+}
+
+// TaggedEvent corresponds to TCG_PCClientTaggedEvent
+type TaggedEvent struct {
+	rawEventData
+	EventID uint32
+	Data    []byte
+}
+
+func (e *TaggedEvent) String() string {
+	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %x}", e.EventID, e.Data)
+}
+
+func (e *TaggedEvent) Write(w io.Writer) error {
+	if err := binary.Write(w, binary.LittleEndian, e.EventID); err != nil {
+		return fmt.Errorf("cannot write taggedEventID: %w", err)
+	}
+
+	n := uint64(len(e.Data))
+	if n > math.MaxUint32 {
+		return errors.New("taggedEventData is too large")
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint32(n)); err != nil {
+		return fmt.Errorf("cannot write taggedEventDataSize: %w", err)
+	}
+	if _, err := w.Write(e.Data); err != nil {
+		return fmt.Errorf("cannot write taggedEventData: %w", err)
+	}
+
+	return nil
+}
+
+func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
+	r := bytes.NewReader(data)
+
+	d := &TaggedEvent{rawEventData: data}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.EventID); err != nil {
+		return nil, fmt.Errorf("cannot decode taggedEventID: %w", err)
+	}
+
+	var n uint32
+	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
+		return nil, fmt.Errorf("cannot decode taggedEventDataSize: %w", err)
+	}
+
+	d.Data = make([]byte, n)
+	if _, err := io.ReadFull(r, d.Data); err != nil {
+		return nil, fmt.Errorf("cannot read taggedEventData: %w", err)
+	}
+
+	return d, nil
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
-func decodeEventDataTCG(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap) (out EventData, err error) {
+func decodeEventDataTCG(data []byte, eventType EventType, digests DigestMap) (out EventData, err error) {
 	switch eventType {
 	case EventTypeNoAction:
 		return decodeEventDataNoAction(data)
 	case EventTypeSeparator:
 		return decodeEventDataSeparator(data, digests)
 	case EventTypeAction, EventTypeEFIAction:
-		return decodeEventDataAction(data), nil
+		return decodeEventDataAction(data)
+	case EventTypePostCode:
+		return decodeEventDataPostCode(data)
+	case EventTypePostCode2:
+		return decodeEventDataPostCode2(data)
+	case EventTypeEFIPlatformFirmwareBlob:
+		return decodeEventDataEFIPlatformFirmwareBlob(data)
+	case EventTypeEFIPlatformFirmwareBlob2:
+		return decodeEventDataEFIPlatformFirmwareBlob2(data)
 	case EventTypeCompactHash:
-		if pcrIndex == 6 {
-			return decodeEventDataHostPlatformSpecificCompactHash(data), nil
-		}
+		return decodeEventDataCompactHash(data)
 	case EventTypeEFIVariableDriverConfig, EventTypeEFIVariableBoot, EventTypeEFIVariableAuthority, EventTypeEFIVariableBoot2:
 		return decodeEventDataEFIVariable(data)
 	case EventTypeEFIBootServicesApplication, EventTypeEFIBootServicesDriver, EventTypeEFIRuntimeServicesDriver:
 		return decodeEventDataEFIImageLoad(data)
-	case EventTypeEFIGPTEvent:
+	case EventTypeEFIGPTEvent, EventTypeEFIGPTEvent2:
 		return decodeEventDataEFIGPT(data)
+	case EventTypeEFIHandoffTables:
+		return decodeEventDataEFIHandoffTablePointers(data)
+	case EventTypeEFIHandoffTables2:
+		return decodeEventDataEFIHandoffTablePointers2(data)
+	case EventTypeEventTag:
+		return decodeEventDataTaggedEvent(data)
 	default:
 	}
 

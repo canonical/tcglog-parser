@@ -17,6 +17,9 @@ import (
 //
 // If an error is encountered when decoding the data associated with an event, the event data will implement the error interface
 // which can be used for obtaining information about the decoding error.
+//
+// Some event data is informative (it provides information about the measurement), whilst others are not
+// normative because the measurement is a tagged hash of the event data.
 type EventData interface {
 	fmt.Stringer
 
@@ -57,6 +60,7 @@ func (e *invalidEventData) Unwrap() error {
 }
 
 // OpaqueEventData is event data whose format is unknown or implementation defined.
+// It may or may not be informative.
 type OpaqueEventData []byte
 
 func (d OpaqueEventData) String() string {
@@ -109,7 +113,7 @@ func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digest
 
 	}
 
-	out, err := decodeEventDataTCG(data, pcrIndex, eventType, digests)
+	out, err := decodeEventDataTCG(data, eventType, digests)
 	if err != nil {
 		return &invalidEventData{rawEventData: data, err: err}
 	}

@@ -28,6 +28,7 @@ const (
 	EventTypeNonhostConfig        EventType = 0x00000010 // EV_NONHOST_CONFIG
 	EventTypeNonhostInfo          EventType = 0x00000011 // EV_NONHOST_INFO
 	EventTypeOmitBootDeviceEvents EventType = 0x00000012 // EV_OMIT_BOOT_DEVICE_EVENTS
+	EventTypePostCode2            EventType = 0x00000013 // EV_POST_CODE2
 
 	EventTypeEFIEventBase               EventType = 0x80000000 // EV_EFI_EVENT_BASE
 	EventTypeEFIVariableDriverConfig    EventType = 0x80000001 // EV_EFI_VARIABLE_DRIVER_CONFIG
@@ -42,10 +43,13 @@ const (
 	EventTypeEFIPlatformFirmwareBlob2   EventType = 0x8000000a // EV_EFI_PLATFORM_FIRMWARE_BLOB2
 	EventTypeEFIHandoffTables2          EventType = 0x8000000b // EV_EFI_HANDOFF_TABLES2
 	EventTypeEFIVariableBoot2           EventType = 0x8000000c // EV_EFI_VARIABLE_BOOT2
+	EventTypeEFIGPTEvent2               EventType = 0x8000000d // EV_EFI_GPT_EVENT2
 	EventTypeEFIHCRTMEvent              EventType = 0x80000010 // EV_EFI_HCRTM_EVENT
 	EventTypeEFIVariableAuthority       EventType = 0x800000e0 // EV_EFI_VARIABLE_AUTHORITY
 	EventTypeEFISPDMFirmwareBlob        EventType = 0x800000e1 // EV_EFI_SPDM_FIRMWARE_BLOB
 	EventTypeEFISPDMFirmwareConfig      EventType = 0x800000e2 // EV_EFI_SPDM_FIRMWARE_CONFIG
+	EventTypeEFISPDMDevicePolicy        EventType = 0x800000e3 // EV_EFI_SPDM_DEVICE_POLICY
+	EventTypeEFISPDMDeviceAuthority     EventType = 0x800000e4 // EV_EFI_SPDM_DEVICE_AUTHORITY
 )
 
 const (

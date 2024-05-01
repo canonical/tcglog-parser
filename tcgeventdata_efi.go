@@ -16,7 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/canonical/go-efilib"
+	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 
 	"golang.org/x/xerrors"
@@ -117,7 +117,8 @@ func (e *SpecIdEvent02) Write(w io.Writer) error {
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
-//  (section 7.4 "EV_NO_ACTION Event Types")
+//
+//	(section 7.4 "EV_NO_ACTION Event Types")
 func decodeSpecIdEvent02(data []byte, r io.Reader) (out *SpecIdEvent02, err error) {
 	var spec rawSpecIdEvent02Hdr
 	if err := binary.Read(r, binary.LittleEndian, &spec); err != nil {
@@ -219,7 +220,8 @@ func (e *SpecIdEvent03) Write(w io.Writer) error {
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//  (secion 9.4.5.1 "Specification ID Version Event")
+//
+//	(secion 9.4.5.1 "Specification ID Version Event")
 func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err error) {
 	var spec rawSpecIdEvent03Hdr
 	if err := binary.Read(r, binary.LittleEndian, &spec); err != nil {
@@ -281,7 +283,8 @@ func (e *StartupLocalityEventData) Write(w io.Writer) error {
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//  (section 9.4.5.3 "Startup Locality Event")
+//
+//	(section 9.4.5.3 "Startup Locality Event")
 func decodeStartupLocalityEvent(data []byte, r io.Reader) (*StartupLocalityEventData, error) {
 	var locality uint8
 	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
@@ -318,9 +321,12 @@ func (e *SP800_155_PlatformIdEventData) Write(w io.Writer) error {
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//  (section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
+//
+//	(section 9.4.5.2 "BIOS Integrity Measurement Reference Manifest Event")
+//
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
-//  (section 7.4 "EV_NO_ACTION Event Types")
+//
+//	(section 7.4 "EV_NO_ACTION Event Types")
 func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*SP800_155_PlatformIdEventData, error) {
 	var d struct {
 		VendorId uint32
@@ -334,7 +340,7 @@ func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*SP800_155_Platf
 }
 
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
-// EFI variable.
+// EFI variable. This is not informative.
 type EFIVariableData struct {
 	rawEventData
 	VariableName efi.GUID
@@ -417,6 +423,7 @@ type rawEFIImageLoadEventHdr struct {
 	LengthOfDevicePath uint64
 }
 
+// EFIImageLoadEvent corresponds to UEFI_IMAGE_LOAD_EVENT and is informative.
 type EFIImageLoadEvent struct {
 	rawEventData
 	LocationInMemory efi.PhysicalAddress
@@ -473,7 +480,10 @@ func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
 		DevicePath:       path}, nil
 }
 
-// EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT events.
+// EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT and
+// EV_EFI_GPT_EVENT2 events. When used for EV_EFI_GPT_EVENT2 events, the platform firmware
+// zeroes out the DiskGUID field in the header and the UniquePartitionGUID field in each
+// partition entry.
 type EFIGPTData struct {
 	rawEventData
 	Hdr        efi.PartitionTableHeader
@@ -558,4 +568,357 @@ func ComputeEFIGPTDataDigest(alg crypto.Hash, data *EFIGPTData) ([]byte, error) 
 		return nil, err
 	}
 	return h.Sum(nil), nil
+}
+
+// EFIConfigurationTable corresponds to UEFI_CONFIGURATION_TABLE
+type EFIConfigurationTable struct {
+	VendorGuid  efi.GUID
+	VendorTable uintptr
+}
+
+func (t EFIConfigurationTable) String() string {
+	return fmt.Sprintf("UEFI_CONFIGURATION_TABLE{VendorGuid: %v, VendorTable: %#x}", t.VendorGuid, t.VendorTable)
+}
+
+func (t *EFIConfigurationTable) Write(w io.Writer) error {
+	if _, err := w.Write(t.VendorGuid[:]); err != nil {
+		return fmt.Errorf("cannot write VendorGuid: %w", err)
+	}
+
+	switch ptrSize() {
+	case 4:
+		return binary.Write(w, binary.LittleEndian, uint32(t.VendorTable))
+	case 8:
+		return binary.Write(w, binary.LittleEndian, uint64(t.VendorTable))
+	default:
+		panic("not reached")
+	}
+}
+
+// EFIHandoffTablePointers corresponds to UEFI_HANDOFF_TABLE_POINTERS and is the event data for EV_EFI_HANDOFF_TABLES events.
+// This is informative.
+type EFIHandoffTablePointers struct {
+	rawEventData
+	TableEntries []EFIConfigurationTable
+}
+
+func (e *EFIHandoffTablePointers) String() string {
+	var builder bytes.Buffer
+	fmt.Fprintf(&builder, "UEFI_HANDOFF_TABLE_POINTERS{\n\tTableEntries: [")
+	for _, entry := range e.TableEntries {
+		fmt.Fprintf(&builder, "\n\t\t%s", entry)
+	}
+	fmt.Fprintf(&builder, "\n\t]\n}")
+	return builder.String()
+}
+
+func (e *EFIHandoffTablePointers) Write(w io.Writer) error {
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
+		return fmt.Errorf("cannot write NumberOfTables: %w", err)
+	}
+	for i, table := range e.TableEntries {
+		if err := table.Write(w); err != nil {
+			return fmt.Errorf("cannot write TableEntry[%d]: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+func decodeEventDataEFIHandoffTablePointers(data []byte) (*EFIHandoffTablePointers, error) {
+	r := bytes.NewReader(data)
+
+	d := &EFIHandoffTablePointers{rawEventData: data}
+
+	var nTables uint64
+	if err := binary.Read(r, binary.LittleEndian, &nTables); err != nil {
+		return nil, fmt.Errorf("cannot read NumberOfTables")
+	}
+
+	d.TableEntries = make([]EFIConfigurationTable, 0, nTables)
+
+	for i := uint64(0); i < nTables; i++ {
+		vendorGuid, err := efi.ReadGUID(r)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read TableEntry[%d].VendorGuid: %w", i, err)
+		}
+
+		var vendorTable uintptr
+		switch ptrSize() {
+		case 4:
+			var x uint32
+			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+			}
+			vendorTable = uintptr(x)
+		case 8:
+			var x uint64
+			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+			}
+			vendorTable = uintptr(x)
+		default:
+			panic("not reached")
+		}
+
+		d.TableEntries = append(d.TableEntries, EFIConfigurationTable{
+			VendorGuid:  vendorGuid,
+			VendorTable: vendorTable,
+		})
+	}
+
+	return d, nil
+}
+
+// EFIHandoffTablePointers2 corresponds to UEFI_HANDOFF_TABLE_POINTERS2 and is the event data for EV_EFI_HANDOFF_TABLES2 events.
+// This is informative.
+type EFIHandoffTablePointers2 struct {
+	rawEventData
+	TableDescription string
+	TableEntries     []EFIConfigurationTable
+}
+
+func (e *EFIHandoffTablePointers2) String() string {
+	var builder bytes.Buffer
+	fmt.Fprintf(&builder, "UEFI_HANDOFF_TABLE_POINTERS2{\n\tTableDescription: %q,\n\tTableEntries: [", e.TableDescription)
+	for _, entry := range e.TableEntries {
+		fmt.Fprintf(&builder, "\n\t\t%s", entry)
+	}
+	fmt.Fprintf(&builder, "\n\t]\n}")
+	return builder.String()
+}
+
+func (e *EFIHandoffTablePointers2) Write(w io.Writer) error {
+	if len(e.TableDescription) > math.MaxUint8 {
+		return errors.New("TableDescription too long")
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint8(len(e.TableDescription))); err != nil {
+		return fmt.Errorf("cannot write TableDescriptionSize: %w", err)
+	}
+	if _, err := io.WriteString(w, e.TableDescription); err != nil {
+		return fmt.Errorf("cannot write TableDescription: %w", err)
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
+		return fmt.Errorf("cannot write NumberOfTables: %w", err)
+	}
+	for i, table := range e.TableEntries {
+		if err := table.Write(w); err != nil {
+			return fmt.Errorf("cannot write TableEntry[%d]: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+func decodeEventDataEFIHandoffTablePointers2(data []byte) (*EFIHandoffTablePointers2, error) {
+	r := bytes.NewReader(data)
+
+	d := &EFIHandoffTablePointers2{rawEventData: data}
+
+	var n uint8
+	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
+		return nil, fmt.Errorf("cannot read TableDescriptionSize")
+	}
+
+	desc := make([]byte, n)
+	if _, err := io.ReadFull(r, desc); err != nil {
+		return nil, fmt.Errorf("cannot read TableDescription")
+	}
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(desc) {
+		return nil, fmt.Errorf("TableDescription contains invalid ASCII")
+	}
+	d.TableDescription = string(desc)
+
+	var nTables uint64
+	if err := binary.Read(r, binary.LittleEndian, &nTables); err != nil {
+		return nil, fmt.Errorf("cannot read NumberOfTables")
+	}
+
+	d.TableEntries = make([]EFIConfigurationTable, 0, nTables)
+
+	for i := uint64(0); i < nTables; i++ {
+		vendorGuid, err := efi.ReadGUID(r)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read TableEntry[%d].VendorGuid: %w", i, err)
+		}
+
+		var vendorTable uintptr
+		switch ptrSize() {
+		case 4:
+			var x uint32
+			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+			}
+			vendorTable = uintptr(x)
+		case 8:
+			var x uint64
+			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+			}
+			vendorTable = uintptr(x)
+		default:
+			panic("not reached")
+		}
+
+		d.TableEntries = append(d.TableEntries, EFIConfigurationTable{
+			VendorGuid:  vendorGuid,
+			VendorTable: vendorTable,
+		})
+	}
+
+	return d, nil
+}
+
+// EFIPlatformFirmwareBlob corresponds to UEFI_PLATFORM_FIRMWARE_BLOB and is the event data for EV_EFI_PLATFORM_FIRMWARE_BLOB
+// and some EV_POST_CODE events. This is informative.
+type EFIPlatformFirmwareBlob struct {
+	rawEventData
+	BlobBase   uintptr
+	BlobLength uint64
+}
+
+func (b *EFIPlatformFirmwareBlob) String() string {
+	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: %#x, BlobLength:%d}", b.BlobBase, b.BlobLength)
+}
+
+func (b *EFIPlatformFirmwareBlob) Write(w io.Writer) error {
+	switch ptrSize() {
+	case 4:
+		if err := binary.Write(w, binary.LittleEndian, uint32(b.BlobBase)); err != nil {
+			return fmt.Errorf("cannot write BlobBase: %w", err)
+		}
+	case 8:
+		if err := binary.Write(w, binary.LittleEndian, uint64(b.BlobBase)); err != nil {
+			return fmt.Errorf("cannot write BlobBase: %w", err)
+		}
+	default:
+		panic("not reached")
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, b.BlobLength); err != nil {
+		return fmt.Errorf("cannot write BlobLength: %w", err)
+	}
+
+	return nil
+}
+
+func decodeEventDataEFIPlatformFirmwareBlob(data []byte) (*EFIPlatformFirmwareBlob, error) {
+	r := bytes.NewReader(data)
+
+	d := &EFIPlatformFirmwareBlob{rawEventData: data}
+
+	switch ptrSize() {
+	case 4:
+		var x uint32
+		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
+		}
+		d.BlobBase = uintptr(x)
+	case 8:
+		var x uint64
+		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
+		}
+		d.BlobBase = uintptr(x)
+	default:
+		panic("not reached")
+	}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.BlobLength); err != nil {
+		return nil, fmt.Errorf("cannot read BlobLength: %w", err)
+	}
+
+	return d, nil
+}
+
+// EFIPlatformFirmwareBlob2 corresponds to UEFI_PLATFORM_FIRMWARE_BLOB2 and is the event data for
+// EV_EFI_PLATFORM_FIRMWARE_BLOB2 and some EV_POST_CODE2 events. This is informative.
+type EFIPlatformFirmwareBlob2 struct {
+	rawEventData
+	BlobDescription string
+	BlobBase        uintptr
+	BlobLength      uint64
+}
+
+func (b *EFIPlatformFirmwareBlob2) String() string {
+	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:%q, BlobBase: %#x, BlobLength:%d}", b.BlobDescription, b.BlobBase, b.BlobLength)
+}
+
+func (b *EFIPlatformFirmwareBlob2) Write(w io.Writer) error {
+	if len(b.BlobDescription) > math.MaxUint8 {
+		return errors.New("BlobDescription too long")
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint8(len(b.BlobDescription))); err != nil {
+		return fmt.Errorf("cannot write BlobDescriptionSize: %w", err)
+	}
+	if _, err := io.WriteString(w, b.BlobDescription); err != nil {
+		return fmt.Errorf("cannot write BlobDescription: %w", err)
+	}
+
+	switch ptrSize() {
+	case 4:
+		if err := binary.Write(w, binary.LittleEndian, uint32(b.BlobBase)); err != nil {
+			return fmt.Errorf("cannot write BlobBase: %w", err)
+		}
+	case 8:
+		if err := binary.Write(w, binary.LittleEndian, uint64(b.BlobBase)); err != nil {
+			return fmt.Errorf("cannot write BlobBase: %w", err)
+		}
+	default:
+		panic("not reached")
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, b.BlobLength); err != nil {
+		return fmt.Errorf("cannot write BlobLength: %w", err)
+	}
+
+	return nil
+}
+
+func decodeEventDataEFIPlatformFirmwareBlob2(data []byte) (*EFIPlatformFirmwareBlob2, error) {
+	r := bytes.NewReader(data)
+
+	d := &EFIPlatformFirmwareBlob2{rawEventData: data}
+
+	var n uint8
+	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
+		return nil, fmt.Errorf("cannot read BlobDescriptionSize")
+	}
+
+	desc := make([]byte, n)
+	if _, err := io.ReadFull(r, desc); err != nil {
+		return nil, fmt.Errorf("cannot read BlobDescription")
+	}
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(desc) {
+		return nil, fmt.Errorf("BlobDescription contains invalid ASCII")
+	}
+	d.BlobDescription = string(desc)
+
+	switch ptrSize() {
+	case 4:
+		var x uint32
+		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
+		}
+		d.BlobBase = uintptr(x)
+	case 8:
+		var x uint64
+		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
+			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
+		}
+		d.BlobBase = uintptr(x)
+	default:
+		panic("not reached")
+	}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.BlobLength); err != nil {
+		return nil, fmt.Errorf("cannot read BlobLength: %w", err)
+	}
+
+	return d, nil
 }
