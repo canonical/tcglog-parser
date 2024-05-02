@@ -90,6 +90,18 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 			return nil, xerrors.Errorf("cannot decode SP800-155 Event data: %w", err)
 		}
 		return out, nil
+	case "SP800-155 Event2":
+		out, err := decodeBIMReferenceManifestEvent2(data, r)
+		if err != nil {
+			return nil, xerrors.Errorf("cannot decode SP800-155 Event2 data: %w", err)
+		}
+		return out, nil
+	case "SP800-155 Event3":
+		out, err := decodeBIMReferenceManifestEvent3(data, r)
+		if err != nil {
+			return nil, xerrors.Errorf("cannot decode SP800-155 Event3 data: %w", err)
+		}
+		return out, nil
 	case "StartupLocality":
 		out, err := decodeStartupLocalityEvent(data, r)
 		if err != nil {

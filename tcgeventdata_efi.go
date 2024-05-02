@@ -264,7 +264,7 @@ func decodeStartupLocalityEvent(data []byte, r io.Reader) (*StartupLocalityEvent
 	return &StartupLocalityEventData{rawEventData: data, StartupLocality: locality}, nil
 }
 
-// SP800_155_PlatformIdEventData corresponds to the event data for a SP800-155-Event
+// SP800_155_PlatformIdEventData corresponds to the event data for a SP800-155 Event
 // EV_NO_ACTION event
 type SP800_155_PlatformIdEventData struct {
 	rawEventData
@@ -307,6 +307,348 @@ func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*SP800_155_Platf
 	}
 
 	return &SP800_155_PlatformIdEventData{rawEventData: data, VendorId: d.VendorId, ReferenceManifestGuid: d.Guid}, nil
+}
+
+// SP800_155_PlatformIdEventData2 corresponds to the event data for a SP800-155 Event2
+// EV_NO_ACTION event
+type SP800_155_PlatformIdEventData2 struct {
+	rawEventData
+	PlatformManufacturerId uint32
+	ReferenceManifestGuid  efi.GUID
+	PlatformManufacturer   string
+	PlatformModel          string
+	PlatformVersion        string
+	FirmwareManufacturer   string
+	FirmwareManufacturerId uint32
+	FirmwareVersion        string
+}
+
+func (d *SP800_155_PlatformIdEventData2) String() string {
+	w := new(bytes.Buffer)
+	fmt.Fprintf(w, "SP800_155_PlatformId_Event2{")
+	fmt.Fprintf(w, "\tPlatformManufacturerId: %d\n", d.PlatformManufacturerId)
+	fmt.Fprintf(w, "\tReferenceManifestGUID: %v\n", d.ReferenceManifestGuid)
+	fmt.Fprintf(w, "\tPlatformManufacturer: %s\n", d.PlatformManufacturer)
+	fmt.Fprintf(w, "\tPlatformModel: %s\n", d.PlatformModel)
+	fmt.Fprintf(w, "\tPlatformVersion: %s\n", d.PlatformVersion)
+	fmt.Fprintf(w, "\tFirmwareManufacturer: %s\n", d.FirmwareManufacturer)
+	fmt.Fprintf(w, "\tFirmwareManufacturerId: %d\n", d.FirmwareManufacturerId)
+	fmt.Fprintf(w, "\tFirmwareVersion: %s\n", d.FirmwareVersion)
+	fmt.Fprintf(w, "}")
+	return w.String()
+}
+
+func (d *SP800_155_PlatformIdEventData2) Write(w io.Writer) error {
+	var signature [16]byte
+	copy(signature[:], []byte("SP800-155 Event2"))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, d.PlatformManufacturerId); err != nil {
+		return err
+	}
+	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformManufacturer), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformModel), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformVersion), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareManufacturer), 0x00)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00))
+}
+
+func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_PlatformIdEventData2, error) {
+	d := &SP800_155_PlatformIdEventData2{rawEventData: data}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.PlatformManufacturerId); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	guid, err := efi.ReadGUID(r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.ReferenceManifestGuid = guid
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("PlatformManufacturer contains invalid ASCII")
+	}
+	d.PlatformManufacturer = string(data)
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("PlatformModel contains invalid ASCII")
+	}
+	d.PlatformModel = string(data)
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("PlatformVersion contains invalid ASCII")
+	}
+	d.PlatformVersion = string(data)
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("FirmwareManufacturer contains invalid ASCII")
+	}
+	d.FirmwareManufacturer = string(data)
+
+	if err := binary.Read(r, binary.LittleEndian, &d.FirmwareManufacturerId); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("FirmwareVersion contains invalid ASCII")
+	}
+	d.FirmwareVersion = string(data)
+
+	return d, nil
+}
+
+type LocatorType uint32
+
+const (
+	LocatorTypeRaw        LocatorType = 0
+	LocatorTypeURI        LocatorType = 1
+	LocatorTypeDevicePath LocatorType = 2
+	LocatorTypeVariable   LocatorType = 3
+)
+
+// SP800_155_PlatformIdEventData3 corresponds to the event data for a SP800-155 Event3
+// EV_NO_ACTION event
+type SP800_155_PlatformIdEventData3 struct {
+	rawEventData
+	PlatformManufacturerId  uint32
+	ReferenceManifestGuid   efi.GUID
+	PlatformManufacturer    string
+	PlatformModel           string
+	PlatformVersion         string
+	FirmwareManufacturer    string
+	FirmwareManufacturerId  uint32
+	FirmwareVersion         string
+	RIMLocatorType          LocatorType
+	RIMLocator              []byte
+	PlatformCertLocatorType LocatorType
+	PlatformCertLocator     []byte
+}
+
+func (d *SP800_155_PlatformIdEventData3) String() string {
+	w := new(bytes.Buffer)
+	fmt.Fprintf(w, "SP800_155_PlatformId_Event3{")
+	fmt.Fprintf(w, "\tPlatformManufacturerId: %d\n", d.PlatformManufacturerId)
+	fmt.Fprintf(w, "\tReferenceManifestGUID: %v\n", d.ReferenceManifestGuid)
+	fmt.Fprintf(w, "\tPlatformManufacturer: %s\n", d.PlatformManufacturer)
+	fmt.Fprintf(w, "\tPlatformModel: %s\n", d.PlatformModel)
+	fmt.Fprintf(w, "\tPlatformVersion: %s\n", d.PlatformVersion)
+	fmt.Fprintf(w, "\tFirmwareManufacturer: %s\n", d.FirmwareManufacturer)
+	fmt.Fprintf(w, "\tFirmwareManufacturerId: %d\n", d.FirmwareManufacturerId)
+	fmt.Fprintf(w, "\tFirmwareVersion: %s\n", d.FirmwareVersion)
+
+	printLocator := func(name string, t LocatorType, data []byte) {
+		switch t {
+		case LocatorTypeRaw:
+			fmt.Fprintf(w, "\t%s:<raw>\n", name)
+		case LocatorTypeURI:
+			fmt.Fprintf(w, "\t%s:uri:%s\n", name, string(bytes.TrimSuffix(data, []byte{0x00})))
+		case LocatorTypeDevicePath:
+			path, err := efi.ReadDevicePath(bytes.NewReader(data))
+			if err != nil {
+				fmt.Fprintf(w, "\t%s:devicepath:%v\n", name, err)
+			} else {
+				fmt.Fprintf(w, "\t%s:devicepath:%s\n", name, path)
+			}
+		case LocatorTypeVariable:
+			r := bytes.NewReader(data)
+			guid, err := efi.ReadGUID(r)
+			if err != nil {
+				fmt.Fprintf(w, "\t%s:variable:%v\n", name, err)
+			}
+			name, err := io.ReadAll(r)
+			if err != nil {
+				fmt.Fprintf(w, "\t%s:variable:%v\n", name, err)
+			}
+			name = bytes.TrimSuffix(name, []byte{0x00})
+			fmt.Fprintf(w, "\t%s:variable:%v-%s\n", name, guid, string(name))
+		}
+	}
+	printLocator("RIMLocator", d.RIMLocatorType, d.RIMLocator)
+	printLocator("PlatformCertLocator", d.PlatformCertLocatorType, d.PlatformCertLocator)
+
+	fmt.Fprintf(w, "}")
+	return w.String()
+}
+
+func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
+	var signature [16]byte
+	copy(signature[:], []byte("SP800-155 Event3"))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, d.PlatformManufacturerId); err != nil {
+		return err
+	}
+	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformManufacturer), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformModel), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformVersion), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareManufacturer), 0x00)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.RIMLocatorType); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint32](w, d.RIMLocator); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.PlatformCertLocatorType); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint32](w, d.PlatformCertLocator)
+}
+
+func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_PlatformIdEventData3, error) {
+	d := &SP800_155_PlatformIdEventData3{rawEventData: data}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.PlatformManufacturerId); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	guid, err := efi.ReadGUID(r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.ReferenceManifestGuid = guid
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("PlatformManufacturer contains invalid ASCII")
+	}
+	d.PlatformManufacturer = string(data)
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("PlatformModel contains invalid ASCII")
+	}
+	d.PlatformModel = string(data)
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("PlatformVersion contains invalid ASCII")
+	}
+	d.PlatformVersion = string(data)
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("FirmwareManufacturer contains invalid ASCII")
+	}
+	d.FirmwareManufacturer = string(data)
+
+	if err := binary.Read(r, binary.LittleEndian, &d.FirmwareManufacturerId); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	data, err = readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data = bytes.TrimSuffix(data, []byte{0x00})
+	// Make sure we have valid printable ASCII
+	if !isPrintableASCII(data) {
+		return nil, fmt.Errorf("FirmwareVersion contains invalid ASCII")
+	}
+	d.FirmwareVersion = string(data)
+
+	if err := binary.Read(r, binary.LittleEndian, &d.RIMLocatorType); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data, err = readLengthPrefixed[uint32, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.RIMLocator = data
+
+	if err := binary.Read(r, binary.LittleEndian, &d.PlatformCertLocatorType); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	data, err = readLengthPrefixed[uint32, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.PlatformCertLocator = data
+
+	return d, nil
 }
 
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
