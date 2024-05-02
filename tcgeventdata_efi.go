@@ -62,15 +62,6 @@ func extractUTF16Buffer(r io.ReadSeeker, nchars uint64) ([]uint16, error) {
 	return out, nil
 }
 
-type rawSpecIdEvent02Hdr struct {
-	PlatformClass    uint32
-	SpecVersionMinor uint8
-	SpecVersionMajor uint8
-	SpecErrata       uint8
-	UintnSize        uint8
-	VendorInfoSize   uint8
-}
-
 // SpecIdEvent02 corresponds to the TCG_EfiSpecIdEventStruct type and is the
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 1.2.
@@ -90,54 +81,57 @@ func (e *SpecIdEvent02) String() string {
 }
 
 func (e *SpecIdEvent02) Write(w io.Writer) error {
-	vendorInfoSize := len(e.VendorInfo)
-	if vendorInfoSize > math.MaxUint8 {
-		return errors.New("VendorInfo too large")
-	}
-
 	var signature [16]byte
 	copy(signature[:], []byte("Spec ID Event02"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
-
-	spec := rawSpecIdEvent02Hdr{
-		PlatformClass:    e.PlatformClass,
-		SpecVersionMinor: e.SpecVersionMinor,
-		SpecVersionMajor: e.SpecVersionMajor,
-		SpecErrata:       e.SpecErrata,
-		UintnSize:        e.UintnSize,
-		VendorInfoSize:   uint8(vendorInfoSize)}
-	if err := binary.Write(w, binary.LittleEndian, &spec); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, e.PlatformClass); err != nil {
 		return err
 	}
-
-	_, err := w.Write(e.VendorInfo)
-	return err
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMinor); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMajor); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecErrata); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.UintnSize); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint8](w, e.VendorInfo)
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
 //
 //	(section 7.4 "EV_NO_ACTION Event Types")
 func decodeSpecIdEvent02(data []byte, r io.Reader) (out *SpecIdEvent02, err error) {
-	var spec rawSpecIdEvent02Hdr
-	if err := binary.Read(r, binary.LittleEndian, &spec); err != nil {
+	d := &SpecIdEvent02{rawEventData: data}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-
-	out = &SpecIdEvent02{
-		rawEventData:     data,
-		PlatformClass:    spec.PlatformClass,
-		SpecVersionMinor: spec.SpecVersionMinor,
-		SpecVersionMajor: spec.SpecVersionMajor,
-		SpecErrata:       spec.SpecErrata,
-		UintnSize:        spec.UintnSize,
-		VendorInfo:       make([]byte, spec.VendorInfoSize)}
-	if _, err := io.ReadFull(r, out.VendorInfo); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMinor); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMajor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecErrata); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.UintnSize); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	vendorInfo, err := readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.VendorInfo = vendorInfo
 
-	return out, nil
+	return d, nil
 }
 
 // EFISpecIdEventAlgorithmSize represents a digest algorithm and its length and corresponds to the
@@ -145,15 +139,6 @@ func decodeSpecIdEvent02(data []byte, r io.Reader) (out *SpecIdEvent02, err erro
 type EFISpecIdEventAlgorithmSize struct {
 	AlgorithmId tpm2.HashAlgorithmId
 	DigestSize  uint16
-}
-
-type rawSpecIdEvent03Hdr struct {
-	PlatformClass      uint32
-	SpecVersionMinor   uint8
-	SpecVersionMajor   uint8
-	SpecErrata         uint8
-	UintnSize          uint8
-	NumberOfAlgorithms uint32
 }
 
 // SpecIdEvent03 corresponds to the TCG_EfiSpecIdEvent type and is the
@@ -186,80 +171,65 @@ func (e *SpecIdEvent03) String() string {
 }
 
 func (e *SpecIdEvent03) Write(w io.Writer) error {
-	vendorInfoSize := len(e.VendorInfo)
-	if vendorInfoSize > math.MaxUint8 {
-		return errors.New("VendorInfo too large")
-	}
-
 	var signature [16]byte
 	copy(signature[:], []byte("Spec ID Event03"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
-
-	spec := rawSpecIdEvent03Hdr{
-		PlatformClass:      e.PlatformClass,
-		SpecVersionMinor:   e.SpecVersionMinor,
-		SpecVersionMajor:   e.SpecVersionMajor,
-		SpecErrata:         e.SpecErrata,
-		UintnSize:          e.UintnSize,
-		NumberOfAlgorithms: uint32(len(e.DigestSizes))}
-	if err := binary.Write(w, binary.LittleEndian, &spec); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, e.PlatformClass); err != nil {
 		return err
 	}
-
-	if err := binary.Write(w, binary.LittleEndian, e.DigestSizes); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMinor); err != nil {
 		return err
 	}
-
-	if err := binary.Write(w, binary.LittleEndian, uint8(vendorInfoSize)); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMajor); err != nil {
 		return err
 	}
-	_, err := w.Write(e.VendorInfo)
-	return err
+	if err := binary.Write(w, binary.LittleEndian, e.SpecErrata); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.UintnSize); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint32](w, e.DigestSizes); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint8](w, e.VendorInfo)
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //
 //	(secion 9.4.5.1 "Specification ID Version Event")
 func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err error) {
-	var spec rawSpecIdEvent03Hdr
-	if err := binary.Read(r, binary.LittleEndian, &spec); err != nil {
+	d := &SpecIdEvent03{rawEventData: data}
+
+	if err := binary.Read(r, binary.LittleEndian, &d.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-
-	out = &SpecIdEvent03{
-		rawEventData:     data,
-		PlatformClass:    spec.PlatformClass,
-		SpecVersionMinor: spec.SpecVersionMinor,
-		SpecVersionMajor: spec.SpecVersionMajor,
-		SpecErrata:       spec.SpecErrata,
-		UintnSize:        spec.UintnSize}
-
-	if spec.NumberOfAlgorithms < 1 {
-		return nil, errors.New("numberOfAlgorithms is zero")
-	}
-
-	out.DigestSizes = make([]EFISpecIdEventAlgorithmSize, spec.NumberOfAlgorithms)
-	if err := binary.Read(r, binary.LittleEndian, out.DigestSizes); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMinor); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	for _, d := range out.DigestSizes {
-		if d.AlgorithmId.IsValid() && d.AlgorithmId.Size() != int(d.DigestSize) {
-			return nil, fmt.Errorf("digestSize for algorithmId %v does not match expected size", d.AlgorithmId)
-		}
-	}
-	var vendorInfoSize uint8
-	if err := binary.Read(r, binary.LittleEndian, &vendorInfoSize); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMajor); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-
-	out.VendorInfo = make([]byte, vendorInfoSize)
-	if _, err := io.ReadFull(r, out.VendorInfo); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecErrata); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
+	if err := binary.Read(r, binary.LittleEndian, &d.UintnSize); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	digestSizes, err := readLengthPrefixed[uint32, EFISpecIdEventAlgorithmSize](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.DigestSizes = digestSizes
+	vendorInfo, err := readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.VendorInfo = vendorInfo
 
-	return out, nil
+	return d, nil
 }
 
 // StartupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
@@ -582,7 +552,7 @@ func (t EFIConfigurationTable) String() string {
 
 func (t *EFIConfigurationTable) Write(w io.Writer) error {
 	if _, err := w.Write(t.VendorGuid[:]); err != nil {
-		return fmt.Errorf("cannot write VendorGuid: %w", err)
+		return err
 	}
 
 	switch ptrSize() {
@@ -614,33 +584,33 @@ func (e *EFIHandoffTablePointers) String() string {
 
 func (e *EFIHandoffTablePointers) Write(w io.Writer) error {
 	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
-		return fmt.Errorf("cannot write NumberOfTables: %w", err)
+		return err
 	}
-	for i, table := range e.TableEntries {
+	for _, table := range e.TableEntries {
 		if err := table.Write(w); err != nil {
-			return fmt.Errorf("cannot write TableEntry[%d]: %w", i, err)
+			return err
 		}
 	}
 
 	return nil
 }
 
-func decodeEventDataEFIHandoffTablePointers(data []byte) (*EFIHandoffTablePointers, error) {
+func decodeEventDataEFIHandoffTablePointers(data []byte) (out *EFIHandoffTablePointers, err error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIHandoffTablePointers{rawEventData: data}
+	out = &EFIHandoffTablePointers{rawEventData: data}
 
 	var nTables uint64
 	if err := binary.Read(r, binary.LittleEndian, &nTables); err != nil {
-		return nil, fmt.Errorf("cannot read NumberOfTables")
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
-	d.TableEntries = make([]EFIConfigurationTable, 0, nTables)
+	out.TableEntries = make([]EFIConfigurationTable, 0, nTables)
 
 	for i := uint64(0); i < nTables; i++ {
 		vendorGuid, err := efi.ReadGUID(r)
 		if err != nil {
-			return nil, fmt.Errorf("cannot read TableEntry[%d].VendorGuid: %w", i, err)
+			return nil, ioerr.EOFIsUnexpected(err)
 		}
 
 		var vendorTable uintptr
@@ -648,26 +618,26 @@ func decodeEventDataEFIHandoffTablePointers(data []byte) (*EFIHandoffTablePointe
 		case 4:
 			var x uint32
 			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+				return nil, ioerr.EOFIsUnexpected(err)
 			}
 			vendorTable = uintptr(x)
 		case 8:
 			var x uint64
 			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+				return nil, ioerr.EOFIsUnexpected(err)
 			}
 			vendorTable = uintptr(x)
 		default:
 			panic("not reached")
 		}
 
-		d.TableEntries = append(d.TableEntries, EFIConfigurationTable{
+		out.TableEntries = append(out.TableEntries, EFIConfigurationTable{
 			VendorGuid:  vendorGuid,
 			VendorTable: vendorTable,
 		})
 	}
 
-	return d, nil
+	return out, nil
 }
 
 // EFIHandoffTablePointers2 corresponds to UEFI_HANDOFF_TABLE_POINTERS2 and is the event data for EV_EFI_HANDOFF_TABLES2 events.
@@ -689,60 +659,47 @@ func (e *EFIHandoffTablePointers2) String() string {
 }
 
 func (e *EFIHandoffTablePointers2) Write(w io.Writer) error {
-	if len(e.TableDescription) > math.MaxUint8 {
-		return errors.New("TableDescription too long")
-	}
-
-	if err := binary.Write(w, binary.LittleEndian, uint8(len(e.TableDescription))); err != nil {
-		return fmt.Errorf("cannot write TableDescriptionSize: %w", err)
-	}
-	if _, err := io.WriteString(w, e.TableDescription); err != nil {
-		return fmt.Errorf("cannot write TableDescription: %w", err)
+	if err := writeLengthPrefixed[uint8](w, []byte(e.TableDescription)); err != nil {
+		return err
 	}
 
 	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
-		return fmt.Errorf("cannot write NumberOfTables: %w", err)
+		return err
 	}
-	for i, table := range e.TableEntries {
+	for _, table := range e.TableEntries {
 		if err := table.Write(w); err != nil {
-			return fmt.Errorf("cannot write TableEntry[%d]: %w", i, err)
+			return err
 		}
 	}
 
 	return nil
 }
 
-func decodeEventDataEFIHandoffTablePointers2(data []byte) (*EFIHandoffTablePointers2, error) {
+func decodeEventDataEFIHandoffTablePointers2(data []byte) (out *EFIHandoffTablePointers2, err error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIHandoffTablePointers2{rawEventData: data}
+	out = &EFIHandoffTablePointers2{rawEventData: data}
 
-	var n uint8
-	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
-		return nil, fmt.Errorf("cannot read TableDescriptionSize")
-	}
-
-	desc := make([]byte, n)
-	if _, err := io.ReadFull(r, desc); err != nil {
-		return nil, fmt.Errorf("cannot read TableDescription")
+	desc, err := readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(desc) {
 		return nil, fmt.Errorf("TableDescription contains invalid ASCII")
 	}
-	d.TableDescription = string(desc)
+	out.TableDescription = string(desc)
 
 	var nTables uint64
 	if err := binary.Read(r, binary.LittleEndian, &nTables); err != nil {
-		return nil, fmt.Errorf("cannot read NumberOfTables")
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
-
-	d.TableEntries = make([]EFIConfigurationTable, 0, nTables)
+	out.TableEntries = make([]EFIConfigurationTable, 0, nTables)
 
 	for i := uint64(0); i < nTables; i++ {
 		vendorGuid, err := efi.ReadGUID(r)
 		if err != nil {
-			return nil, fmt.Errorf("cannot read TableEntry[%d].VendorGuid: %w", i, err)
+			return nil, ioerr.EOFIsUnexpected(err)
 		}
 
 		var vendorTable uintptr
@@ -750,33 +707,33 @@ func decodeEventDataEFIHandoffTablePointers2(data []byte) (*EFIHandoffTablePoint
 		case 4:
 			var x uint32
 			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+				return nil, ioerr.EOFIsUnexpected(err)
 			}
 			vendorTable = uintptr(x)
 		case 8:
 			var x uint64
 			if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-				return nil, fmt.Errorf("cannot read TableEntry[%d].VendorTable: %w", i, err)
+				return nil, ioerr.EOFIsUnexpected(err)
 			}
 			vendorTable = uintptr(x)
 		default:
 			panic("not reached")
 		}
 
-		d.TableEntries = append(d.TableEntries, EFIConfigurationTable{
+		out.TableEntries = append(out.TableEntries, EFIConfigurationTable{
 			VendorGuid:  vendorGuid,
 			VendorTable: vendorTable,
 		})
 	}
 
-	return d, nil
+	return out, nil
 }
 
 // EFIPlatformFirmwareBlob corresponds to UEFI_PLATFORM_FIRMWARE_BLOB and is the event data for EV_EFI_PLATFORM_FIRMWARE_BLOB
 // and some EV_POST_CODE events. This is informative.
 type EFIPlatformFirmwareBlob struct {
 	rawEventData
-	BlobBase   uintptr
+	BlobBase   efi.PhysicalAddress
 	BlobLength uint64
 }
 
@@ -785,21 +742,11 @@ func (b *EFIPlatformFirmwareBlob) String() string {
 }
 
 func (b *EFIPlatformFirmwareBlob) Write(w io.Writer) error {
-	switch ptrSize() {
-	case 4:
-		if err := binary.Write(w, binary.LittleEndian, uint32(b.BlobBase)); err != nil {
-			return fmt.Errorf("cannot write BlobBase: %w", err)
-		}
-	case 8:
-		if err := binary.Write(w, binary.LittleEndian, uint64(b.BlobBase)); err != nil {
-			return fmt.Errorf("cannot write BlobBase: %w", err)
-		}
-	default:
-		panic("not reached")
+	if err := binary.Write(w, binary.LittleEndian, b.BlobBase); err != nil {
+		return err
 	}
-
 	if err := binary.Write(w, binary.LittleEndian, b.BlobLength); err != nil {
-		return fmt.Errorf("cannot write BlobLength: %w", err)
+		return err
 	}
 
 	return nil
@@ -810,25 +757,11 @@ func decodeEventDataEFIPlatformFirmwareBlob(data []byte) (*EFIPlatformFirmwareBl
 
 	d := &EFIPlatformFirmwareBlob{rawEventData: data}
 
-	switch ptrSize() {
-	case 4:
-		var x uint32
-		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
-		}
-		d.BlobBase = uintptr(x)
-	case 8:
-		var x uint64
-		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
-		}
-		d.BlobBase = uintptr(x)
-	default:
-		panic("not reached")
+	if err := binary.Read(r, binary.LittleEndian, &d.BlobBase); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
-
 	if err := binary.Read(r, binary.LittleEndian, &d.BlobLength); err != nil {
-		return nil, fmt.Errorf("cannot read BlobLength: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return d, nil
@@ -839,7 +772,7 @@ func decodeEventDataEFIPlatformFirmwareBlob(data []byte) (*EFIPlatformFirmwareBl
 type EFIPlatformFirmwareBlob2 struct {
 	rawEventData
 	BlobDescription string
-	BlobBase        uintptr
+	BlobBase        efi.PhysicalAddress
 	BlobLength      uint64
 }
 
@@ -848,32 +781,14 @@ func (b *EFIPlatformFirmwareBlob2) String() string {
 }
 
 func (b *EFIPlatformFirmwareBlob2) Write(w io.Writer) error {
-	if len(b.BlobDescription) > math.MaxUint8 {
-		return errors.New("BlobDescription too long")
+	if err := writeLengthPrefixed[uint8](w, []byte(b.BlobDescription)); err != nil {
+		return err
 	}
-
-	if err := binary.Write(w, binary.LittleEndian, uint8(len(b.BlobDescription))); err != nil {
-		return fmt.Errorf("cannot write BlobDescriptionSize: %w", err)
+	if err := binary.Write(w, binary.LittleEndian, b.BlobBase); err != nil {
+		return err
 	}
-	if _, err := io.WriteString(w, b.BlobDescription); err != nil {
-		return fmt.Errorf("cannot write BlobDescription: %w", err)
-	}
-
-	switch ptrSize() {
-	case 4:
-		if err := binary.Write(w, binary.LittleEndian, uint32(b.BlobBase)); err != nil {
-			return fmt.Errorf("cannot write BlobBase: %w", err)
-		}
-	case 8:
-		if err := binary.Write(w, binary.LittleEndian, uint64(b.BlobBase)); err != nil {
-			return fmt.Errorf("cannot write BlobBase: %w", err)
-		}
-	default:
-		panic("not reached")
-	}
-
 	if err := binary.Write(w, binary.LittleEndian, b.BlobLength); err != nil {
-		return fmt.Errorf("cannot write BlobLength: %w", err)
+		return err
 	}
 
 	return nil
@@ -884,14 +799,9 @@ func decodeEventDataEFIPlatformFirmwareBlob2(data []byte) (*EFIPlatformFirmwareB
 
 	d := &EFIPlatformFirmwareBlob2{rawEventData: data}
 
-	var n uint8
-	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
-		return nil, fmt.Errorf("cannot read BlobDescriptionSize")
-	}
-
-	desc := make([]byte, n)
-	if _, err := io.ReadFull(r, desc); err != nil {
-		return nil, fmt.Errorf("cannot read BlobDescription")
+	desc, err := readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(desc) {
@@ -899,25 +809,11 @@ func decodeEventDataEFIPlatformFirmwareBlob2(data []byte) (*EFIPlatformFirmwareB
 	}
 	d.BlobDescription = string(desc)
 
-	switch ptrSize() {
-	case 4:
-		var x uint32
-		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
-		}
-		d.BlobBase = uintptr(x)
-	case 8:
-		var x uint64
-		if err := binary.Read(r, binary.LittleEndian, &x); err != nil {
-			return nil, fmt.Errorf("cannot read BlobBase: %w", err)
-		}
-		d.BlobBase = uintptr(x)
-	default:
-		panic("not reached")
+	if err := binary.Read(r, binary.LittleEndian, &d.BlobBase); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
-
 	if err := binary.Read(r, binary.LittleEndian, &d.BlobLength); err != nil {
-		return nil, fmt.Errorf("cannot read BlobLength: %w", err)
+		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
 	return d, nil

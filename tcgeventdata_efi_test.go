@@ -553,13 +553,13 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob(c *C) {
 	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
 	c.Check(e.Bytes(), DeepEquals, data)
 
-	c.Check(uint64(e.BlobBase), Equals, uint64(4279701504))
+	c.Check(e.BlobBase, Equals, efi.PhysicalAddress(4279701504))
 	c.Check(e.BlobLength, Equals, uint64(6619136))
 }
 
 func (s *tcgeventdataEfiSuite) TestPlatformFirmwareBlobWrite(c *C) {
 	ev := &EFIPlatformFirmwareBlob{
-		BlobBase:   uintptr(0xff171000),
+		BlobBase:   0xff171000,
 		BlobLength: 6619136,
 	}
 
@@ -578,7 +578,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob2(c *C) {
 	c.Check(e.Bytes(), DeepEquals, data)
 
 	c.Check(e.BlobDescription, Equals, "POST CODE")
-	c.Check(uint64(e.BlobBase), Equals, uint64(4290904064))
+	c.Check(e.BlobBase, Equals, efi.PhysicalAddress(4290904064))
 	c.Check(e.BlobLength, Equals, uint64(393216))
 
 }
@@ -586,7 +586,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob2(c *C) {
 func (s *tcgeventdataEfiSuite) TestPlatformFirmwareBlob2Write(c *C) {
 	ev := &EFIPlatformFirmwareBlob2{
 		BlobDescription: "POST CODE",
-		BlobBase:        uintptr(0xffc20000),
+		BlobBase:        0xffc20000,
 		BlobLength:      393216,
 	}
 

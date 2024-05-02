@@ -6,11 +6,16 @@ package tcglog
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 	"unsafe"
+
+	"golang.org/x/exp/constraints"
 )
 
 func makeDefaultFormatter(s fmt.State, f rune) string {
@@ -84,4 +89,30 @@ func isPrintableASCII(data []byte) bool {
 		}
 	}
 	return true
+}
+
+func readLengthPrefixed[T constraints.Unsigned, V any](r io.Reader) ([]V, error) {
+	var n T
+	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
+		return nil, err
+	}
+
+	data := make([]V, n)
+	if err := binary.Read(r, binary.LittleEndian, &data); err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func writeLengthPrefixed[T constraints.Unsigned, V any](w io.Writer, data []V) error {
+	n := uint64(len(data))
+	if n != uint64(T(n)) {
+		return errors.New("size overflow")
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, T(n)); err != nil {
+		return err
+	}
+	return binary.Write(w, binary.LittleEndian, data)
 }

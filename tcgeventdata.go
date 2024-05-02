@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"strings"
 
 	"github.com/canonical/go-tpm2"
@@ -235,15 +234,7 @@ func (e *TaggedEvent) Write(w io.Writer) error {
 		return fmt.Errorf("cannot write taggedEventID: %w", err)
 	}
 
-	n := uint64(len(e.Data))
-	if n > math.MaxUint32 {
-		return errors.New("taggedEventData is too large")
-	}
-
-	if err := binary.Write(w, binary.LittleEndian, uint32(n)); err != nil {
-		return fmt.Errorf("cannot write taggedEventDataSize: %w", err)
-	}
-	if _, err := w.Write(e.Data); err != nil {
+	if err := writeLengthPrefixed[uint32, byte](w, e.Data); err != nil {
 		return fmt.Errorf("cannot write taggedEventData: %w", err)
 	}
 
@@ -259,15 +250,11 @@ func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
 		return nil, fmt.Errorf("cannot decode taggedEventID: %w", err)
 	}
 
-	var n uint32
-	if err := binary.Read(r, binary.LittleEndian, &n); err != nil {
-		return nil, fmt.Errorf("cannot decode taggedEventDataSize: %w", err)
-	}
-
-	d.Data = make([]byte, n)
-	if _, err := io.ReadFull(r, d.Data); err != nil {
+	data, err := readLengthPrefixed[uint32, byte](r)
+	if err != nil {
 		return nil, fmt.Errorf("cannot read taggedEventData: %w", err)
 	}
+	d.Data = data
 
 	return d, nil
 }
