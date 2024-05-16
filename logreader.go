@@ -28,7 +28,7 @@ func ReadLog(r io.Reader, options *LogOptions) (*Log, error) {
 		return nil, err
 	}
 
-	log, digestSizes := newLog(event)
+	log, digestSizes := NewLog(event)
 
 	for {
 		var event *Event
