@@ -385,6 +385,9 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("PlatformManufacturer is not NULL terminated")
+	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data) {
@@ -395,6 +398,9 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("PlatformModel is not NULL terminated")
 	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
@@ -407,6 +413,9 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("PlatformVersion is not NULL terminated")
+	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data) {
@@ -417,6 +426,9 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("FirmwareManufacturer is not NULL terminated")
 	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
@@ -432,6 +444,9 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("FirmwareVersion is not NULL terminated")
 	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
@@ -575,6 +590,9 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("PlatformManufacturer is not NULL terminated")
+	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data) {
@@ -585,6 +603,9 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("PlatformModel is not NULL terminated")
 	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
@@ -597,6 +618,9 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("PlatformVersion is not NULL terminated")
+	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data) {
@@ -607,6 +631,9 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("FirmwareManufacturer is not NULL terminated")
 	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
@@ -622,6 +649,9 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if !bytes.HasSuffix(data, []byte{0x00}) {
+		return nil, errors.New("FirmwareVersion is not NULL terminated")
 	}
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII

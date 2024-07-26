@@ -67,11 +67,6 @@ func ptrSize() int {
 }
 
 func isPrintableASCII(data []byte) bool {
-	if len(data) == 0 {
-		// Empty strings contain no printable ASCII
-		return false
-	}
-
 	for len(data) > 0 {
 		// Pop the next bytee
 		c := data[0]
