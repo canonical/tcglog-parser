@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	_ "github.com/canonical/go-efilib/guids"
 	"github.com/canonical/go-tpm2"
 	"github.com/jessevdk/go-flags"
 
