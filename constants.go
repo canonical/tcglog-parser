@@ -65,4 +65,5 @@ var (
 	EFIExitBootServicesFailedEvent      = StringEventData("Exit Boot Services Returned with Failure")
 	EFIExitBootServicesSucceededEvent   = StringEventData("Exit Boot Services Returned with Success")
 	FirmwareDebuggerEvent               = StringEventData("UEFI Debug Mode")
+	DMAProtectionDisabled               = StringEventData("DMA Protection Disabled")
 )
