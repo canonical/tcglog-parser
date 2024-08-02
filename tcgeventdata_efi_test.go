@@ -633,3 +633,17 @@ func (s *tcgeventdataEfiSuite) TestHandoffTablePointersWrite(c *C) {
 		0x8d, 0x98, 0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f, 0x98, 0x6b, 0x57, 0x66, 0x00, 0x00, 0x00, 0x00,
 	})
 }
+
+func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEvent(c *C) {
+	data := []byte("HCRTM")
+	e, err := DecodeEventDataEFIHCRTMEvent(data)
+	c.Assert(err, IsNil)
+
+	c.Check(e.String(), Equals, "HCRTM")
+}
+
+func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEventNotASCII(c *C) {
+	data := []byte("😇\x00")
+	_, err := DecodeEventDataEFIHCRTMEvent(data)
+	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+}

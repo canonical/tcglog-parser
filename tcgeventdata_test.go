@@ -11,6 +11,7 @@ import (
 	_ "crypto/sha256"
 
 	"github.com/canonical/go-tpm2"
+	"github.com/canonical/go-tpm2/mu"
 
 	. "gopkg.in/check.v1"
 
@@ -233,6 +234,26 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent03WithVendorIn
 		{AlgorithmId: tpm2.HashAlgorithmSHA1, DigestSize: 20},
 		{AlgorithmId: tpm2.HashAlgorithmSHA256, DigestSize: 32}})
 	c.Check(event.VendorInfo, DeepEquals, []byte{0xa5, 0xa5, 0xa5, 0xa5})
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataNoActionHCRTMCompMeas(c *C) {
+	data := decodeHexString(c, "482d4352544d20436f6d704d6561730006482d4352544d002200000b21268e6804daa48d4a6a36960bda877f39a567510482cbc7fc0d41e3e6b06b2b")
+	e, err := DecodeEventDataNoAction(data)
+	c.Assert(err, IsNil)
+
+	event, ok := e.(*HCRTMComponentEventData)
+	c.Assert(ok, Equals, true)
+
+	c.Check(event.Bytes(), DeepEquals, data)
+	c.Check(event.ComponentDescription, Equals, "H-CRTM")
+	c.Check(event.MeasurementFormatType, Equals, HCRTMMeasurementFormatDigest)
+	c.Check(event.ComponentMeasurement, DeepEquals, decodeHexString(c, "000b21268e6804daa48d4a6a36960bda877f39a567510482cbc7fc0d41e3e6b06b2b"))
+
+	var digest tpm2.TaggedHash
+	_, err = mu.UnmarshalFromBytes(event.ComponentMeasurement, &digest)
+	c.Check(err, IsNil)
+	c.Check(digest.HashAlg, Equals, tpm2.HashAlgorithmSHA256)
+	c.Check(digest.Digest(), DeepEquals, tpm2.Digest(decodeHexString(c, "21268e6804daa48d4a6a36960bda877f39a567510482cbc7fc0d41e3e6b06b2b")))
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataActionGood(c *C) {

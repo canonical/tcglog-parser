@@ -13,6 +13,7 @@ import (
 	"io"
 	"strings"
 
+	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 
 	"golang.org/x/xerrors"
@@ -37,6 +38,52 @@ func (d StringEventData) Write(w io.Writer) error {
 
 func (d StringEventData) Bytes() []byte {
 	return []byte(d)
+}
+
+// NullTerminatedStringEventData corresponds to event data that is a NULL terminated
+// ASCII string. As with other strings, the go representation is not NULL terminated.
+// It may or may not be informative.
+type NullTerminatedStringEventData string
+
+func (d NullTerminatedStringEventData) String() string {
+	return string(d)
+}
+
+func (d NullTerminatedStringEventData) Write(w io.Writer) error {
+	if _, err := io.WriteString(w, string(d)); err != nil {
+		return err
+	}
+	_, err := w.Write([]byte{0})
+	return err
+}
+
+func (d NullTerminatedStringEventData) Bytes() []byte {
+	return append([]byte(d), 0x00)
+}
+
+// NullTerminatedUCS2StringEventData corresponds to event data that is a NULL
+// terminated UCS2 string. As with other strings, the go representation is not
+// NULL terminated and is represented in UTF8. It may or may not be informative.
+type NullTerminatedUCS2StringEventData string
+
+func (d NullTerminatedUCS2StringEventData) String() string {
+	return string(d)
+}
+
+func (d NullTerminatedUCS2StringEventData) Write(w io.Writer) error {
+	ucs2 := efi.ConvertUTF8ToUCS2(string(d))
+	if err := binary.Write(w, binary.LittleEndian, ucs2); err != nil {
+		return err
+	}
+	_, err := w.Write([]byte{0x00, 0x00})
+	return err
+}
+
+func (d NullTerminatedUCS2StringEventData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	d.Write(w)
+	return w.Bytes()
+
 }
 
 // ComputeStringEventDigest computes the digest associated with the supplied string, for
@@ -108,6 +155,12 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 			return nil, xerrors.Errorf("cannot decode StartupLocality data: %w", err)
 		}
 		return out, nil
+	case "H-CRTM CompMeas":
+		out, err := decodeHCRTMComponentEvent(data, r)
+		if err != nil {
+			return nil, xerrors.Errorf("cannot decocde H-CRTM CompMeas data: %w", err)
+		}
+		return out, nil
 	default:
 		return nil, nil
 	}
@@ -116,7 +169,7 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func decodeEventDataAction(data []byte) (StringEventData, error) {
-	if !isPrintableASCII(data) {
+	if !isPrintableASCII(data, false) {
 		return "", errors.New("data does not contain printable ASCII")
 	}
 	return StringEventData(data), nil
@@ -210,21 +263,21 @@ func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventDa
 }
 
 func decodeEventDataCompactHash(data []byte) (StringEventData, error) {
-	if !isPrintableASCII(data) {
+	if !isPrintableASCII(data, false) {
 		return "", errors.New("data does not contain printable ASCII")
 	}
 	return StringEventData(data), nil
 }
 
 func decodeEventDataPostCode(data []byte) (EventData, error) {
-	if isPrintableASCII(data) {
+	if isPrintableASCII(data, false) {
 		return StringEventData(data), nil
 	}
 	return decodeEventDataEFIPlatformFirmwareBlob(data)
 }
 
 func decodeEventDataPostCode2(data []byte) (EventData, error) {
-	if isPrintableASCII(data) {
+	if isPrintableASCII(data, false) {
 		return StringEventData(data), nil
 	}
 	return decodeEventDataEFIPlatformFirmwareBlob2(data)
@@ -271,6 +324,39 @@ func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
 	return d, nil
 }
 
+func decodeEventDataSCRTMContents(data []byte) (EventData, error) {
+	// If measured by a H-CRTM event, this may be a NULL terminated string
+	if isPrintableASCII(data, true) {
+		return NullTerminatedStringEventData(data[:len(data)-1]), nil
+	}
+	// Try UEFI_PLATFORM_FIRMWARE_BLOB
+	if len(data) == 16 { // The size of a UEFI_PLATFORM_FIRMWARE_BLOB
+		return decodeEventDataEFIPlatformFirmwareBlob(data)
+	}
+	// Try UEFI_PLATFORM_FIRMWARE_BLOB2
+	return decodeEventDataEFIPlatformFirmwareBlob2(data)
+}
+
+func decodeEventDataSCRTMVersion(data []byte) (EventData, error) {
+	if isPrintableUCS2(data, true) {
+		r := bytes.NewReader(data[:len(data)-2])
+		var ucs2Str []uint16
+		if err := binary.Read(r, binary.LittleEndian, &ucs2Str); err != nil {
+			return nil, err
+		}
+		str := efi.ConvertUTF16ToUTF8(ucs2Str)
+		return NullTerminatedUCS2StringEventData(str), nil
+	}
+	if len(data) == 16 {
+		guid, err := efi.ReadGUID(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		return GUIDEventData(guid), nil
+	}
+	return nil, errors.New("event data is not a NULL-terminated UCS2 string or a EFI_GUID")
+}
+
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.1 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.2 "Event Types")
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.4.1 "Event Types")
@@ -298,12 +384,18 @@ func decodeEventDataTCG(data []byte, eventType EventType, digests DigestMap) (ou
 		return decodeEventDataEFIImageLoad(data)
 	case EventTypeEFIGPTEvent, EventTypeEFIGPTEvent2:
 		return decodeEventDataEFIGPT(data)
+	case EventTypeEFIHCRTMEvent:
+		return decodeEventDataEFIHCRTMEvent(data)
 	case EventTypeEFIHandoffTables:
 		return decodeEventDataEFIHandoffTablePointers(data)
 	case EventTypeEFIHandoffTables2:
 		return decodeEventDataEFIHandoffTablePointers2(data)
 	case EventTypeEventTag:
 		return decodeEventDataTaggedEvent(data)
+	case EventTypeSCRTMContents:
+		return decodeEventDataSCRTMContents(data)
+	case EventTypeSCRTMVersion:
+		return decodeEventDataSCRTMVersion(data)
 	default:
 	}
 

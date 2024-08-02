@@ -6,6 +6,7 @@ package tcglog
 
 var (
 	DecodeEventDataEFIGPT                   = decodeEventDataEFIGPT
+	DecodeEventDataEFIHCRTMEvent            = decodeEventDataEFIHCRTMEvent
 	DecodeEventDataEFIImageLoad             = decodeEventDataEFIImageLoad
 	DecodeEventDataEFIVariable              = decodeEventDataEFIVariable
 	DecodeEventDataAction                   = decodeEventDataAction

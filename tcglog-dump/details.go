@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/canonical/go-efilib"
+	efi "github.com/canonical/go-efilib"
 
 	"github.com/canonical/tcglog-parser"
 )
@@ -214,7 +214,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		return &variableAuthorityStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
-	case event.EventType == tcglog.EventTypeEFIGPTEvent && !verbose:
+	case (event.EventType == tcglog.EventTypeEFIGPTEvent || event.EventType == tcglog.EventTypeEFIGPTEvent2) && !verbose:
 		data, ok := event.Data.(*tcglog.EFIGPTData)
 		if !ok {
 			return event.Data
@@ -243,19 +243,8 @@ func eventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
 	if out := customEventDetailsStringer(event, verbose); out != nil {
 		return out
 	}
-	switch d := event.Data.(type) {
-	case *tcglog.GrubStringEventData:
-		return d
-	case tcglog.OpaqueEventData:
-		return d
-	case tcglog.StringEventData:
-		return d
-	case *tcglog.SystemdEFIStubCommandline:
-		return d
-	default:
-		if verbose {
-			return event.Data
-		}
+	if _, isErr := event.Data.(error); isErr && !verbose {
 		return nullStringer{}
 	}
+	return event.Data
 }
