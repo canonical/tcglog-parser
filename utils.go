@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"unicode"
-	"unicode/utf16"
 	"unicode/utf8"
 	"unsafe"
 
@@ -34,26 +33,6 @@ func makeDefaultFormatter(s fmt.State, f rune) string {
 	}
 	fmt.Fprintf(&builder, "%c", f)
 	return builder.String()
-}
-
-func convertStringToUtf16(str string) []uint16 {
-	var unicodePoints []rune
-	for len(str) > 0 {
-		r, s := utf8.DecodeRuneInString(str)
-		unicodePoints = append(unicodePoints, r)
-		str = str[s:]
-	}
-	return utf16.Encode(unicodePoints)
-}
-
-func convertUtf16ToString(u []uint16) string {
-	var utf8Str []byte
-	for _, r := range utf16.Decode(u) {
-		utf8Char := make([]byte, utf8.RuneLen(r))
-		utf8.EncodeRune(utf8Char, r)
-		utf8Str = append(utf8Str, utf8Char...)
-	}
-	return string(utf8Str)
 }
 
 func ptrSize() int {

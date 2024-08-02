@@ -24,44 +24,6 @@ import (
 	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
-var (
-	surr1 uint16 = 0xd800
-	surr2 uint16 = 0xdc00
-	surr3 uint16 = 0xe000
-)
-
-// UEFI_VARIABLE_DATA specifies the number of *characters* for a UTF-16 sequence rather than the size of
-// the buffer. Extract a UTF-16 sequence of the correct length, given a buffer and the number of characters.
-// The returned buffer can be passed to utf16.Decode.
-func extractUTF16Buffer(r io.ReadSeeker, nchars uint64) ([]uint16, error) {
-	var out []uint16
-
-	for i := nchars; i > 0; i-- {
-		var c uint16
-		if err := binary.Read(r, binary.LittleEndian, &c); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-		if c >= surr1 && c < surr2 {
-			if err := binary.Read(r, binary.LittleEndian, &c); err != nil {
-				return nil, err
-			}
-			if c < surr2 || c >= surr3 {
-				// Invalid surrogate sequence. utf16.Decode doesn't consume this
-				// byte when inserting the replacement char
-				if _, err := r.Seek(-1, io.SeekCurrent); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			// Valid surrogate sequence
-			out = append(out, c)
-		}
-	}
-
-	return out, nil
-}
-
 // SpecIdEvent02 corresponds to the TCG_EfiSpecIdEventStruct type and is the
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 1.2.
@@ -705,7 +667,7 @@ func (e *EFIVariableData) Write(w io.Writer) error {
 	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
 		return err
 	}
-	if err := binary.Write(w, binary.LittleEndian, convertStringToUtf16(e.UnicodeName)); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, efi.ConvertUTF8ToUCS2(e.UnicodeName)); err != nil {
 		return err
 	}
 	_, err := w.Write(e.VariableData)
@@ -744,11 +706,11 @@ func decodeEventDataEFIVariable(data []byte) (*EFIVariableData, error) {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
-	utf16Name, err := extractUTF16Buffer(r, unicodeNameLength)
-	if err != nil {
+	ucs2Name := make([]uint16, unicodeNameLength)
+	if err := binary.Read(r, binary.LittleEndian, &ucs2Name); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	d.UnicodeName = convertUtf16ToString(utf16Name)
+	d.UnicodeName = efi.ConvertUTF16ToUTF8(ucs2Name)
 
 	d.VariableData = make([]byte, variableDataLength)
 	if _, err := io.ReadFull(r, d.VariableData); err != nil {
