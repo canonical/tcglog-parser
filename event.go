@@ -203,12 +203,6 @@ func ReadEventCryptoAgile(r io.Reader, digestSizes []EFISpecIdEventAlgorithmSize
 		digests[algorithmId] = digest
 	}
 
-	for _, s := range digestSizes {
-		if _, exists := digests[s.AlgorithmId]; !exists {
-			return nil, fmt.Errorf("event is missing a digest value for algorithm %v", s.AlgorithmId)
-		}
-	}
-
 	for alg, _ := range digests {
 		if alg.IsValid() {
 			continue
