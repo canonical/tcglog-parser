@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/canonical/go-efilib"
+	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/linux"
 	"github.com/jessevdk/go-flags"
@@ -26,7 +26,7 @@ import (
 
 type options struct {
 	WithGrub               bool                             `long:"with-grub" description:"Validate log entries measured by GRUB to PCR 8"`
-	WithSystemdEFIStub     *tcglog.PCRIndex                 `long:"with-systemd-efi-stub" description:"Validate log entries measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
+	WithSystemdEFIStub     *tpm2.Handle                     `long:"with-systemd-efi-stub" description:"Validate log entries measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
 	Pcrs                   internal_flags.PCRRange          `short:"p" long:"pcrs" description:"Validate log entries associated with the specified PCRs. Can be specified multiple times" default:"0-7"`
 	TpmPath                string                           `long:"tpm-path" description:"Validate log entries associated with the specified TPM" default:"/dev/tpm0"`
 	IgnoreDataDecodeErrors bool                             `long:"ignore-data-decode-errors" description:"Don't exit with an error if any event data fails to decode correctly"`
@@ -108,14 +108,14 @@ func populatePeImageDataCache(algorithms tcglog.AlgorithmIdList) {
 	fmt.Println("")
 }
 
-func pcrIndexListToSelect(l []tcglog.PCRIndex) (out tpm2.PCRSelect) {
+func pcrIndexListToSelect(l []tpm2.Handle) (out tpm2.PCRSelect) {
 	for _, i := range l {
 		out = append(out, int(i))
 	}
 	return
 }
 
-func readPCRs(algorithms tcglog.AlgorithmIdList) (result map[tcglog.PCRIndex]tcglog.DigestMap, err error) {
+func readPCRs(algorithms tcglog.AlgorithmIdList) (result map[tpm2.Handle]tcglog.DigestMap, err error) {
 	tcti, err := linux.OpenDevice(opts.TpmPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open TPM device: %v", err)
@@ -127,7 +127,7 @@ func readPCRs(algorithms tcglog.AlgorithmIdList) (result map[tcglog.PCRIndex]tcg
 		return nil, errors.New("not a valid TPM2 device")
 	}
 
-	result = make(map[tcglog.PCRIndex]tcglog.DigestMap)
+	result = make(map[tpm2.Handle]tcglog.DigestMap)
 
 	var selections tpm2.PCRSelectionList
 	for _, alg := range algorithms {
@@ -145,7 +145,7 @@ func readPCRs(algorithms tcglog.AlgorithmIdList) (result map[tcglog.PCRIndex]tcg
 
 	for _, s := range selections {
 		for _, i := range s.Select {
-			result[tcglog.PCRIndex(i)][s.Hash] = tcglog.Digest(digests[s.Hash][i])
+			result[tpm2.Handle(i)][s.Hash] = digests[s.Hash][i]
 		}
 	}
 
@@ -154,7 +154,7 @@ func readPCRs(algorithms tcglog.AlgorithmIdList) (result map[tcglog.PCRIndex]tcg
 
 type incorrectDigestValue struct {
 	algorithm tpm2.HashAlgorithmId
-	expected  tcglog.Digest
+	expected  tpm2.Digest
 }
 
 type incorrectPeImageDigest struct {
@@ -265,8 +265,8 @@ func checkEvent(event *tcglog.Event, c *logChecker) (out *checkedEvent) {
 }
 
 type logChecker struct {
-	indexTracker                map[tcglog.PCRIndex]uint
-	expectedPCRValues           map[tcglog.PCRIndex]tcglog.DigestMap
+	indexTracker                map[tpm2.Handle]uint
+	expectedPCRValues           map[tpm2.Handle]tcglog.DigestMap
 	events                      []*checkedEvent
 	seenIncorrectDigests        bool
 	seenIncorrectPeImageDigests bool
@@ -305,13 +305,13 @@ func (c *logChecker) processEvent(event *tcglog.Event) {
 }
 
 func (c *logChecker) run(log *tcglog.Log) {
-	c.indexTracker = make(map[tcglog.PCRIndex]uint)
-	c.expectedPCRValues = make(map[tcglog.PCRIndex]tcglog.DigestMap)
+	c.indexTracker = make(map[tpm2.Handle]uint)
+	c.expectedPCRValues = make(map[tpm2.Handle]tcglog.DigestMap)
 	for _, pcr := range opts.Pcrs {
 		c.expectedPCRValues[pcr] = tcglog.DigestMap{}
 
 		for _, alg := range log.Algorithms {
-			c.expectedPCRValues[pcr][alg] = make(tcglog.Digest, alg.Size())
+			c.expectedPCRValues[pcr][alg] = make(tpm2.Digest, alg.Size())
 		}
 	}
 

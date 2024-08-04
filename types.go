@@ -10,17 +10,11 @@ import (
 	"github.com/canonical/go-tpm2"
 )
 
-// PCRIndex corresponds to the index of a PCR on the TPM.
-type PCRIndex uint32
-
 // EventType corresponds to the type of an event in an event log.
 type EventType uint32
 
-// Digest is the result of hashing some data.
-type Digest []byte
-
 // DigestMap is a map of algorithms to digests.
-type DigestMap map[tpm2.HashAlgorithmId]Digest
+type DigestMap map[tpm2.HashAlgorithmId]tpm2.Digest
 
 func (e EventType) String() string {
 	switch e {

@@ -10,6 +10,8 @@ import (
 	"io"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/canonical/go-tpm2"
 )
 
 // EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
@@ -99,8 +101,8 @@ func ComputeEventDigest(alg crypto.Hash, data []byte) []byte {
 	return h.Sum(nil)
 }
 
-func decodeEventData(data []byte, pcrIndex PCRIndex, eventType EventType, digests DigestMap, options *LogOptions) EventData {
-	if options.EnableGrub && (pcrIndex == 8 || pcrIndex == 9) {
+func decodeEventData(data []byte, pcrIndex tpm2.Handle, eventType EventType, digests DigestMap, options *LogOptions) EventData {
+	if options.EnableGrub && (pcrIndex == 0x00000008 || pcrIndex == 0x00000009) {
 		if out := decodeEventDataGRUB(data, pcrIndex, eventType); out != nil {
 			return out
 		}

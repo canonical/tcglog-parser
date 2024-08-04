@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/canonical/go-tpm2"
 )
 
 var (
@@ -42,13 +44,13 @@ func (e *GrubStringEventData) Write(w io.Writer) error {
 	return err
 }
 
-func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) EventData {
+func decodeEventDataGRUB(data []byte, pcrIndex tpm2.Handle, eventType EventType) EventData {
 	if eventType != EventTypeIPL {
 		return nil
 	}
 
 	switch pcrIndex {
-	case 8:
+	case 0x00000008:
 		str := string(data)
 		switch {
 		case strings.HasPrefix(str, kernelCmdlinePrefix):
@@ -58,7 +60,7 @@ func decodeEventDataGRUB(data []byte, pcrIndex PCRIndex, eventType EventType) Ev
 		default:
 			return nil
 		}
-	case 9:
+	case 0x00000009:
 		return StringEventData(data)
 	default:
 		panic("unhandled PCR index")

@@ -11,8 +11,6 @@ import (
 
 	"github.com/bsiegert/ranges"
 	"github.com/canonical/go-tpm2"
-
-	"github.com/canonical/tcglog-parser"
 )
 
 type HashAlgorithmId tpm2.HashAlgorithmId
@@ -51,7 +49,7 @@ func (h *HashAlgorithmId) UnmarshalFlag(value string) error {
 	return nil
 }
 
-type PCRRange []tcglog.PCRIndex
+type PCRRange []tpm2.Handle
 
 func (r PCRRange) MarshalFlag() (string, error) {
 	var s []string
@@ -67,12 +65,12 @@ func (r *PCRRange) UnmarshalFlag(value string) error {
 		return err
 	}
 	for _, p := range i {
-		*r = append(*r, tcglog.PCRIndex(p))
+		*r = append(*r, tpm2.Handle(p))
 	}
 	return nil
 }
 
-func (r *PCRRange) Contains(index tcglog.PCRIndex) bool {
+func (r *PCRRange) Contains(index tpm2.Handle) bool {
 	for _, p := range *r {
 		if p == index {
 			return true

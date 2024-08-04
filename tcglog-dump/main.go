@@ -26,7 +26,7 @@ type options struct {
 	ExtractData        string                         `long:"extract-data" description:"Extract event data associated with each event to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"data"`
 	ExtractVars        string                         `long:"extract-vars" description:"Extract variable data for events associated with the measurement of EFI variables to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"var"`
 	WithGrub           bool                           `long:"with-grub" description:"Decode event data measured by GRUB to PCRs 8 and 9"`
-	WithSystemdEFIStub *tcglog.PCRIndex               `long:"with-systemd-efi-stub" description:"Decode event data measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
+	WithSystemdEFIStub *tpm2.Handle                   `long:"with-systemd-efi-stub" description:"Decode event data measured by systemd's EFI stub Linux loader to the specified PCR" optional:"true" optional-value:"8"`
 	Pcrs               internal_flags.PCRRange        `short:"p" long:"pcrs" description:"Display events associated with the specified PCRs. Can be specified multiple times"`
 
 	Positional struct {

@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"crypto"
 
-	"github.com/canonical/go-efilib"
+	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 
 	. "gopkg.in/check.v1"
@@ -24,7 +24,7 @@ func (s *eventSuite) TestEventWrite(c *C) {
 	event := Event{
 		PCRIndex:  0,
 		EventType: EventTypeNoAction,
-		Digests:   DigestMap{tpm2.HashAlgorithmSHA1: make(Digest, tpm2.HashAlgorithmSHA1.Size())},
+		Digests:   DigestMap{tpm2.HashAlgorithmSHA1: make(tpm2.Digest, tpm2.HashAlgorithmSHA1.Size())},
 		Data: &SpecIdEvent03{
 			SpecVersionMajor: 2,
 			UintnSize:        2,
@@ -43,9 +43,9 @@ func (s *eventSuite) TestReadEvent(c *C) {
 		&LogOptions{})
 	c.Assert(err, IsNil)
 
-	c.Check(event.PCRIndex, Equals, PCRIndex(0))
+	c.Check(event.PCRIndex, Equals, tpm2.Handle(0))
 	c.Check(event.EventType, Equals, EventTypeNoAction)
-	c.Check(event.Digests, DeepEquals, DigestMap{tpm2.HashAlgorithmSHA1: make(Digest, tpm2.HashAlgorithmSHA1.Size())})
+	c.Check(event.Digests, DeepEquals, DigestMap{tpm2.HashAlgorithmSHA1: make(tpm2.Digest, tpm2.HashAlgorithmSHA1.Size())})
 
 	data, ok := event.Data.(*SpecIdEvent03)
 	c.Assert(ok, Equals, true)
@@ -98,7 +98,7 @@ func (s *eventSuite) TestReadEventiCryptoAgile(c *C) {
 		&LogOptions{})
 	c.Assert(err, IsNil)
 
-	c.Check(event.PCRIndex, Equals, PCRIndex(1))
+	c.Check(event.PCRIndex, Equals, tpm2.Handle(1))
 	c.Check(event.EventType, Equals, EventTypeEFIVariableBoot)
 
 	data, ok := event.Data.(*EFIVariableData)

@@ -6,13 +6,15 @@ package tcglog
 
 import (
 	"io"
+
+	"github.com/canonical/go-tpm2"
 )
 
 // LogOptions allows the behaviour of Log to be controlled.
 type LogOptions struct {
-	EnableGrub           bool     // Enable support for interpreting events recorded by GRUB
-	EnableSystemdEFIStub bool     // Enable support for interpreting events recorded by systemd's EFI linux loader stub
-	SystemdEFIStubPCR    PCRIndex // Specify the PCR that systemd's EFI linux loader stub measures to
+	EnableGrub           bool        // Enable support for interpreting events recorded by GRUB
+	EnableSystemdEFIStub bool        // Enable support for interpreting events recorded by systemd's EFI linux loader stub
+	SystemdEFIStubPCR    tpm2.Handle // Specify the PCR that systemd's EFI linux loader stub measures to
 }
 
 // ReadLog reads an event log read from r using the supplied options. The log must
