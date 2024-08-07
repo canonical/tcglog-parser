@@ -64,12 +64,6 @@ func (s *tcgeventdataSuite) TestSeparatorEventDataIsError(c *C) {
 	c.Check(event.IsError(), Equals, true)
 }
 
-func (s *tcgeventdataSuite) TestNewErrorSeparatorEventData(c *C) {
-	event := NewErrorSeparatorEventData([]byte("1234"))
-	c.Check(event.Value, Equals, SeparatorEventErrorValue)
-	c.Check(event.Bytes(), DeepEquals, []byte("1234"))
-}
-
 func (s *tcgeventdataSuite) TestSeparatorEventDataString(c *C) {
 	event := &SeparatorEventData{Value: SeparatorEventNormalValue}
 	c.Check(event.String(), Equals, "")
@@ -77,7 +71,7 @@ func (s *tcgeventdataSuite) TestSeparatorEventDataString(c *C) {
 	event.Value = SeparatorEventAltNormalValue
 	c.Check(event.String(), Equals, "")
 
-	event = NewErrorSeparatorEventData([]byte("foo"))
+	event = &SeparatorEventData{Value: SeparatorEventErrorValue, ErrorInfo: []byte("foo")}
 	c.Check(event.String(), Equals, "ERROR: 0x666f6f")
 }
 
@@ -98,7 +92,7 @@ func (s *tcgeventdataSuite) TestSeparatorEventDataWrite2(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestSeparatorEventDataWrite3(c *C) {
-	event := NewErrorSeparatorEventData([]byte("bar"))
+	event := &SeparatorEventData{Value: SeparatorEventErrorValue, ErrorInfo: []byte("bar")}
 
 	w := new(bytes.Buffer)
 	c.Check(event.Write(w), IsNil)

@@ -16,12 +16,42 @@ import (
 // SystemdEFIStubCommandline represents a kernel commandline measured by the
 // systemd EFI stub linux loader.
 type SystemdEFIStubCommandline struct {
-	rawEventData
 	Str string
+}
+
+func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) *SystemdEFIStubCommandline {
+	if eventType != EventTypeIPL {
+		return nil
+	}
+
+	// data is a UCS2 string in little-endian form terminated with a single zero byte,
+	// so we should have an odd number of bytes.
+	if len(data)%2 != 1 {
+		return nil
+	}
+	if data[len(data)-1] != 0x00 {
+		return nil
+	}
+
+	// Omit the zero byte added by the EFI stub and then convert to native byte order.
+	reader := bytes.NewReader(data[:len(data)-1])
+
+	ucs2Str := make([]uint16, len(data)/2)
+	binary.Read(reader, binary.LittleEndian, &ucs2Str)
+
+	return &SystemdEFIStubCommandline{Str: efi.ConvertUTF16ToUTF8(ucs2Str)}
 }
 
 func (e *SystemdEFIStubCommandline) String() string {
 	return "kernel commandline: " + e.Str
+}
+
+func (e *SystemdEFIStubCommandline) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *SystemdEFIStubCommandline) Write(w io.Writer) error {
@@ -46,27 +76,4 @@ func ComputeSystemdEFIStubCommandlineDigest(alg crypto.Hash, commandline string)
 	// Include those here.
 	binary.Write(h, binary.LittleEndian, append(efi.ConvertUTF8ToUCS2(commandline), 0))
 	return h.Sum(nil)
-}
-
-func decodeEventDataSystemdEFIStub(data []byte, eventType EventType) *SystemdEFIStubCommandline {
-	if eventType != EventTypeIPL {
-		return nil
-	}
-
-	// data is a UCS2 string in little-endian form terminated with a single zero byte,
-	// so we should have an odd number of bytes.
-	if len(data)%2 != 1 {
-		return nil
-	}
-	if data[len(data)-1] != 0x00 {
-		return nil
-	}
-
-	// Omit the zero byte added by the EFI stub and then convert to native byte order.
-	reader := bytes.NewReader(data[:len(data)-1])
-
-	ucs2Str := make([]uint16, len(data)/2)
-	binary.Read(reader, binary.LittleEndian, &ucs2Str)
-
-	return &SystemdEFIStubCommandline{rawEventData: data, Str: efi.ConvertUTF16ToUTF8(ucs2Str)}
 }

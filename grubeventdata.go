@@ -5,6 +5,7 @@
 package tcglog
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -30,13 +31,20 @@ const (
 
 // GrubStringEventData represents the data associated with an event measured by GRUB.
 type GrubStringEventData struct {
-	rawEventData
 	Type GrubStringEventType
 	Str  string
 }
 
 func (e *GrubStringEventData) String() string {
 	return fmt.Sprintf("%s{ %s }", string(e.Type), e.Str)
+}
+
+func (e *GrubStringEventData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *GrubStringEventData) Write(w io.Writer) error {
@@ -54,9 +62,9 @@ func decodeEventDataGRUB(data []byte, pcrIndex tpm2.Handle, eventType EventType)
 		str := string(data)
 		switch {
 		case strings.HasPrefix(str, kernelCmdlinePrefix):
-			return &GrubStringEventData{rawEventData: data, Type: KernelCmdline, Str: strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}
+			return &GrubStringEventData{Type: KernelCmdline, Str: strings.TrimSuffix(strings.TrimPrefix(str, kernelCmdlinePrefix), "\x00")}
 		case strings.HasPrefix(str, grubCmdPrefix):
-			return &GrubStringEventData{rawEventData: data, Type: GrubCmd, Str: strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}
+			return &GrubStringEventData{Type: GrubCmd, Str: strings.TrimSuffix(strings.TrimPrefix(str, grubCmdPrefix), "\x00")}
 		default:
 			return nil
 		}

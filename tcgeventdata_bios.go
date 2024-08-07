@@ -5,6 +5,7 @@
 package tcglog
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -15,7 +16,6 @@ import (
 // SpecIdEvent00 corresponds to the TCG_PCClientSpecIdEventStruct type and is the
 // event data for a Specification ID Version EV_NO_ACTION event for BIOS platforms.
 type SpecIdEvent00 struct {
-	rawEventData
 	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
@@ -23,40 +23,11 @@ type SpecIdEvent00 struct {
 	VendorInfo       []byte
 }
 
-func (e *SpecIdEvent00) String() string {
-	return fmt.Sprintf("PCClientSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d }",
-		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
-}
-
-func (e *SpecIdEvent00) Write(w io.Writer) error {
-	var signature [16]byte
-	copy(signature[:], []byte("Spec ID Event00"))
-	if _, err := w.Write(signature[:]); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.PlatformClass); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMinor); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMajor); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.SpecErrata); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, uint8(0)); err != nil {
-		return err
-	}
-	return writeLengthPrefixed[uint8](w, e.VendorInfo)
-}
-
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
 //
 //	(section 11.3.4.1 "Specification Event")
 func decodeSpecIdEvent00(data []byte, r io.Reader) (out *SpecIdEvent00, err error) {
-	d := &SpecIdEvent00{rawEventData: data}
+	d := new(SpecIdEvent00)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -81,4 +52,41 @@ func decodeSpecIdEvent00(data []byte, r io.Reader) (out *SpecIdEvent00, err erro
 	d.VendorInfo = vendorInfo
 
 	return d, nil
+}
+
+func (e *SpecIdEvent00) String() string {
+	return fmt.Sprintf("PCClientSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d }",
+		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
+}
+
+func (e *SpecIdEvent00) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (e *SpecIdEvent00) Write(w io.Writer) error {
+	var signature [16]byte
+	copy(signature[:], []byte("Spec ID Event00"))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.PlatformClass); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMinor); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMajor); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecErrata); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, uint8(0)); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint8](w, e.VendorInfo)
 }

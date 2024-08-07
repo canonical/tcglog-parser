@@ -21,7 +21,26 @@ import (
 	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
-var separatorErrorDigests = make(map[tpm2.HashAlgorithmId]tpm2.Digest)
+// separatorErrorDigests are the digests of uint32(1) for various algorithms.
+var separatorErrorDigests = map[tpm2.HashAlgorithmId]tpm2.Digest{
+	tpm2.HashAlgorithmSHA1: tpm2.Digest{0x3c, 0x58, 0x56, 0x4, 0xe8, 0x7f, 0x85, 0x59, 0x73, 0x73, 0x1f, 0xea, 0x83, 0xe2, 0x1f, 0xab, 0x93, 0x92, 0xd2, 0xfc},
+	tpm2.HashAlgorithmSHA256: tpm2.Digest{0x67, 0xab, 0xdd, 0x72, 0x10, 0x24, 0xf0, 0xff, 0x4e, 0xb, 0x3f, 0x4c, 0x2f, 0xc1, 0x3b, 0xc5, 0xba, 0xd4, 0x2d, 0xb,
+		0x78, 0x51, 0xd4, 0x56, 0xd8, 0x8d, 0x20, 0x3d, 0x15, 0xaa, 0xa4, 0x50},
+	tpm2.HashAlgorithmSHA384: tpm2.Digest{0x72, 0x10, 0xaf, 0x19, 0x14, 0x5e, 0xc2, 0xa8, 0xe2, 0x50, 0xa7, 0xfe, 0x8e, 0x9e, 0xee, 0xac, 0x13, 0x1, 0xe5, 0x24,
+		0xda, 0xab, 0x82, 0x36, 0x6c, 0x36, 0xbe, 0x61, 0x4d, 0xc3, 0x54, 0x2, 0xa2, 0x89, 0x10, 0x1e, 0x48, 0xca, 0xd6, 0x1c, 0x45, 0x33, 0x7f, 0x2f, 0x32, 0xc1,
+		0x4f, 0xdc},
+	tpm2.HashAlgorithmSHA512: tpm2.Digest{0xed, 0xf9, 0x2e, 0x3d, 0x4f, 0x80, 0xfc, 0x47, 0xd9, 0x48, 0xea, 0x2f, 0x17, 0xb9, 0xbf, 0xc7, 0x42, 0xd3, 0x4e, 0x2e,
+		0x78, 0x5a, 0x7a, 0x49, 0x27, 0xf3, 0xe2, 0x61, 0xe8, 0xbd, 0x9d, 0x40, 0xb, 0x64, 0x8b, 0xff, 0x21, 0x23, 0xb8, 0x39, 0x6d, 0x24, 0xfb, 0x28, 0xf5, 0x86,
+		0x99, 0x79, 0xe0, 0x8d, 0x58, 0xb4, 0xb5, 0xd1, 0x56, 0xe6, 0x40, 0x34, 0x4a, 0x2c, 0xa, 0x54, 0x67, 0x5d},
+	tpm2.HashAlgorithmSHA3_256: tpm2.Digest{0x29, 0x5c, 0xd1, 0x69, 0x8c, 0x6a, 0xc5, 0xbd, 0x80, 0x4a, 0x9, 0xe5, 0xf, 0x19, 0xf8, 0x54, 0x94, 0x75, 0xe5, 0x2d,
+		0xb1, 0xc6, 0xeb, 0xd4, 0x41, 0xed, 0xc, 0x7b, 0x25, 0x6e, 0x1d, 0xdf},
+	tpm2.HashAlgorithmSHA3_384: tpm2.Digest{0xe7, 0xb9, 0x1f, 0x51, 0xfb, 0x66, 0x1b, 0x6e, 0xc8, 0xea, 0x28, 0x55, 0xc8, 0x8b, 0x38, 0x80, 0x71, 0xca, 0xf1,
+		0xf6, 0xa3, 0xc, 0x95, 0x24, 0x50, 0x83, 0x8d, 0x61, 0xb3, 0x55, 0x61, 0x63, 0x8b, 0x93, 0xeb, 0xdc, 0x22, 0x1b, 0x86, 0xa6, 0x81, 0x33, 0xe, 0xef, 0xa1,
+		0x2e, 0x10, 0xcd},
+	tpm2.HashAlgorithmSHA3_512: tpm2.Digest{0xda, 0x5e, 0xa4, 0xad, 0x55, 0x26, 0xac, 0xe3, 0x3e, 0x3, 0x75, 0xf3, 0x68, 0xd4, 0x16, 0xd9, 0x5f, 0xbf, 0x6a, 0x68,
+		0x0, 0xb6, 0x60, 0x85, 0x26, 0xdc, 0x7e, 0x39, 0xce, 0x9a, 0x43, 0xf3, 0xb0, 0xa7, 0xbe, 0xd2, 0x20, 0x60, 0xdc, 0xd7, 0x1a, 0x13, 0xc, 0x95, 0x7b, 0xcd, 0x2,
+		0xe1, 0x95, 0x7e, 0x6d, 0x76, 0xee, 0x61, 0x79, 0xd7, 0x2, 0x36, 0x94, 0x1, 0x6a, 0x49, 0x25, 0x5b},
+}
 
 // StringEventData corresponds to event data that is an non-NULL terminated ASCII string.
 // It may or may not be informative.
@@ -177,12 +196,45 @@ func decodeEventDataAction(data []byte) (StringEventData, error) {
 
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.
 type SeparatorEventData struct {
-	rawEventData
-	Value uint32 // The separator value measured to the TPM
+	Value     uint32 // The separator value measured to the TPM
+	ErrorInfo []byte // The error information recorded in the log when Value == SeparatorEventErrorValue
 }
 
-func NewErrorSeparatorEventData(err []byte) *SeparatorEventData {
-	return &SeparatorEventData{rawEventData: err, Value: SeparatorEventErrorValue}
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
+//
+//	(section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
+//
+// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
+//
+//	(section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
+//	 "Procedure for Pre-OS to OS-Present Transition")
+func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventData, error) {
+	for alg, digest := range digests {
+		errorDigest, ok := separatorErrorDigests[alg]
+		if !ok {
+			continue
+		}
+		if bytes.Equal(digest, errorDigest) {
+			// This separator event indicates an error. The digest is the tagged hash of the
+			// error value (uint32(1)) and the event data is information about the error.
+			return &SeparatorEventData{Value: SeparatorEventErrorValue, ErrorInfo: data}, nil
+		}
+	}
+
+	// Not an error separator. The digest is the tagged hash of the event data, which contains one of
+	// uint32(0) or uint32(0xffffffff).
+	if len(data) != binary.Size(uint32(0)) {
+		return nil, errors.New("data is the wrong size")
+	}
+
+	value := binary.LittleEndian.Uint32(data)
+	switch value {
+	case SeparatorEventNormalValue, SeparatorEventAltNormalValue:
+	default:
+		return nil, fmt.Errorf("invalid separator value: %d", value)
+	}
+
+	return &SeparatorEventData{Value: value}, nil
 }
 
 // IsError indicates that this event was associated with an error condition.
@@ -196,7 +248,15 @@ func (e *SeparatorEventData) String() string {
 	if !e.IsError() {
 		return ""
 	}
-	return fmt.Sprintf("ERROR: 0x%x", e.rawEventData)
+	return fmt.Sprintf("ERROR: 0x%x", e.ErrorInfo)
+}
+
+func (e *SeparatorEventData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *SeparatorEventData) Write(w io.Writer) error {
@@ -204,7 +264,7 @@ func (e *SeparatorEventData) Write(w io.Writer) error {
 	case SeparatorEventNormalValue, SeparatorEventAltNormalValue:
 		return binary.Write(w, binary.LittleEndian, e.Value)
 	case SeparatorEventErrorValue:
-		_, err := w.Write(e.rawEventData)
+		_, err := w.Write(e.ErrorInfo)
 		return err
 	default:
 		return errors.New("invalid value")
@@ -218,48 +278,6 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 	h := alg.New()
 	binary.Write(h, binary.LittleEndian, value)
 	return h.Sum(nil)
-}
-
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf
-//
-//	(section 3.3.2.2 2 Error Conditions" , section 8.2.3 "Measuring Boot Events")
-//
-// https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf:
-//
-//	(section 2.3.2 "Error Conditions", section 2.3.4 "PCR Usage", section 7.2
-//	 "Procedure for Pre-OS to OS-Present Transition")
-func decodeEventDataSeparator(data []byte, digests DigestMap) (*SeparatorEventData, error) {
-	var alg tpm2.HashAlgorithmId
-	for a, _ := range digests {
-		if !alg.IsValid() || a.Size() > alg.Size() {
-			alg = a
-		}
-	}
-
-	errorDigest, ok := separatorErrorDigests[alg]
-	if !ok {
-		h := alg.NewHash()
-		binary.Write(h, binary.LittleEndian, SeparatorEventErrorValue)
-		separatorErrorDigests[alg] = h.Sum(nil)
-		errorDigest = separatorErrorDigests[alg]
-	}
-
-	if bytes.Equal(digests[alg], errorDigest) {
-		return &SeparatorEventData{rawEventData: data, Value: SeparatorEventErrorValue}, nil
-	}
-
-	if len(data) != binary.Size(uint32(0)) {
-		return nil, errors.New("data is the wrong size")
-	}
-
-	value := binary.LittleEndian.Uint32(data)
-	switch value {
-	case SeparatorEventNormalValue, SeparatorEventErrorValue, SeparatorEventAltNormalValue:
-	default:
-		return nil, fmt.Errorf("invalid separator value: %d", value)
-	}
-
-	return &SeparatorEventData{rawEventData: data, Value: value}, nil
 }
 
 func decodeEventDataCompactHash(data []byte) (StringEventData, error) {
@@ -285,31 +303,14 @@ func decodeEventDataPostCode2(data []byte) (EventData, error) {
 
 // TaggedEvent corresponds to TCG_PCClientTaggedEvent
 type TaggedEvent struct {
-	rawEventData
 	EventID uint32
 	Data    []byte
-}
-
-func (e *TaggedEvent) String() string {
-	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %x}", e.EventID, e.Data)
-}
-
-func (e *TaggedEvent) Write(w io.Writer) error {
-	if err := binary.Write(w, binary.LittleEndian, e.EventID); err != nil {
-		return fmt.Errorf("cannot write taggedEventID: %w", err)
-	}
-
-	if err := writeLengthPrefixed[uint32, byte](w, e.Data); err != nil {
-		return fmt.Errorf("cannot write taggedEventData: %w", err)
-	}
-
-	return nil
 }
 
 func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
 	r := bytes.NewReader(data)
 
-	d := &TaggedEvent{rawEventData: data}
+	d := new(TaggedEvent)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.EventID); err != nil {
 		return nil, fmt.Errorf("cannot decode taggedEventID: %w", err)
@@ -322,6 +323,30 @@ func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
 	d.Data = data
 
 	return d, nil
+}
+
+func (e *TaggedEvent) String() string {
+	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %x}", e.EventID, e.Data)
+}
+
+func (e *TaggedEvent) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (e *TaggedEvent) Write(w io.Writer) error {
+	if err := binary.Write(w, binary.LittleEndian, e.EventID); err != nil {
+		return fmt.Errorf("cannot write taggedEventID: %w", err)
+	}
+
+	if err := writeLengthPrefixed[uint32, byte](w, e.Data); err != nil {
+		return fmt.Errorf("cannot write taggedEventData: %w", err)
+	}
+
+	return nil
 }
 
 func decodeEventDataSCRTMContents(data []byte) (EventData, error) {

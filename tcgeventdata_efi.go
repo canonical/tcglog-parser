@@ -44,7 +44,6 @@ func (d GUIDEventData) Write(w io.Writer) error {
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 1.2.
 type SpecIdEvent02 struct {
-	rawEventData
 	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
@@ -53,9 +52,47 @@ type SpecIdEvent02 struct {
 	VendorInfo       []byte
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
+//
+//	(section 7.4 "EV_NO_ACTION Event Types")
+func decodeSpecIdEvent02(data []byte, r io.Reader) (out *SpecIdEvent02, err error) {
+	d := new(SpecIdEvent02)
+
+	if err := binary.Read(r, binary.LittleEndian, &d.PlatformClass); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMinor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMajor); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.SpecErrata); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.UintnSize); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	vendorInfo, err := readLengthPrefixed[uint8, byte](r)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.VendorInfo = vendorInfo
+
+	return d, nil
+}
+
 func (e *SpecIdEvent02) String() string {
 	return fmt.Sprintf("EfiSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d, uintnSize=%d }",
 		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
+}
+
+func (e *SpecIdEvent02) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *SpecIdEvent02) Write(w io.Writer) error {
@@ -82,36 +119,6 @@ func (e *SpecIdEvent02) Write(w io.Writer) error {
 	return writeLengthPrefixed[uint8](w, e.VendorInfo)
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf
-//
-//	(section 7.4 "EV_NO_ACTION Event Types")
-func decodeSpecIdEvent02(data []byte, r io.Reader) (out *SpecIdEvent02, err error) {
-	d := &SpecIdEvent02{rawEventData: data}
-
-	if err := binary.Read(r, binary.LittleEndian, &d.PlatformClass); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMinor); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &d.SpecVersionMajor); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &d.SpecErrata); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &d.UintnSize); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	vendorInfo, err := readLengthPrefixed[uint8, byte](r)
-	if err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	d.VendorInfo = vendorInfo
-
-	return d, nil
-}
-
 // EFISpecIdEventAlgorithmSize represents a digest algorithm and its length and corresponds to the
 // TCG_EfiSpecIdEventAlgorithmSize type.
 type EFISpecIdEventAlgorithmSize struct {
@@ -123,7 +130,6 @@ type EFISpecIdEventAlgorithmSize struct {
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 2.0.
 type SpecIdEvent03 struct {
-	rawEventData
 	PlatformClass    uint32
 	SpecVersionMinor uint8
 	SpecVersionMajor uint8
@@ -133,53 +139,11 @@ type SpecIdEvent03 struct {
 	VendorInfo       []byte
 }
 
-func (e *SpecIdEvent03) String() string {
-	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "EfiSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d, uintnSize=%d, digestSizes=[",
-		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
-	for i, algSize := range e.DigestSizes {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		fmt.Fprintf(&builder, "{ algorithmId=0x%04x, digestSize=%d }",
-			uint16(algSize.AlgorithmId), algSize.DigestSize)
-	}
-	builder.WriteString("] }")
-	return builder.String()
-}
-
-func (e *SpecIdEvent03) Write(w io.Writer) error {
-	var signature [16]byte
-	copy(signature[:], []byte("Spec ID Event03"))
-	if _, err := w.Write(signature[:]); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.PlatformClass); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMinor); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMajor); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.SpecErrata); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, e.UintnSize); err != nil {
-		return err
-	}
-	if err := writeLengthPrefixed[uint32](w, e.DigestSizes); err != nil {
-		return err
-	}
-	return writeLengthPrefixed[uint8](w, e.VendorInfo)
-}
-
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
 //
 //	(secion 9.4.5.1 "Specification ID Version Event")
 func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err error) {
-	d := &SpecIdEvent03{rawEventData: data}
+	d := new(SpecIdEvent03)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.PlatformClass); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -210,14 +174,83 @@ func decodeSpecIdEvent03(data []byte, r io.Reader) (out *SpecIdEvent03, err erro
 	return d, nil
 }
 
+func (e *SpecIdEvent03) String() string {
+	var builder bytes.Buffer
+	fmt.Fprintf(&builder, "EfiSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d, uintnSize=%d, digestSizes=[",
+		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
+	for i, algSize := range e.DigestSizes {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		fmt.Fprintf(&builder, "{ algorithmId=0x%04x, digestSize=%d }",
+			uint16(algSize.AlgorithmId), algSize.DigestSize)
+	}
+	builder.WriteString("] }")
+	return builder.String()
+}
+
+func (e *SpecIdEvent03) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (e *SpecIdEvent03) Write(w io.Writer) error {
+	var signature [16]byte
+	copy(signature[:], []byte("Spec ID Event03"))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.PlatformClass); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMinor); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecVersionMajor); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.SpecErrata); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, e.UintnSize); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint32](w, e.DigestSizes); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint8](w, e.VendorInfo)
+}
+
 // StartupLocalityEventData is the event data for a StartupLocality EV_NO_ACTION event.
 type StartupLocalityEventData struct {
-	rawEventData
 	StartupLocality uint8
+}
+
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
+//
+//	(section 9.4.5.3 "Startup Locality Event")
+func decodeStartupLocalityEvent(data []byte, r io.Reader) (*StartupLocalityEventData, error) {
+	var locality uint8
+	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	return &StartupLocalityEventData{StartupLocality: locality}, nil
 }
 
 func (e *StartupLocalityEventData) String() string {
 	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.StartupLocality)
+}
+
+func (e *StartupLocalityEventData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *StartupLocalityEventData) Write(w io.Writer) error {
@@ -230,18 +263,6 @@ func (e *StartupLocalityEventData) Write(w io.Writer) error {
 	return binary.Write(w, binary.LittleEndian, e.StartupLocality)
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
-//
-//	(section 9.4.5.3 "Startup Locality Event")
-func decodeStartupLocalityEvent(data []byte, r io.Reader) (*StartupLocalityEventData, error) {
-	var locality uint8
-	if err := binary.Read(r, binary.LittleEndian, &locality); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	return &StartupLocalityEventData{rawEventData: data, StartupLocality: locality}, nil
-}
-
 type HCRTMMeasurementFormatType uint8
 
 const (
@@ -251,14 +272,13 @@ const (
 
 // HCRTMComponentEventData corresponds to TCG_HCRTMComponentEvent
 type HCRTMComponentEventData struct {
-	rawEventData
 	ComponentDescription  string
 	MeasurementFormatType HCRTMMeasurementFormatType
 	ComponentMeasurement  []byte // This will be a TPMT_HA structure if MeasurementFormatType == HCRTMMeasurementFormatDigest
 }
 
 func decodeHCRTMComponentEvent(data []byte, r io.Reader) (*HCRTMComponentEventData, error) {
-	d := &HCRTMComponentEventData{rawEventData: data}
+	d := new(HCRTMComponentEventData)
 
 	data, err := readLengthPrefixed[uint8, byte](r)
 	if err != nil {
@@ -285,6 +305,14 @@ func decodeHCRTMComponentEvent(data []byte, r io.Reader) (*HCRTMComponentEventDa
 
 func (d *HCRTMComponentEventData) String() string {
 	return fmt.Sprintf("TCG_HCRTMComponentEvent{ComponentDescription: %s, MeasurementFormatType: %x}", d.ComponentDescription, d.MeasurementFormatType)
+}
+
+func (e *HCRTMComponentEventData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (d *HCRTMComponentEventData) Write(w io.Writer) error {
@@ -314,27 +342,8 @@ func decodeEventDataEFIHCRTMEvent(data []byte) (StringEventData, error) {
 // SP800_155_PlatformIdEventData corresponds to the event data for a SP800-155 Event
 // EV_NO_ACTION event
 type SP800_155_PlatformIdEventData struct {
-	rawEventData
 	VendorId              uint32
 	ReferenceManifestGuid efi.GUID
-}
-
-func (e *SP800_155_PlatformIdEventData) String() string {
-	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.VendorId, e.ReferenceManifestGuid)
-}
-
-func (e *SP800_155_PlatformIdEventData) Write(w io.Writer) error {
-	var signature [16]byte
-	copy(signature[:], []byte("SP800-155 Event"))
-	if _, err := w.Write(signature[:]); err != nil {
-		return err
-	}
-
-	if err := binary.Write(w, binary.LittleEndian, e.VendorId); err != nil {
-		return err
-	}
-	_, err := w.Write(e.ReferenceManifestGuid[:])
-	return err
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf
@@ -353,13 +362,38 @@ func decodeBIMReferenceManifestEvent(data []byte, r io.Reader) (*SP800_155_Platf
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
 
-	return &SP800_155_PlatformIdEventData{rawEventData: data, VendorId: d.VendorId, ReferenceManifestGuid: d.Guid}, nil
+	return &SP800_155_PlatformIdEventData{VendorId: d.VendorId, ReferenceManifestGuid: d.Guid}, nil
+}
+
+func (e *SP800_155_PlatformIdEventData) String() string {
+	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.VendorId, e.ReferenceManifestGuid)
+}
+
+func (e *SP800_155_PlatformIdEventData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (e *SP800_155_PlatformIdEventData) Write(w io.Writer) error {
+	var signature [16]byte
+	copy(signature[:], []byte("SP800-155 Event"))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, e.VendorId); err != nil {
+		return err
+	}
+	_, err := w.Write(e.ReferenceManifestGuid[:])
+	return err
 }
 
 // SP800_155_PlatformIdEventData2 corresponds to the event data for a SP800-155 Event2
 // EV_NO_ACTION event
 type SP800_155_PlatformIdEventData2 struct {
-	rawEventData
 	PlatformManufacturerId uint32
 	ReferenceManifestGuid  efi.GUID
 	PlatformManufacturer   string
@@ -370,54 +404,8 @@ type SP800_155_PlatformIdEventData2 struct {
 	FirmwareVersion        string
 }
 
-func (d *SP800_155_PlatformIdEventData2) String() string {
-	w := new(bytes.Buffer)
-	fmt.Fprintf(w, "SP800_155_PlatformId_Event2{")
-	fmt.Fprintf(w, "\tPlatformManufacturerId: %d\n", d.PlatformManufacturerId)
-	fmt.Fprintf(w, "\tReferenceManifestGUID: %v\n", d.ReferenceManifestGuid)
-	fmt.Fprintf(w, "\tPlatformManufacturer: %s\n", d.PlatformManufacturer)
-	fmt.Fprintf(w, "\tPlatformModel: %s\n", d.PlatformModel)
-	fmt.Fprintf(w, "\tPlatformVersion: %s\n", d.PlatformVersion)
-	fmt.Fprintf(w, "\tFirmwareManufacturer: %s\n", d.FirmwareManufacturer)
-	fmt.Fprintf(w, "\tFirmwareManufacturerId: %d\n", d.FirmwareManufacturerId)
-	fmt.Fprintf(w, "\tFirmwareVersion: %s\n", d.FirmwareVersion)
-	fmt.Fprintf(w, "}")
-	return w.String()
-}
-
-func (d *SP800_155_PlatformIdEventData2) Write(w io.Writer) error {
-	var signature [16]byte
-	copy(signature[:], []byte("SP800-155 Event2"))
-	if _, err := w.Write(signature[:]); err != nil {
-		return err
-	}
-
-	if err := binary.Write(w, binary.LittleEndian, d.PlatformManufacturerId); err != nil {
-		return err
-	}
-	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
-		return err
-	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformManufacturer), 0x00)); err != nil {
-		return err
-	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformModel), 0x00)); err != nil {
-		return err
-	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformVersion), 0x00)); err != nil {
-		return err
-	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareManufacturer), 0x00)); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
-		return err
-	}
-	return writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00))
-}
-
 func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_PlatformIdEventData2, error) {
-	d := &SP800_155_PlatformIdEventData2{rawEventData: data}
+	d := new(SP800_155_PlatformIdEventData2)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.PlatformManufacturerId); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -505,36 +493,9 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	return d, nil
 }
 
-type LocatorType uint32
-
-const (
-	LocatorTypeRaw        LocatorType = 0
-	LocatorTypeURI        LocatorType = 1
-	LocatorTypeDevicePath LocatorType = 2
-	LocatorTypeVariable   LocatorType = 3
-)
-
-// SP800_155_PlatformIdEventData3 corresponds to the event data for a SP800-155 Event3
-// EV_NO_ACTION event
-type SP800_155_PlatformIdEventData3 struct {
-	rawEventData
-	PlatformManufacturerId  uint32
-	ReferenceManifestGuid   efi.GUID
-	PlatformManufacturer    string
-	PlatformModel           string
-	PlatformVersion         string
-	FirmwareManufacturer    string
-	FirmwareManufacturerId  uint32
-	FirmwareVersion         string
-	RIMLocatorType          LocatorType
-	RIMLocator              []byte
-	PlatformCertLocatorType LocatorType
-	PlatformCertLocator     []byte
-}
-
-func (d *SP800_155_PlatformIdEventData3) String() string {
+func (d *SP800_155_PlatformIdEventData2) String() string {
 	w := new(bytes.Buffer)
-	fmt.Fprintf(w, "SP800_155_PlatformId_Event3{")
+	fmt.Fprintf(w, "SP800_155_PlatformId_Event2{")
 	fmt.Fprintf(w, "\tPlatformManufacturerId: %d\n", d.PlatformManufacturerId)
 	fmt.Fprintf(w, "\tReferenceManifestGUID: %v\n", d.ReferenceManifestGuid)
 	fmt.Fprintf(w, "\tPlatformManufacturer: %s\n", d.PlatformManufacturer)
@@ -543,44 +504,21 @@ func (d *SP800_155_PlatformIdEventData3) String() string {
 	fmt.Fprintf(w, "\tFirmwareManufacturer: %s\n", d.FirmwareManufacturer)
 	fmt.Fprintf(w, "\tFirmwareManufacturerId: %d\n", d.FirmwareManufacturerId)
 	fmt.Fprintf(w, "\tFirmwareVersion: %s\n", d.FirmwareVersion)
-
-	printLocator := func(name string, t LocatorType, data []byte) {
-		switch t {
-		case LocatorTypeRaw:
-			fmt.Fprintf(w, "\t%s:<raw>\n", name)
-		case LocatorTypeURI:
-			fmt.Fprintf(w, "\t%s:uri:%s\n", name, string(bytes.TrimSuffix(data, []byte{0x00})))
-		case LocatorTypeDevicePath:
-			path, err := efi.ReadDevicePath(bytes.NewReader(data))
-			if err != nil {
-				fmt.Fprintf(w, "\t%s:devicepath:%v\n", name, err)
-			} else {
-				fmt.Fprintf(w, "\t%s:devicepath:%s\n", name, path)
-			}
-		case LocatorTypeVariable:
-			r := bytes.NewReader(data)
-			guid, err := efi.ReadGUID(r)
-			if err != nil {
-				fmt.Fprintf(w, "\t%s:variable:%v\n", name, err)
-			}
-			name, err := io.ReadAll(r)
-			if err != nil {
-				fmt.Fprintf(w, "\t%s:variable:%v\n", name, err)
-			}
-			name = bytes.TrimSuffix(name, []byte{0x00})
-			fmt.Fprintf(w, "\t%s:variable:%v-%s\n", name, guid, string(name))
-		}
-	}
-	printLocator("RIMLocator", d.RIMLocatorType, d.RIMLocator)
-	printLocator("PlatformCertLocator", d.PlatformCertLocatorType, d.PlatformCertLocator)
-
 	fmt.Fprintf(w, "}")
 	return w.String()
 }
 
-func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
+func (e *SP800_155_PlatformIdEventData2) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (d *SP800_155_PlatformIdEventData2) Write(w io.Writer) error {
 	var signature [16]byte
-	copy(signature[:], []byte("SP800-155 Event3"))
+	copy(signature[:], []byte("SP800-155 Event2"))
 	if _, err := w.Write(signature[:]); err != nil {
 		return err
 	}
@@ -606,23 +544,37 @@ func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
 	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00)); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, d.RIMLocatorType); err != nil {
-		return err
-	}
-	if err := writeLengthPrefixed[uint32](w, d.RIMLocator); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, d.PlatformCertLocatorType); err != nil {
-		return err
-	}
-	return writeLengthPrefixed[uint32](w, d.PlatformCertLocator)
+	return writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00))
+}
+
+type LocatorType uint32
+
+const (
+	LocatorTypeRaw        LocatorType = 0
+	LocatorTypeURI        LocatorType = 1
+	LocatorTypeDevicePath LocatorType = 2
+	LocatorTypeVariable   LocatorType = 3
+)
+
+// SP800_155_PlatformIdEventData3 corresponds to the event data for a SP800-155 Event3
+// EV_NO_ACTION event
+type SP800_155_PlatformIdEventData3 struct {
+	PlatformManufacturerId  uint32
+	ReferenceManifestGuid   efi.GUID
+	PlatformManufacturer    string
+	PlatformModel           string
+	PlatformVersion         string
+	FirmwareManufacturer    string
+	FirmwareManufacturerId  uint32
+	FirmwareVersion         string
+	RIMLocatorType          LocatorType
+	RIMLocator              []byte
+	PlatformCertLocatorType LocatorType
+	PlatformCertLocator     []byte
 }
 
 func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_PlatformIdEventData3, error) {
-	d := &SP800_155_PlatformIdEventData3{rawEventData: data}
+	d := new(SP800_155_PlatformIdEventData3)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.PlatformManufacturerId); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -728,44 +680,109 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	return d, nil
 }
 
+func (d *SP800_155_PlatformIdEventData3) String() string {
+	w := new(bytes.Buffer)
+	fmt.Fprintf(w, "SP800_155_PlatformId_Event3{")
+	fmt.Fprintf(w, "\tPlatformManufacturerId: %d\n", d.PlatformManufacturerId)
+	fmt.Fprintf(w, "\tReferenceManifestGUID: %v\n", d.ReferenceManifestGuid)
+	fmt.Fprintf(w, "\tPlatformManufacturer: %s\n", d.PlatformManufacturer)
+	fmt.Fprintf(w, "\tPlatformModel: %s\n", d.PlatformModel)
+	fmt.Fprintf(w, "\tPlatformVersion: %s\n", d.PlatformVersion)
+	fmt.Fprintf(w, "\tFirmwareManufacturer: %s\n", d.FirmwareManufacturer)
+	fmt.Fprintf(w, "\tFirmwareManufacturerId: %d\n", d.FirmwareManufacturerId)
+	fmt.Fprintf(w, "\tFirmwareVersion: %s\n", d.FirmwareVersion)
+
+	printLocator := func(name string, t LocatorType, data []byte) {
+		switch t {
+		case LocatorTypeRaw:
+			fmt.Fprintf(w, "\t%s:<raw>\n", name)
+		case LocatorTypeURI:
+			fmt.Fprintf(w, "\t%s:uri:%s\n", name, string(bytes.TrimSuffix(data, []byte{0x00})))
+		case LocatorTypeDevicePath:
+			path, err := efi.ReadDevicePath(bytes.NewReader(data))
+			if err != nil {
+				fmt.Fprintf(w, "\t%s:devicepath:%v\n", name, err)
+			} else {
+				fmt.Fprintf(w, "\t%s:devicepath:%s\n", name, path)
+			}
+		case LocatorTypeVariable:
+			r := bytes.NewReader(data)
+			guid, err := efi.ReadGUID(r)
+			if err != nil {
+				fmt.Fprintf(w, "\t%s:variable:%v\n", name, err)
+			}
+			name, err := io.ReadAll(r)
+			if err != nil {
+				fmt.Fprintf(w, "\t%s:variable:%v\n", name, err)
+			}
+			name = bytes.TrimSuffix(name, []byte{0x00})
+			fmt.Fprintf(w, "\t%s:variable:%v-%s\n", name, guid, string(name))
+		}
+	}
+	printLocator("RIMLocator", d.RIMLocatorType, d.RIMLocator)
+	printLocator("PlatformCertLocator", d.PlatformCertLocatorType, d.PlatformCertLocator)
+
+	fmt.Fprintf(w, "}")
+	return w.String()
+}
+
+func (e *SP800_155_PlatformIdEventData3) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
+	var signature [16]byte
+	copy(signature[:], []byte("SP800-155 Event3"))
+	if _, err := w.Write(signature[:]); err != nil {
+		return err
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, d.PlatformManufacturerId); err != nil {
+		return err
+	}
+	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformManufacturer), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformModel), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformVersion), 0x00)); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareManufacturer), 0x00)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.RIMLocatorType); err != nil {
+		return err
+	}
+	if err := writeLengthPrefixed[uint32](w, d.RIMLocator); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, d.PlatformCertLocatorType); err != nil {
+		return err
+	}
+	return writeLengthPrefixed[uint32](w, d.PlatformCertLocator)
+}
+
 // EFIVariableData corresponds to the EFI_VARIABLE_DATA type and is the event data associated with the measurement of an
 // EFI variable. This is not informative.
 type EFIVariableData struct {
-	rawEventData
 	VariableName efi.GUID
 	UnicodeName  string
 	VariableData []byte
-}
-
-func (e *EFIVariableData) String() string {
-	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\", VariableData:\n\t%s}",
-		e.VariableName, e.UnicodeName, strings.Replace(hex.Dump(e.VariableData), "\n", "\n\t", -1))
-}
-
-func (e *EFIVariableData) Write(w io.Writer) error {
-	if _, err := w.Write(e.VariableName[:]); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, efi.ConvertUTF8ToUCS2(e.UnicodeName)); err != nil {
-		return err
-	}
-	_, err := w.Write(e.VariableData)
-	return err
-}
-
-// ComputeEFIVariableDataDigest computes the EFI_VARIABLE_DATA digest associated with the supplied
-// parameters
-func ComputeEFIVariableDataDigest(alg crypto.Hash, name string, guid efi.GUID, data []byte) []byte {
-	h := alg.New()
-	varData := EFIVariableData{VariableName: guid, UnicodeName: name, VariableData: data}
-	varData.Write(h)
-	return h.Sum(nil)
 }
 
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 7.8 "Measuring EFI Variables")
@@ -773,7 +790,7 @@ func ComputeEFIVariableDataDigest(alg crypto.Hash, name string, guid efi.GUID, d
 func decodeEventDataEFIVariable(data []byte) (*EFIVariableData, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIVariableData{rawEventData: data}
+	d := new(EFIVariableData)
 
 	variableName, err := efi.ReadGUID(r)
 	if err != nil {
@@ -805,6 +822,45 @@ func decodeEventDataEFIVariable(data []byte) (*EFIVariableData, error) {
 	return d, nil
 }
 
+func (e *EFIVariableData) String() string {
+	return fmt.Sprintf("UEFI_VARIABLE_DATA{ VariableName: %s, UnicodeName: \"%s\", VariableData:\n\t%s}",
+		e.VariableName, e.UnicodeName, strings.Replace(hex.Dump(e.VariableData), "\n", "\n\t", -1))
+}
+
+func (e *EFIVariableData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (e *EFIVariableData) Write(w io.Writer) error {
+	if _, err := w.Write(e.VariableName[:]); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, uint64(utf8.RuneCount([]byte(e.UnicodeName)))); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.VariableData))); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, efi.ConvertUTF8ToUCS2(e.UnicodeName)); err != nil {
+		return err
+	}
+	_, err := w.Write(e.VariableData)
+	return err
+}
+
+// ComputeEFIVariableDataDigest computes the EFI_VARIABLE_DATA digest associated with the supplied
+// parameters
+func ComputeEFIVariableDataDigest(alg crypto.Hash, name string, guid efi.GUID, data []byte) []byte {
+	h := alg.New()
+	varData := EFIVariableData{VariableName: guid, UnicodeName: name, VariableData: data}
+	varData.Write(h)
+	return h.Sum(nil)
+}
+
 type rawEFIImageLoadEventHdr struct {
 	LocationInMemory   efi.PhysicalAddress
 	LengthInMemory     uint64
@@ -814,16 +870,46 @@ type rawEFIImageLoadEventHdr struct {
 
 // EFIImageLoadEvent corresponds to UEFI_IMAGE_LOAD_EVENT and is informative.
 type EFIImageLoadEvent struct {
-	rawEventData
 	LocationInMemory efi.PhysicalAddress
 	LengthInMemory   uint64
 	LinkTimeAddress  uint64
 	DevicePath       efi.DevicePath
 }
 
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
+// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
+func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
+	r := bytes.NewReader(data)
+
+	var e rawEFIImageLoadEventHdr
+	if err := binary.Read(r, binary.LittleEndian, &e); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	lr := io.LimitReader(r, int64(e.LengthOfDevicePath))
+	path, err := efi.ReadDevicePath(lr)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	return &EFIImageLoadEvent{
+		LocationInMemory: e.LocationInMemory,
+		LengthInMemory:   e.LengthInMemory,
+		LinkTimeAddress:  e.LinkTimeAddress,
+		DevicePath:       path}, nil
+}
+
 func (e *EFIImageLoadEvent) String() string {
 	return fmt.Sprintf("UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x%016x, ImageLengthInMemory: %d, "+
 		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.LocationInMemory, e.LengthInMemory, e.LinkTimeAddress, e.DevicePath)
+}
+
+func (e *EFIImageLoadEvent) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *EFIImageLoadEvent) Write(w io.Writer) error {
@@ -845,38 +931,45 @@ func (e *EFIImageLoadEvent) Write(w io.Writer) error {
 	return err
 }
 
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_EFI_Platform_1_22_Final_-v15.pdf (section 4 "Measuring PE/COFF Image Files")
-// https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientSpecPlat_TPM_2p0_1p04_pub.pdf (section 9.2.3 "UEFI_IMAGE_LOAD_EVENT Structure")
-func decodeEventDataEFIImageLoad(data []byte) (*EFIImageLoadEvent, error) {
-	r := bytes.NewReader(data)
-
-	var e rawEFIImageLoadEventHdr
-	if err := binary.Read(r, binary.LittleEndian, &e); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	lr := io.LimitReader(r, int64(e.LengthOfDevicePath))
-	path, err := efi.ReadDevicePath(lr)
-	if err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	return &EFIImageLoadEvent{
-		rawEventData:     data,
-		LocationInMemory: e.LocationInMemory,
-		LengthInMemory:   e.LengthInMemory,
-		LinkTimeAddress:  e.LinkTimeAddress,
-		DevicePath:       path}, nil
-}
-
 // EFIGPTData corresponds to UEFI_GPT_DATA and is the event data for EV_EFI_GPT_EVENT and
 // EV_EFI_GPT_EVENT2 events. When used for EV_EFI_GPT_EVENT2 events, the platform firmware
 // zeroes out the DiskGUID field in the header and the UniquePartitionGUID field in each
 // partition entry.
 type EFIGPTData struct {
-	rawEventData
 	Hdr        efi.PartitionTableHeader
 	Partitions []*efi.PartitionEntry
+}
+
+func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
+	r := bytes.NewReader(data)
+
+	d := new(EFIGPTData)
+
+	// UEFI_GPT_DATA.UEFIPartitionHeader
+	hdr, err := efi.ReadPartitionTableHeader(r, false)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.Hdr = *hdr
+
+	// UEFI_GPT_DATA.NumberOfPartitions
+	var numberOfParts uint64
+	if err := binary.Read(r, binary.LittleEndian, &numberOfParts); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	if numberOfParts > math.MaxUint32 {
+		return nil, errors.New("invalid EFI_GPT_DATA.NumberOfPartitons")
+	}
+
+	// UEFI_GPT_DATA.Partitions
+	partitions, err := efi.ReadPartitionEntries(r, uint32(numberOfParts), hdr.SizeOfPartitionEntry)
+	if err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	d.Partitions = partitions
+
+	return d, nil
 }
 
 func (e *EFIGPTData) String() string {
@@ -887,6 +980,14 @@ func (e *EFIGPTData) String() string {
 	}
 	fmt.Fprintf(&builder, "\n\t]\n}")
 	return builder.String()
+}
+
+func (e *EFIGPTData) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (e *EFIGPTData) Write(w io.Writer) error {
@@ -916,38 +1017,6 @@ func (e *EFIGPTData) Write(w io.Writer) error {
 	}
 
 	return nil
-}
-
-func decodeEventDataEFIGPT(data []byte) (*EFIGPTData, error) {
-	r := bytes.NewReader(data)
-
-	d := &EFIGPTData{rawEventData: data}
-
-	// UEFI_GPT_DATA.UEFIPartitionHeader
-	hdr, err := efi.ReadPartitionTableHeader(r, false)
-	if err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	d.Hdr = *hdr
-
-	// UEFI_GPT_DATA.NumberOfPartitions
-	var numberOfParts uint64
-	if err := binary.Read(r, binary.LittleEndian, &numberOfParts); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	if numberOfParts > math.MaxUint32 {
-		return nil, errors.New("invalid EFI_GPT_DATA.NumberOfPartitons")
-	}
-
-	// UEFI_GPT_DATA.Partitions
-	partitions, err := efi.ReadPartitionEntries(r, uint32(numberOfParts), hdr.SizeOfPartitionEntry)
-	if err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	d.Partitions = partitions
-
-	return d, nil
 }
 
 // ComputeEFIGPTDataDigest computes a UEFI_GPT_DATA digest from the supplied data.
@@ -987,37 +1056,13 @@ func (t *EFIConfigurationTable) Write(w io.Writer) error {
 // EFIHandoffTablePointers corresponds to UEFI_HANDOFF_TABLE_POINTERS and is the event data for EV_EFI_HANDOFF_TABLES events.
 // This is informative.
 type EFIHandoffTablePointers struct {
-	rawEventData
 	TableEntries []EFIConfigurationTable
-}
-
-func (e *EFIHandoffTablePointers) String() string {
-	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "UEFI_HANDOFF_TABLE_POINTERS{\n\tTableEntries: [")
-	for _, entry := range e.TableEntries {
-		fmt.Fprintf(&builder, "\n\t\t%s", entry)
-	}
-	fmt.Fprintf(&builder, "\n\t]\n}")
-	return builder.String()
-}
-
-func (e *EFIHandoffTablePointers) Write(w io.Writer) error {
-	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
-		return err
-	}
-	for _, table := range e.TableEntries {
-		if err := table.Write(w); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func decodeEventDataEFIHandoffTablePointers(data []byte) (out *EFIHandoffTablePointers, err error) {
 	r := bytes.NewReader(data)
 
-	out = &EFIHandoffTablePointers{rawEventData: data}
+	out = new(EFIHandoffTablePointers)
 
 	var nTables uint64
 	if err := binary.Read(r, binary.LittleEndian, &nTables); err != nil {
@@ -1059,17 +1104,9 @@ func decodeEventDataEFIHandoffTablePointers(data []byte) (out *EFIHandoffTablePo
 	return out, nil
 }
 
-// EFIHandoffTablePointers2 corresponds to UEFI_HANDOFF_TABLE_POINTERS2 and is the event data for EV_EFI_HANDOFF_TABLES2 events.
-// This is informative.
-type EFIHandoffTablePointers2 struct {
-	rawEventData
-	TableDescription string
-	TableEntries     []EFIConfigurationTable
-}
-
-func (e *EFIHandoffTablePointers2) String() string {
+func (e *EFIHandoffTablePointers) String() string {
 	var builder bytes.Buffer
-	fmt.Fprintf(&builder, "UEFI_HANDOFF_TABLE_POINTERS2{\n\tTableDescription: %q,\n\tTableEntries: [", e.TableDescription)
+	fmt.Fprintf(&builder, "UEFI_HANDOFF_TABLE_POINTERS{\n\tTableEntries: [")
 	for _, entry := range e.TableEntries {
 		fmt.Fprintf(&builder, "\n\t\t%s", entry)
 	}
@@ -1077,11 +1114,15 @@ func (e *EFIHandoffTablePointers2) String() string {
 	return builder.String()
 }
 
-func (e *EFIHandoffTablePointers2) Write(w io.Writer) error {
-	if err := writeLengthPrefixed[uint8](w, []byte(e.TableDescription)); err != nil {
-		return err
+func (e *EFIHandoffTablePointers) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
 	}
+	return w.Bytes()
+}
 
+func (e *EFIHandoffTablePointers) Write(w io.Writer) error {
 	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
 		return err
 	}
@@ -1094,10 +1135,17 @@ func (e *EFIHandoffTablePointers2) Write(w io.Writer) error {
 	return nil
 }
 
+// EFIHandoffTablePointers2 corresponds to UEFI_HANDOFF_TABLE_POINTERS2 and is the event data for EV_EFI_HANDOFF_TABLES2 events.
+// This is informative.
+type EFIHandoffTablePointers2 struct {
+	TableDescription string
+	TableEntries     []EFIConfigurationTable
+}
+
 func decodeEventDataEFIHandoffTablePointers2(data []byte) (out *EFIHandoffTablePointers2, err error) {
 	r := bytes.NewReader(data)
 
-	out = &EFIHandoffTablePointers2{rawEventData: data}
+	out = new(EFIHandoffTablePointers2)
 
 	desc, err := readLengthPrefixed[uint8, byte](r)
 	if err != nil {
@@ -1148,16 +1196,73 @@ func decodeEventDataEFIHandoffTablePointers2(data []byte) (out *EFIHandoffTableP
 	return out, nil
 }
 
+func (e *EFIHandoffTablePointers2) String() string {
+	var builder bytes.Buffer
+	fmt.Fprintf(&builder, "UEFI_HANDOFF_TABLE_POINTERS2{\n\tTableDescription: %q,\n\tTableEntries: [", e.TableDescription)
+	for _, entry := range e.TableEntries {
+		fmt.Fprintf(&builder, "\n\t\t%s", entry)
+	}
+	fmt.Fprintf(&builder, "\n\t]\n}")
+	return builder.String()
+}
+
+func (e *EFIHandoffTablePointers2) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (e *EFIHandoffTablePointers2) Write(w io.Writer) error {
+	if err := writeLengthPrefixed[uint8](w, []byte(e.TableDescription)); err != nil {
+		return err
+	}
+
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(e.TableEntries))); err != nil {
+		return err
+	}
+	for _, table := range e.TableEntries {
+		if err := table.Write(w); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // EFIPlatformFirmwareBlob corresponds to UEFI_PLATFORM_FIRMWARE_BLOB and is the event data for EV_EFI_PLATFORM_FIRMWARE_BLOB
 // and some EV_POST_CODE events. This is informative.
 type EFIPlatformFirmwareBlob struct {
-	rawEventData
 	BlobBase   efi.PhysicalAddress
 	BlobLength uint64
 }
 
+func decodeEventDataEFIPlatformFirmwareBlob(data []byte) (*EFIPlatformFirmwareBlob, error) {
+	r := bytes.NewReader(data)
+
+	d := new(EFIPlatformFirmwareBlob)
+
+	if err := binary.Read(r, binary.LittleEndian, &d.BlobBase); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &d.BlobLength); err != nil {
+		return nil, ioerr.EOFIsUnexpected(err)
+	}
+
+	return d, nil
+}
+
 func (b *EFIPlatformFirmwareBlob) String() string {
 	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: %#x, BlobLength:%d}", b.BlobBase, b.BlobLength)
+}
+
+func (e *EFIPlatformFirmwareBlob) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
 }
 
 func (b *EFIPlatformFirmwareBlob) Write(w io.Writer) error {
@@ -1171,52 +1276,18 @@ func (b *EFIPlatformFirmwareBlob) Write(w io.Writer) error {
 	return nil
 }
 
-func decodeEventDataEFIPlatformFirmwareBlob(data []byte) (*EFIPlatformFirmwareBlob, error) {
-	r := bytes.NewReader(data)
-
-	d := &EFIPlatformFirmwareBlob{rawEventData: data}
-
-	if err := binary.Read(r, binary.LittleEndian, &d.BlobBase); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-	if err := binary.Read(r, binary.LittleEndian, &d.BlobLength); err != nil {
-		return nil, ioerr.EOFIsUnexpected(err)
-	}
-
-	return d, nil
-}
-
 // EFIPlatformFirmwareBlob2 corresponds to UEFI_PLATFORM_FIRMWARE_BLOB2 and is the event data for
 // EV_EFI_PLATFORM_FIRMWARE_BLOB2 and some EV_POST_CODE2 events. This is informative.
 type EFIPlatformFirmwareBlob2 struct {
-	rawEventData
 	BlobDescription string
 	BlobBase        efi.PhysicalAddress
 	BlobLength      uint64
 }
 
-func (b *EFIPlatformFirmwareBlob2) String() string {
-	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:%q, BlobBase: %#x, BlobLength:%d}", b.BlobDescription, b.BlobBase, b.BlobLength)
-}
-
-func (b *EFIPlatformFirmwareBlob2) Write(w io.Writer) error {
-	if err := writeLengthPrefixed[uint8](w, []byte(b.BlobDescription)); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, b.BlobBase); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, b.BlobLength); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func decodeEventDataEFIPlatformFirmwareBlob2(data []byte) (*EFIPlatformFirmwareBlob2, error) {
 	r := bytes.NewReader(data)
 
-	d := &EFIPlatformFirmwareBlob2{rawEventData: data}
+	d := new(EFIPlatformFirmwareBlob2)
 
 	desc, err := readLengthPrefixed[uint8, byte](r)
 	if err != nil {
@@ -1236,4 +1307,30 @@ func decodeEventDataEFIPlatformFirmwareBlob2(data []byte) (*EFIPlatformFirmwareB
 	}
 
 	return d, nil
+}
+
+func (b *EFIPlatformFirmwareBlob2) String() string {
+	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:%q, BlobBase: %#x, BlobLength:%d}", b.BlobDescription, b.BlobBase, b.BlobLength)
+}
+
+func (e *EFIPlatformFirmwareBlob2) Bytes() []byte {
+	w := new(bytes.Buffer)
+	if err := e.Write(w); err != nil {
+		panic(err)
+	}
+	return w.Bytes()
+}
+
+func (b *EFIPlatformFirmwareBlob2) Write(w io.Writer) error {
+	if err := writeLengthPrefixed[uint8](w, []byte(b.BlobDescription)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, b.BlobBase); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, b.BlobLength); err != nil {
+		return err
+	}
+
+	return nil
 }
