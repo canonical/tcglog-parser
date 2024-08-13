@@ -40,6 +40,13 @@ func (d GUIDEventData) Write(w io.Writer) error {
 	return err
 }
 
+// ComputeGUIDEventDataDigest computes the digest for the specified GUIDEventData.
+func ComputeGUIDEventDataDigest(alg crypto.Hash, guid GUIDEventData) []byte {
+	h := alg.New()
+	h.Write(guid[:])
+	return h.Sum(nil)
+}
+
 // SpecIdEvent02 corresponds to the TCG_EfiSpecIdEventStruct type and is the
 // event data for a Specification ID Version EV_NO_ACTION event on EFI platforms
 // for TPM family 1.2.
@@ -1023,6 +1030,31 @@ func (e *EFIGPTData) Write(w io.Writer) error {
 func ComputeEFIGPTDataDigest(alg crypto.Hash, data *EFIGPTData) ([]byte, error) {
 	h := alg.New()
 	if err := data.Write(h); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
+}
+
+// ComputeEFIGPT2DataDigest computes a UEFI_GPT_DATA digest from the supplied data,
+// for the new EV_EFI_GPT_EVENT2 event type, which zeroes out personally identifiable
+// information (the disk GUID and each individual partition unique partition GUID).
+func ComputeEFIGPT2DataDigest(alg crypto.Hash, data *EFIGPTData) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	if err := data.Write(buf); err != nil {
+		return nil, err
+	}
+
+	data2, err := decodeEventDataEFIGPT(buf.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	data2.Hdr.DiskGUID = efi.GUID{}
+	for _, entry := range data2.Partitions {
+		entry.UniquePartitionGUID = efi.GUID{}
+	}
+
+	h := alg.New()
+	if err := data2.Write(h); err != nil {
 		return nil, err
 	}
 	return h.Sum(nil), nil

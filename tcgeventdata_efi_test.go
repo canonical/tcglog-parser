@@ -9,6 +9,7 @@ import (
 	"crypto"
 	_ "crypto/sha1"
 	_ "crypto/sha256"
+	_ "crypto/sha512"
 
 	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
@@ -545,6 +546,94 @@ func (s *tcgeventdataEfiSuite) TestComputeEFIGPTDataDigestSHA1(c *C) {
 	c.Check(digest, DeepEquals, decodeHexString(c, "4243b31b1b3a540afd2df40ab96f272bdab403f3"))
 }
 
+func (s *tcgeventdataEfiSuite) TestComputeEFIGPT2DataDigestSHA256(c *C) {
+	event := EFIGPTData{
+		Hdr: efi.PartitionTableHeader{
+			HeaderSize:               92,
+			MyLBA:                    1,
+			AlternateLBA:             4000797359,
+			FirstUsableLBA:           34,
+			LastUsableLBA:            4000797326,
+			DiskGUID:                 efi.MakeGUID(0xa4ae73c2, 0x0e2f, 0x4513, 0xbd3c, [...]uint8{0x45, 0x6d, 0xa7, 0xf7, 0xf0, 0xfd}),
+			PartitionEntryLBA:        2,
+			NumberOfPartitionEntries: 128,
+			SizeOfPartitionEntry:     128,
+			PartitionEntryArrayCRC32: 189081846},
+		Partitions: []*efi.PartitionEntry{
+			{
+				PartitionTypeGUID:   efi.MakeGUID(0xc12a7328, 0xf81f, 0x11d2, 0xba4b, [...]uint8{0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b}),
+				UniquePartitionGUID: efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60}),
+				StartingLBA:         2048,
+				EndingLBA:           1050623,
+				Attributes:          0,
+				PartitionName:       "EFI System Partition",
+			},
+			{
+				PartitionTypeGUID:   efi.MakeGUID(0x0fc63daf, 0x8483, 0x4772, 0x8e79, [...]uint8{0x3d, 0x69, 0xd8, 0x47, 0x7d, 0xe4}),
+				UniquePartitionGUID: efi.MakeGUID(0x631b17dc, 0xedb7, 0x4d1d, 0xa761, [...]uint8{0x6d, 0xce, 0x3e, 0xfc, 0xe4, 0x15}),
+				StartingLBA:         1050624,
+				EndingLBA:           2549759,
+				Attributes:          0,
+				PartitionName:       "",
+			},
+			{
+				PartitionTypeGUID:   efi.MakeGUID(0x0fc63daf, 0x8483, 0x4772, 0x8e79, [...]uint8{0x3d, 0x69, 0xd8, 0x47, 0x7d, 0xe4}),
+				UniquePartitionGUID: efi.MakeGUID(0xc64af521, 0x14f1, 0x4ef2, 0xadb5, [...]uint8{0x20, 0xb5, 0x9c, 0xa2, 0x33, 0x5a}),
+				StartingLBA:         2549760,
+				EndingLBA:           4000796671,
+				Attributes:          0,
+				PartitionName:       "",
+			}}}
+
+	digest, err := ComputeEFIGPT2DataDigest(crypto.SHA256, &event)
+	c.Check(err, IsNil)
+	c.Check(digest, DeepEquals, decodeHexString(c, "007d3af33a1f72dc640a5e30f39752fdcd0ec7e51dd3c9c0b70dd90d09352406"))
+}
+
+func (s *tcgeventdataEfiSuite) TestComputeEFIGPT2DataDigestSHA256DifferentGUIDs(c *C) {
+	event := EFIGPTData{
+		Hdr: efi.PartitionTableHeader{
+			HeaderSize:               92,
+			MyLBA:                    1,
+			AlternateLBA:             4000797359,
+			FirstUsableLBA:           34,
+			LastUsableLBA:            4000797326,
+			DiskGUID:                 efi.MakeGUID(0xa4ae73c2, 0x0e2f, 0x4513, 0xbd3c, [...]uint8{0x45, 0x6d, 0xa7, 0xf7, 0xf1, 0xfd}),
+			PartitionEntryLBA:        2,
+			NumberOfPartitionEntries: 128,
+			SizeOfPartitionEntry:     128,
+			PartitionEntryArrayCRC32: 189081846},
+		Partitions: []*efi.PartitionEntry{
+			{
+				PartitionTypeGUID:   efi.MakeGUID(0xc12a7328, 0xf81f, 0x11d2, 0xba4b, [...]uint8{0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b}),
+				UniquePartitionGUID: efi.MakeGUID(0xc64af521, 0x14f1, 0x4ef2, 0xadb5, [...]uint8{0x20, 0xb5, 0x9c, 0xa2, 0x33, 0x5a}),
+				StartingLBA:         2048,
+				EndingLBA:           1050623,
+				Attributes:          0,
+				PartitionName:       "EFI System Partition",
+			},
+			{
+				PartitionTypeGUID:   efi.MakeGUID(0x0fc63daf, 0x8483, 0x4772, 0x8e79, [...]uint8{0x3d, 0x69, 0xd8, 0x47, 0x7d, 0xe4}),
+				UniquePartitionGUID: efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60}),
+				StartingLBA:         1050624,
+				EndingLBA:           2549759,
+				Attributes:          0,
+				PartitionName:       "",
+			},
+			{
+				PartitionTypeGUID:   efi.MakeGUID(0x0fc63daf, 0x8483, 0x4772, 0x8e79, [...]uint8{0x3d, 0x69, 0xd8, 0x47, 0x7d, 0xe4}),
+				UniquePartitionGUID: efi.MakeGUID(0x631b17dc, 0xedb7, 0x4d1d, 0xa761, [...]uint8{0x6d, 0xce, 0x3e, 0xfc, 0xe4, 0x15}),
+				StartingLBA:         2549760,
+				EndingLBA:           4000796671,
+				Attributes:          0,
+				PartitionName:       "",
+			}}}
+
+	digest, err := ComputeEFIGPT2DataDigest(crypto.SHA256, &event)
+	c.Check(err, IsNil)
+	c.Check(digest, DeepEquals, decodeHexString(c, "007d3af33a1f72dc640a5e30f39752fdcd0ec7e51dd3c9c0b70dd90d09352406"))
+}
+
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob(c *C) {
 	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
 	e, err := DecodeEventDataEFIPlatformFirmwareBlob(data)
@@ -646,4 +735,19 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEventNotASCII(c *C) {
 	data := []byte("😇\x00")
 	_, err := DecodeEventDataEFIHCRTMEvent(data)
 	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+}
+
+func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA256(c *C) {
+	digest := ComputeGUIDEventDataDigest(crypto.SHA256, GUIDEventData(efi.MakeGUID(0x821aca26, 0x29ea, 0x4993, 0x839f, [...]byte{0x59, 0x7f, 0xc0, 0x21, 0x70, 0x8d})))
+	c.Check(digest, DeepEquals, decodeHexString(c, "59b1f92051a43fea7ac3a846f2714c3e041a4153d581acd585914bcff2ad2781"))
+}
+
+func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA384(c *C) {
+	digest := ComputeGUIDEventDataDigest(crypto.SHA384, GUIDEventData(efi.MakeGUID(0x821aca26, 0x29ea, 0x4993, 0x839f, [...]byte{0x59, 0x7f, 0xc0, 0x21, 0x70, 0x8d})))
+	c.Check(digest, DeepEquals, decodeHexString(c, "cb8fefb4f37b16be04f12330c558bed126333d37ea612dfe1132c0002ce627fb8788417d721622e1e136493dadb22c89"))
+}
+
+func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA256_2(c *C) {
+	digest := ComputeGUIDEventDataDigest(crypto.SHA256, GUIDEventData(efi.MakeGUID(0xee993080, 0x5197, 0x4d4e, 0xb63c, [...]byte{0xf1, 0xf7, 0x41, 0x3e, 0x33, 0xce})))
+	c.Check(digest, DeepEquals, decodeHexString(c, "9887eee09413e1bac0376540f43816be7e43e719e9a21a907fe2e03c61dd7ce6"))
 }

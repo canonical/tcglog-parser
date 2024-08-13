@@ -21,7 +21,9 @@ import (
 	"github.com/canonical/tcglog-parser/internal/ioerr"
 )
 
-// separatorErrorDigests are the digests of uint32(1) for various algorithms.
+// separatorErrorDigests are the digests of uint32(1) for various algorithms, used
+// to identify EV_SEPARATOR events that signal an error, where the digest is the tagged
+// hash of uint32(1) but the event data contains information about the error.
 var separatorErrorDigests = map[tpm2.HashAlgorithmId]tpm2.Digest{
 	tpm2.HashAlgorithmSHA1: tpm2.Digest{0x3c, 0x58, 0x56, 0x4, 0xe8, 0x7f, 0x85, 0x59, 0x73, 0x73, 0x1f, 0xea, 0x83, 0xe2, 0x1f, 0xab, 0x93, 0x92, 0xd2, 0xfc},
 	tpm2.HashAlgorithmSHA256: tpm2.Digest{0x67, 0xab, 0xdd, 0x72, 0x10, 0x24, 0xf0, 0xff, 0x4e, 0xb, 0x3f, 0x4c, 0x2f, 0xc1, 0x3b, 0xc5, 0xba, 0xd4, 0x2d, 0xb,
@@ -59,9 +61,18 @@ func (d StringEventData) Bytes() []byte {
 	return []byte(d)
 }
 
+// ComputeStringEventDigest computes the digest associated with the supplied string, for
+// events where the data is not informative. The function assumes that the string is
+// ASCII encoded and measured without a terminating NULL byte.
+func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
+	h := alg.New()
+	io.WriteString(h, str)
+	return h.Sum(nil)
+}
+
 // NullTerminatedStringEventData corresponds to event data that is a NULL terminated
 // ASCII string. As with other strings, the go representation is not NULL terminated.
-// It may or may not be informative.
+// It's only use in this package is for EV_S_CRTM_CONTENTS, which is informative.
 type NullTerminatedStringEventData string
 
 func (d NullTerminatedStringEventData) String() string {
@@ -82,7 +93,9 @@ func (d NullTerminatedStringEventData) Bytes() []byte {
 
 // NullTerminatedUCS2StringEventData corresponds to event data that is a NULL
 // terminated UCS2 string. As with other strings, the go representation is not
-// NULL terminated and is represented in UTF8. It may or may not be informative.
+// NULL terminated and is represented in UTF8. It's only use in this package is
+// for EV_S_CRTM_VERSION, which is not informative (the event digest is the tagged
+// hash of this event data).
 type NullTerminatedUCS2StringEventData string
 
 func (d NullTerminatedUCS2StringEventData) String() string {
@@ -105,12 +118,14 @@ func (d NullTerminatedUCS2StringEventData) Bytes() []byte {
 
 }
 
-// ComputeStringEventDigest computes the digest associated with the supplied string, for
-// events where the data is not informative. The function assumes that the string is
-// ASCII encoded and measured without a terminating NULL byte.
-func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
+// ComputeNullTerminatedUCS2StringEventDigest computes the digest for the supplied string,
+// for events where the event data is not informative and is represented by a NULL terminated
+// UCS2 string. The supplied string must be UTF8 without a NULL termination.
+func ComputeNullTerminatedUCS2StringEventDigest(alg crypto.Hash, str string) []byte {
+	ucs2str := efi.ConvertUTF8ToUCS2(str)
+	ucs2str = append(ucs2str, 0)
 	h := alg.New()
-	io.WriteString(h, str)
+	binary.Write(h, binary.LittleEndian, ucs2str)
 	return h.Sum(nil)
 }
 
@@ -301,7 +316,8 @@ func decodeEventDataPostCode2(data []byte) (EventData, error) {
 	return decodeEventDataEFIPlatformFirmwareBlob2(data)
 }
 
-// TaggedEvent corresponds to TCG_PCClientTaggedEvent
+// TaggedEvent corresponds to TCG_PCClientTaggedEvent. It is not informative - ie, the
+// event digest should be the tagged hash of this field.
 type TaggedEvent struct {
 	EventID uint32
 	Data    []byte
@@ -326,7 +342,7 @@ func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
 }
 
 func (e *TaggedEvent) String() string {
-	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %x}", e.EventID, e.Data)
+	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %#x}", e.EventID, e.Data)
 }
 
 func (e *TaggedEvent) Bytes() []byte {
@@ -349,6 +365,13 @@ func (e *TaggedEvent) Write(w io.Writer) error {
 	return nil
 }
 
+// ComputeTaggedEventDigest computes the digest for the specified TaggedEvent.
+func ComputeTaggedEventDigest(alg crypto.Hash, ev *TaggedEvent) []byte {
+	h := alg.New()
+	ev.Write(h)
+	return h.Sum(nil)
+}
+
 func decodeEventDataSCRTMContents(data []byte) (EventData, error) {
 	// If measured by a H-CRTM event, this may be a NULL terminated string
 	if isPrintableASCII(data, true) {
@@ -364,12 +387,12 @@ func decodeEventDataSCRTMContents(data []byte) (EventData, error) {
 
 func decodeEventDataSCRTMVersion(data []byte) (EventData, error) {
 	if isPrintableUCS2(data, true) {
-		r := bytes.NewReader(data[:len(data)-2])
-		var ucs2Str []uint16
+		r := bytes.NewReader(data)
+		ucs2Str := make([]uint16, len(data)/2)
 		if err := binary.Read(r, binary.LittleEndian, &ucs2Str); err != nil {
 			return nil, err
 		}
-		str := efi.ConvertUTF16ToUTF8(ucs2Str)
+		str := efi.ConvertUTF16ToUTF8(ucs2Str[:len(ucs2Str)-1])
 		return NullTerminatedUCS2StringEventData(str), nil
 	}
 	if len(data) == 16 {

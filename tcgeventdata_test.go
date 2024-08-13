@@ -10,6 +10,7 @@ import (
 	_ "crypto/sha1"
 	_ "crypto/sha256"
 
+	efi "github.com/canonical/go-efilib"
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
 
@@ -46,9 +47,62 @@ func (s *tcgeventdataSuite) TestStringEventDataWrite2(c *C) {
 	c.Check(w.Bytes(), DeepEquals, []byte("bar"))
 }
 
+func (s *tcgeventdataSuite) TestNullTerminatedStringEventDataString(c *C) {
+	event := NullTerminatedStringEventData("foo")
+	c.Check(event.String(), Equals, "foo")
+
+	event = NullTerminatedStringEventData("bar")
+	c.Check(event.String(), Equals, "bar")
+}
+
+func (s *tcgeventdataSuite) TestNullTerminatedStringEventDataWrite1(c *C) {
+	event := NullTerminatedStringEventData("foo")
+
+	w := new(bytes.Buffer)
+	c.Check(event.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte("foo\x00"))
+}
+
+func (s *tcgeventdataSuite) TestNullTerminatedStringEventDataWrite2(c *C) {
+	event := NullTerminatedStringEventData("bar")
+
+	w := new(bytes.Buffer)
+	c.Check(event.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte("bar\x00"))
+}
+
+func (s *tcgeventdataSuite) TestNullTerminatedUCS2StringEventDataString(c *C) {
+	event := NullTerminatedUCS2StringEventData("⅒")
+	c.Check(event.String(), Equals, "⅒")
+
+	event = NullTerminatedUCS2StringEventData("⅙")
+	c.Check(event.String(), Equals, "⅙")
+}
+
+func (s *tcgeventdataSuite) TestNullTerminatedUCS2StringEventDataWrite1(c *C) {
+	event := NullTerminatedUCS2StringEventData("⅒")
+
+	w := new(bytes.Buffer)
+	c.Check(event.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte{0x52, 0x21, 0x00, 0x00})
+}
+
+func (s *tcgeventdataSuite) TestNullTerminatedUCS2StringEventDataWrite2(c *C) {
+	event := NullTerminatedUCS2StringEventData("⅙")
+
+	w := new(bytes.Buffer)
+	c.Check(event.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, []byte{0x59, 0x21, 0x00, 0x00})
+}
+
 func (s *tcgeventdataSuite) TestComputeStringEventDigest(c *C) {
 	c.Check(ComputeStringEventDigest(crypto.SHA256, "foo"), DeepEquals, decodeHexString(c, "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"))
 	c.Check(ComputeStringEventDigest(crypto.SHA1, "bar"), DeepEquals, decodeHexString(c, "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"))
+}
+
+func (s *tcgeventdataSuite) TestComputeNullTerminatedUCS2StringEventDigest(c *C) {
+	c.Check(ComputeNullTerminatedUCS2StringEventDigest(crypto.SHA256, "⅒"), DeepEquals, decodeHexString(c, "f647e5f2248cdf468b4740b2451346eeebd71cb74068f4c11a61511226f6c4c9"))
+	c.Check(ComputeNullTerminatedUCS2StringEventDigest(crypto.SHA1, "⅙"), DeepEquals, decodeHexString(c, "1773e59232aa507adb8eae9aac4d5b72162f53e1"))
 }
 
 func (s *tcgeventdataSuite) TestSeparatorEventDataIsError(c *C) {
@@ -333,4 +387,103 @@ func (s *tcgeventdataSuite) TestDecodeEventDataPostCode2WithBlob(c *C) {
 	c.Check(ev.BlobDescription, Equals, "POST CODE")
 	c.Check(uint64(ev.BlobBase), Equals, uint64(4290904064))
 	c.Check(ev.BlobLength, Equals, uint64(393216))
+}
+
+func (s *tcgeventdataSuite) TestTaggedEventString(c *C) {
+	ev := &TaggedEvent{
+		EventID: 105,
+		Data:    []byte("foo"),
+	}
+	c.Check(ev.String(), Equals, "TCG_PCClientTaggedEvent{taggedEventID: 105, taggedEventData: 0x666f6f}")
+
+	ev = &TaggedEvent{
+		EventID: 5761,
+		Data:    []byte("bar"),
+	}
+	c.Check(ev.String(), Equals, "TCG_PCClientTaggedEvent{taggedEventID: 5761, taggedEventData: 0x626172}")
+}
+
+func (s *tcgeventdataSuite) TestTaggedEventWrite1(c *C) {
+	ev := &TaggedEvent{
+		EventID: 105,
+		Data:    []byte("foo"),
+	}
+	w := new(bytes.Buffer)
+	c.Check(ev.Write(w), IsNil)
+	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "6900000003000000666f6f"))
+}
+
+func (s *tcgeventdataSuite) TestTaggedEventWrite2(c *C) {
+	ev := &TaggedEvent{
+		EventID: 5761,
+		Data:    []byte("bar"),
+	}
+	w := new(bytes.Buffer)
+	c.Check(ev.Write(w), IsNil)
+	c.Logf("%x", w.Bytes())
+	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "8116000003000000626172"))
+}
+
+func (s *tcgeventdataSuite) TestComputeTaggedEventDigest(c *C) {
+	c.Check(ComputeTaggedEventDigest(crypto.SHA256, &TaggedEvent{EventID: 105, Data: []byte("foo")}), DeepEquals, decodeHexString(c, "716e9d513087b01e1a12d3bff8203cda2928d1f7995d882bfd8652f3f6e0ae76"))
+	c.Check(ComputeTaggedEventDigest(crypto.SHA1, &TaggedEvent{EventID: 5761, Data: []byte("bar")}), DeepEquals, decodeHexString(c, "a03dbcfe30a3846c0963df1553bbfb25bcea13b2"))
+}
+
+func (s *tcgeventdataSuite) TestDecodeSCRTMContentsHCRTM(c *C) {
+	data := []byte("H-CRTM measured S-CRTM contents\x00")
+	ev, err := DecodeEventDataSCRTMContents(data)
+	c.Assert(err, IsNil)
+	c.Check(ev.Bytes(), DeepEquals, data)
+	str, ok := ev.(NullTerminatedStringEventData)
+	c.Check(ok, Equals, true)
+	c.Check(str, Equals, NullTerminatedStringEventData("H-CRTM measured S-CRTM contents"))
+}
+
+func (s *tcgeventdataSuite) TestDecodeSCRTMContentsPlatformBlob(c *C) {
+	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
+	ev, err := DecodeEventDataSCRTMContents(data)
+	c.Assert(err, IsNil)
+	c.Check(ev.Bytes(), DeepEquals, data)
+	blob, ok := ev.(*EFIPlatformFirmwareBlob)
+	c.Check(ok, Equals, true)
+	c.Check(blob.BlobBase, Equals, efi.PhysicalAddress(4279701504))
+	c.Check(blob.BlobLength, Equals, uint64(6619136))
+}
+
+func (s *tcgeventdataSuite) TestDecodeSCRTMContentsPlatformBlob2(c *C) {
+	data := []byte{0x0f, 0x53, 0x2d, 0x43, 0x52, 0x54, 0x4d, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x73, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
+	ev, err := DecodeEventDataSCRTMContents(data)
+	c.Assert(err, IsNil)
+	c.Check(ev.Bytes(), DeepEquals, data)
+	blob, ok := ev.(*EFIPlatformFirmwareBlob2)
+	c.Check(ok, Equals, true)
+	c.Check(blob.BlobDescription, Equals, "S-CRTM contents")
+	c.Check(blob.BlobBase, Equals, efi.PhysicalAddress(4290904064))
+	c.Check(blob.BlobLength, Equals, uint64(393216))
+}
+
+func (s *tcgeventdataSuite) TestDecodeSCRTMVersionUCS2(c *C) {
+	data := []byte{0x31, 0x00, 0x2e, 0x00, 0x30, 0x00, 0x33, 0x00, 0x00, 0x00}
+	ev, err := DecodeEventDataSCRTMVersion(data)
+	c.Assert(err, IsNil)
+	c.Check(ev.Bytes(), DeepEquals, data)
+	str, ok := ev.(NullTerminatedUCS2StringEventData)
+	c.Check(ok, Equals, true)
+	c.Check(str, Equals, NullTerminatedUCS2StringEventData("1.03"))
+}
+
+func (s *tcgeventdataSuite) TestDecodeSCRTMVersionGUID(c *C) {
+	expectedGuid := efi.MakeGUID(0xec7aa64a, 0xbd0b, 0x4e7e, 0x91dd, [...]byte{0xf5, 0x74, 0x74, 0xfe, 0x03, 0x2d})
+	ev, err := DecodeEventDataSCRTMVersion(expectedGuid[:])
+	c.Assert(err, IsNil)
+	c.Check(ev.Bytes(), DeepEquals, []byte(expectedGuid[:]))
+	guid, ok := ev.(GUIDEventData)
+	c.Check(ok, Equals, true)
+	c.Check(guid, Equals, GUIDEventData(expectedGuid))
+}
+
+func (s *tcgeventdataSuite) TestDecodeSCRTMVersionInvalid(c *C) {
+	data := []byte{0x1, 0x2, 0x3}
+	_, err := DecodeEventDataSCRTMVersion(data)
+	c.Assert(err, ErrorMatches, `event data is not a NULL-terminated UCS2 string or a EFI_GUID`)
 }

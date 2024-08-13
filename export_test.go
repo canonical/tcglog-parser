@@ -11,6 +11,8 @@ var (
 	DecodeEventDataEFIVariable              = decodeEventDataEFIVariable
 	DecodeEventDataAction                   = decodeEventDataAction
 	DecodeEventDataNoAction                 = decodeEventDataNoAction
+	DecodeEventDataSCRTMContents            = decodeEventDataSCRTMContents
+	DecodeEventDataSCRTMVersion             = decodeEventDataSCRTMVersion
 	DecodeEventDataSeparator                = decodeEventDataSeparator
 	DecodeEventDataSystemdEFIStub           = decodeEventDataSystemdEFIStub
 	DecodeEventDataCompactHash              = decodeEventDataCompactHash
