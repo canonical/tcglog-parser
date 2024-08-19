@@ -738,16 +738,16 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEventNotASCII(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA256(c *C) {
-	digest := ComputeGUIDEventDataDigest(crypto.SHA256, GUIDEventData(efi.MakeGUID(0x821aca26, 0x29ea, 0x4993, 0x839f, [...]byte{0x59, 0x7f, 0xc0, 0x21, 0x70, 0x8d})))
+	digest := ComputeGUIDEventDataDigest(crypto.SHA256, efi.MakeGUID(0x821aca26, 0x29ea, 0x4993, 0x839f, [...]byte{0x59, 0x7f, 0xc0, 0x21, 0x70, 0x8d}))
 	c.Check(digest, DeepEquals, decodeHexString(c, "59b1f92051a43fea7ac3a846f2714c3e041a4153d581acd585914bcff2ad2781"))
 }
 
 func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA384(c *C) {
-	digest := ComputeGUIDEventDataDigest(crypto.SHA384, GUIDEventData(efi.MakeGUID(0x821aca26, 0x29ea, 0x4993, 0x839f, [...]byte{0x59, 0x7f, 0xc0, 0x21, 0x70, 0x8d})))
+	digest := ComputeGUIDEventDataDigest(crypto.SHA384, efi.MakeGUID(0x821aca26, 0x29ea, 0x4993, 0x839f, [...]byte{0x59, 0x7f, 0xc0, 0x21, 0x70, 0x8d}))
 	c.Check(digest, DeepEquals, decodeHexString(c, "cb8fefb4f37b16be04f12330c558bed126333d37ea612dfe1132c0002ce627fb8788417d721622e1e136493dadb22c89"))
 }
 
 func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA256_2(c *C) {
-	digest := ComputeGUIDEventDataDigest(crypto.SHA256, GUIDEventData(efi.MakeGUID(0xee993080, 0x5197, 0x4d4e, 0xb63c, [...]byte{0xf1, 0xf7, 0x41, 0x3e, 0x33, 0xce})))
+	digest := ComputeGUIDEventDataDigest(crypto.SHA256, efi.MakeGUID(0xee993080, 0x5197, 0x4d4e, 0xb63c, [...]byte{0xf1, 0xf7, 0x41, 0x3e, 0x33, 0xce}))
 	c.Check(digest, DeepEquals, decodeHexString(c, "9887eee09413e1bac0376540f43816be7e43e719e9a21a907fe2e03c61dd7ce6"))
 }

@@ -40,8 +40,8 @@ func (d GUIDEventData) Write(w io.Writer) error {
 	return err
 }
 
-// ComputeGUIDEventDataDigest computes the digest for the specified GUIDEventData.
-func ComputeGUIDEventDataDigest(alg crypto.Hash, guid GUIDEventData) []byte {
+// ComputeGUIDEventDataDigest computes the digest for the specified EFI_GUID.
+func ComputeGUIDEventDataDigest(alg crypto.Hash, guid efi.GUID) []byte {
 	h := alg.New()
 	h.Write(guid[:])
 	return h.Sum(nil)
