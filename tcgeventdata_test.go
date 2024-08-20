@@ -316,7 +316,7 @@ func (s *tcgeventdataSuite) TestDecodeEventDataActionGood(c *C) {
 func (s *tcgeventdataSuite) TestDecodeEventDataActionBad(c *C) {
 	data := []byte{0x02, 0xf6, 0x01}
 	_, err := DecodeEventDataAction(data)
-	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+	c.Check(err, ErrorMatches, `data does not contain printable ASCII that is not NULL terminated`)
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashGood(c *C) {
@@ -331,7 +331,7 @@ func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashGood(c *C) {
 func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashBad(c *C) {
 	data := []byte{0x02, 0xf6, 0x01}
 	_, err := DecodeEventDataCompactHash(data)
-	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+	c.Check(err, ErrorMatches, `data does not contain printable ASCII that is not NULL terminated`)
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataPostCodeString(c *C) {

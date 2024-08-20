@@ -734,7 +734,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEvent(c *C) {
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEventNotASCII(c *C) {
 	data := []byte("😇\x00")
 	_, err := DecodeEventDataEFIHCRTMEvent(data)
-	c.Check(err, ErrorMatches, `data does not contain printable ASCII`)
+	c.Check(err, ErrorMatches, `data does not contain printable ASCII that is not NULL terminated`)
 }
 
 func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA256(c *C) {

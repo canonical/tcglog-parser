@@ -204,7 +204,7 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func decodeEventDataAction(data []byte) (StringEventData, error) {
 	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII")
+		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
 	}
 	return StringEventData(data), nil
 }
@@ -297,7 +297,7 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 
 func decodeEventDataCompactHash(data []byte) (StringEventData, error) {
 	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII")
+		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
 	}
 	return StringEventData(data), nil
 }
@@ -318,7 +318,7 @@ func decodeEventDataPostCode2(data []byte) (EventData, error) {
 
 func decodeEventDataOmitBootDeviceEvents(data []byte) (StringEventData, error) {
 	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII")
+		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
 	}
 	return StringEventData(data), nil
 }

@@ -293,7 +293,7 @@ func decodeHCRTMComponentEvent(data []byte, r io.Reader) (*HCRTMComponentEventDa
 	}
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("ComponentDescription contains invalid ASCII")
+		return nil, fmt.Errorf("ComponentDescription does not contain printable ASCII that is not NULL terminated")
 	}
 	d.ComponentDescription = string(data)
 
@@ -341,7 +341,7 @@ func (d *HCRTMComponentEventData) Write(w io.Writer) error {
 func decodeEventDataEFIHCRTMEvent(data []byte) (StringEventData, error) {
 	// The spec says this should just be the string "HCRTM"
 	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII")
+		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
 	}
 	return StringEventData(data), nil
 }
@@ -433,7 +433,7 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformManufacturer contains invalid ASCII")
+		return nil, fmt.Errorf("PlatformManufacturer does not contain printable ASCII")
 	}
 	d.PlatformManufacturer = string(data)
 
@@ -447,7 +447,7 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformModel contains invalid ASCII")
+		return nil, fmt.Errorf("PlatformModel does not contain printable ASCII")
 	}
 	d.PlatformModel = string(data)
 
@@ -461,7 +461,7 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformVersion contains invalid ASCII")
+		return nil, fmt.Errorf("PlatformVersion does not contain printable ASCII")
 	}
 	d.PlatformVersion = string(data)
 
@@ -475,7 +475,7 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareManufacturer contains invalid ASCII")
+		return nil, fmt.Errorf("FirmwareManufacturer does not contain printable ASCII")
 	}
 	d.FirmwareManufacturer = string(data)
 
@@ -493,7 +493,7 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareVersion contains invalid ASCII")
+		return nil, fmt.Errorf("FirmwareVersion does not contain printable ASCII")
 	}
 	d.FirmwareVersion = string(data)
 
@@ -616,7 +616,7 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformModel contains invalid ASCII")
+		return nil, fmt.Errorf("PlatformModel does not contain printable ASCII")
 	}
 	d.PlatformModel = string(data)
 
@@ -630,7 +630,7 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformVersion contains invalid ASCII")
+		return nil, fmt.Errorf("PlatformVersion does not contain printable ASCII")
 	}
 	d.PlatformVersion = string(data)
 
@@ -644,7 +644,7 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareManufacturer contains invalid ASCII")
+		return nil, fmt.Errorf("FirmwareManufacturer does not contain printable ASCII")
 	}
 	d.FirmwareManufacturer = string(data)
 
@@ -662,7 +662,7 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	data = bytes.TrimSuffix(data, []byte{0x00})
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareVersion contains invalid ASCII")
+		return nil, fmt.Errorf("FirmwareVersion does not contain printable ASCII")
 	}
 	d.FirmwareVersion = string(data)
 
@@ -1185,7 +1185,7 @@ func decodeEventDataEFIHandoffTablePointers2(data []byte) (out *EFIHandoffTableP
 	}
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(desc, false) {
-		return nil, fmt.Errorf("TableDescription contains invalid ASCII")
+		return nil, fmt.Errorf("TableDescription does not contain printable ASCII that is not NULL terminated")
 	}
 	out.TableDescription = string(desc)
 
@@ -1327,7 +1327,7 @@ func decodeEventDataEFIPlatformFirmwareBlob2(data []byte) (*EFIPlatformFirmwareB
 	}
 	// Make sure we have valid printable ASCII
 	if !isPrintableASCII(desc, false) {
-		return nil, fmt.Errorf("BlobDescription contains invalid ASCII")
+		return nil, fmt.Errorf("BlobDescription does not contain printable ASCII that is not NULL terminated")
 	}
 	d.BlobDescription = string(desc)
 
