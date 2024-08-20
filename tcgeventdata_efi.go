@@ -427,41 +427,29 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("PlatformManufacturer is not NULL terminated")
+	str, err := decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode PlatformManufacturer: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformManufacturer does not contain printable ASCII")
-	}
-	d.PlatformManufacturer = string(data)
+	d.PlatformManufacturer = string(str)
 
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("PlatformModel is not NULL terminated")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode PlatformModel: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformModel does not contain printable ASCII")
-	}
-	d.PlatformModel = string(data)
+	d.PlatformModel = string(str)
 
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("PlatformVersion is not NULL terminated")
-	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformVersion does not contain printable ASCII")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode PlatformVersion: %w", err)
 	}
 	d.PlatformVersion = string(data)
 
@@ -469,15 +457,11 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("FirmwareManufacturer is not NULL terminated")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode FirmwareManufacturer: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareManufacturer does not contain printable ASCII")
-	}
-	d.FirmwareManufacturer = string(data)
+	d.FirmwareManufacturer = string(str)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.FirmwareManufacturerId); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -487,15 +471,11 @@ func decodeBIMReferenceManifestEvent2(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("FirmwareVersion is not NULL terminated")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode FirmwareVersion: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareVersion does not contain printable ASCII")
-	}
-	d.FirmwareVersion = string(data)
+	d.FirmwareVersion = string(str)
 
 	return d, nil
 }
@@ -536,22 +516,22 @@ func (d *SP800_155_PlatformIdEventData2) Write(w io.Writer) error {
 	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformManufacturer), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformManufacturer).Bytes()); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformModel), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformModel).Bytes()); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformVersion), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformVersion).Bytes()); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareManufacturer), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareManufacturer).Bytes()); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
 		return err
 	}
-	return writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00))
+	return writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareVersion).Bytes())
 }
 
 type LocatorType uint32
@@ -596,41 +576,29 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("PlatformManufacturer is not NULL terminated")
+	str, err := decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode PlatformManufacturer: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformManufacturer contains invalid ASCII")
-	}
-	d.PlatformManufacturer = string(data)
+	d.PlatformManufacturer = string(str)
 
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("PlatformModel is not NULL terminated")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode PlatformModel: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformModel does not contain printable ASCII")
-	}
-	d.PlatformModel = string(data)
+	d.PlatformModel = string(str)
 
 	data, err = readLengthPrefixed[uint8, byte](r)
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("PlatformVersion is not NULL terminated")
-	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("PlatformVersion does not contain printable ASCII")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode PlatformVersion: %w", err)
 	}
 	d.PlatformVersion = string(data)
 
@@ -638,15 +606,11 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("FirmwareManufacturer is not NULL terminated")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode FirmwareManufacturer: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareManufacturer does not contain printable ASCII")
-	}
-	d.FirmwareManufacturer = string(data)
+	d.FirmwareManufacturer = string(str)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.FirmwareManufacturerId); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -656,15 +620,11 @@ func decodeBIMReferenceManifestEvent3(data []byte, r io.Reader) (*SP800_155_Plat
 	if err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
 	}
-	if !bytes.HasSuffix(data, []byte{0x00}) {
-		return nil, errors.New("FirmwareVersion is not NULL terminated")
+	str, err = decodeNullTerminatedStringEventData(data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode FirmwareVersion: %w", err)
 	}
-	data = bytes.TrimSuffix(data, []byte{0x00})
-	// Make sure we have valid printable ASCII
-	if !isPrintableASCII(data, false) {
-		return nil, fmt.Errorf("FirmwareVersion does not contain printable ASCII")
-	}
-	d.FirmwareVersion = string(data)
+	d.FirmwareVersion = string(str)
 
 	if err := binary.Read(r, binary.LittleEndian, &d.RIMLocatorType); err != nil {
 		return nil, ioerr.EOFIsUnexpected(err)
@@ -754,22 +714,22 @@ func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
 	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformManufacturer), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformManufacturer).Bytes()); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformModel), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformModel).Bytes()); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.PlatformVersion), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformVersion).Bytes()); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareManufacturer), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareManufacturer).Bytes()); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, append([]byte(d.FirmwareVersion), 0x00)); err != nil {
+	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareVersion).Bytes()); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.LittleEndian, d.RIMLocatorType); err != nil {

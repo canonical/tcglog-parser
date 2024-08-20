@@ -75,6 +75,13 @@ func ComputeStringEventDigest(alg crypto.Hash, str string) []byte {
 // It's only use in this package is for EV_S_CRTM_CONTENTS, which is informative.
 type NullTerminatedStringEventData string
 
+func decodeNullTerminatedStringEventData(data []byte) (NullTerminatedStringEventData, error) {
+	if !isPrintableASCII(data, true) {
+		return "", errors.New("data does not contain printable ASCII that is NULL terminated")
+	}
+	return NullTerminatedStringEventData(data[:len(data)-1]), nil
+}
+
 func (d NullTerminatedStringEventData) String() string {
 	return string(d)
 }
@@ -97,6 +104,20 @@ func (d NullTerminatedStringEventData) Bytes() []byte {
 // for EV_S_CRTM_VERSION, which is not informative (the event digest is the tagged
 // hash of this event data).
 type NullTerminatedUCS2StringEventData string
+
+func decodeNullTerminatedUCS2StringEventData(data []byte) (NullTerminatedUCS2StringEventData, error) {
+	if !isPrintableUCS2(data, true) {
+		return "", errors.New("data does not contain printable UCS2 that is NULL terminated")
+	}
+
+	r := bytes.NewReader(data)
+	ucs2Str := make([]uint16, len(data)/2)
+	if err := binary.Read(r, binary.LittleEndian, &ucs2Str); err != nil {
+		return "", err
+	}
+	str := efi.ConvertUTF16ToUTF8(ucs2Str[:len(ucs2Str)-1])
+	return NullTerminatedUCS2StringEventData(str), nil
+}
 
 func (d NullTerminatedUCS2StringEventData) String() string {
 	return string(d)
@@ -382,7 +403,7 @@ func ComputeTaggedEventDigest(alg crypto.Hash, ev *TaggedEvent) []byte {
 func decodeEventDataSCRTMContents(data []byte) (EventData, error) {
 	// If measured by a H-CRTM event, this may be a NULL terminated string
 	if isPrintableASCII(data, true) {
-		return NullTerminatedStringEventData(data[:len(data)-1]), nil
+		return decodeNullTerminatedStringEventData(data)
 	}
 	// Try UEFI_PLATFORM_FIRMWARE_BLOB
 	if len(data) == 16 { // The size of a UEFI_PLATFORM_FIRMWARE_BLOB
@@ -394,13 +415,7 @@ func decodeEventDataSCRTMContents(data []byte) (EventData, error) {
 
 func decodeEventDataSCRTMVersion(data []byte) (EventData, error) {
 	if isPrintableUCS2(data, true) {
-		r := bytes.NewReader(data)
-		ucs2Str := make([]uint16, len(data)/2)
-		if err := binary.Read(r, binary.LittleEndian, &ucs2Str); err != nil {
-			return nil, err
-		}
-		str := efi.ConvertUTF16ToUTF8(ucs2Str[:len(ucs2Str)-1])
-		return NullTerminatedUCS2StringEventData(str), nil
+		return decodeNullTerminatedUCS2StringEventData(data)
 	}
 	if len(data) == 16 {
 		guid, err := efi.ReadGUID(bytes.NewReader(data))
