@@ -316,6 +316,13 @@ func decodeEventDataPostCode2(data []byte) (EventData, error) {
 	return decodeEventDataEFIPlatformFirmwareBlob2(data)
 }
 
+func decodeEventDataOmitBootDeviceEvents(data []byte) (StringEventData, error) {
+	if !isPrintableASCII(data, false) {
+		return "", errors.New("data does not contain printable ASCII")
+	}
+	return StringEventData(data), nil
+}
+
 // TaggedEvent corresponds to TCG_PCClientTaggedEvent. It is not informative - ie, the
 // event digest should be the tagged hash of this field.
 type TaggedEvent struct {
@@ -444,6 +451,8 @@ func decodeEventDataTCG(data []byte, eventType EventType, digests DigestMap) (ou
 		return decodeEventDataSCRTMContents(data)
 	case EventTypeSCRTMVersion:
 		return decodeEventDataSCRTMVersion(data)
+	case EventTypeOmitBootDeviceEvents:
+		return decodeEventDataOmitBootDeviceEvents(data)
 	default:
 	}
 
