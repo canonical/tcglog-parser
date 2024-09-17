@@ -1,0 +1,27 @@
+name: Tests
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+jobs:
+  tests:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        goversion:
+          - 1.18
+          - stable
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.goversion }}
+    - name: Checkout code
+      uses: actions/checkout@v3
+    - name: Build
+      run: go build -v -mod=readonly ./...
+    - name: Test
+      run: go test -v -race -p 1 -mod=readonly ./... -args -use-mssim
+    - name: Go vet
+      run: go vet ./...
