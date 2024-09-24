@@ -67,3 +67,7 @@ var (
 	FirmwareDebuggerEvent               = StringEventData("UEFI Debug Mode")
 	DMAProtectionDisabled               = StringEventData("DMA Protection Disabled")
 )
+
+var BootAttemptsOmitted = StringEventData("BOOT ATTEMPTS OMITTED")
+
+var HCRTM = StringEventData("HCRTM")

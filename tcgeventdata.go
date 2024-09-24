@@ -338,8 +338,8 @@ func decodeEventDataPostCode2(data []byte) (EventData, error) {
 }
 
 func decodeEventDataOmitBootDeviceEvents(data []byte) (StringEventData, error) {
-	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
+	if !bytes.Equal(data, BootAttemptsOmitted.Bytes()) {
+		return "", errors.New("data contains unexpected contents")
 	}
 	return StringEventData(data), nil
 }

@@ -487,3 +487,16 @@ func (s *tcgeventdataSuite) TestDecodeSCRTMVersionInvalid(c *C) {
 	_, err := DecodeEventDataSCRTMVersion(data)
 	c.Assert(err, ErrorMatches, `event data is not a NULL-terminated UCS2 string or a EFI_GUID`)
 }
+
+func (s *tcgeventdataSuite) TestDecodeEventDataOmitBootDeviceEventsGood(c *C) {
+	data := []byte{0x42, 0x4f, 0x4f, 0x54, 0x20, 0x41, 0x54, 0x54, 0x45, 0x4d, 0x50, 0x54, 0x53, 0x20, 0x4f, 0x4d, 0x49, 0x54, 0x54, 0x45, 0x44}
+	ev, err := DecodeEventDataOmitBootDeviceEvents(data)
+	c.Assert(err, IsNil)
+	c.Check(ev, Equals, BootAttemptsOmitted)
+}
+
+func (s *tcgeventdataSuite) TestDecodeEventDataOmitBootDeviceEventsUnexpectedData(c *C) {
+	data := []byte{0x66, 0x6f, 0x6f}
+	_, err := DecodeEventDataOmitBootDeviceEvents(data)
+	c.Check(err, ErrorMatches, `data contains unexpected contents`)
+}

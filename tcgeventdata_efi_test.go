@@ -724,17 +724,16 @@ func (s *tcgeventdataEfiSuite) TestHandoffTablePointersWrite(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEvent(c *C) {
-	data := []byte("HCRTM")
-	e, err := DecodeEventDataEFIHCRTMEvent(data)
+	data := []byte{0x48, 0x43, 0x52, 0x54, 0x4d}
+	ev, err := DecodeEventDataEFIHCRTMEvent(data)
 	c.Assert(err, IsNil)
-
-	c.Check(e.String(), Equals, "HCRTM")
+	c.Check(ev, Equals, HCRTM)
 }
 
-func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMEventNotASCII(c *C) {
-	data := []byte("😇\x00")
+func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIHCRTMUnexpectedData(c *C) {
+	data := []byte{0x66, 0x6f, 0x6f}
 	_, err := DecodeEventDataEFIHCRTMEvent(data)
-	c.Check(err, ErrorMatches, `data does not contain printable ASCII that is not NULL terminated`)
+	c.Check(err, ErrorMatches, `data contains unexpected contents`)
 }
 
 func (s *tcgeventdataEfiSuite) TestComputeGUIDEventDataDigestSHA256(c *C) {

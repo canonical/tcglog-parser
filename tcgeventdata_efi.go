@@ -340,8 +340,8 @@ func (d *HCRTMComponentEventData) Write(w io.Writer) error {
 
 func decodeEventDataEFIHCRTMEvent(data []byte) (StringEventData, error) {
 	// The spec says this should just be the string "HCRTM"
-	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
+	if !bytes.Equal(data, HCRTM.Bytes()) {
+		return "", errors.New("data contains unexpected contents")
 	}
 	return StringEventData(data), nil
 }
