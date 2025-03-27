@@ -182,7 +182,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		case *tcglog.StartupLocalityEventData:
 			return startupLocalityStringer(data.StartupLocality)
 		}
-	case event.EventType == tcglog.EventTypeEFIVariableBoot, event.EventType == tcglog.EventTypeEFIVariableBoot2:
+	case (event.EventType == tcglog.EventTypeEFIVariableBoot || event.EventType == tcglog.EventTypeEFIVariableBoot2) && !verbose:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
 			return event.Data
@@ -197,7 +197,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		return &bootOptionVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
-	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig && event.PCRIndex == 7:
+	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig && event.PCRIndex == 7 && !verbose:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
 			return event.Data
@@ -209,7 +209,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 			}
 		}
 		return &dbVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
-	case event.EventType == tcglog.EventTypeEFIVariableAuthority && event.PCRIndex == 7:
+	case event.EventType == tcglog.EventTypeEFIVariableAuthority && event.PCRIndex == 7 && !verbose:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
 			return event.Data
@@ -232,8 +232,8 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		return &simpleGptEventStringer{data}
-	case event.EventType == tcglog.EventTypeEFIBootServicesApplication, event.EventType == tcglog.EventTypeEFIBootServicesDriver,
-		event.EventType == tcglog.EventTypeEFIRuntimeServicesDriver:
+	case (event.EventType == tcglog.EventTypeEFIBootServicesApplication || event.EventType == tcglog.EventTypeEFIBootServicesDriver ||
+		event.EventType == tcglog.EventTypeEFIRuntimeServicesDriver) && !verbose:
 		if !verbose {
 			data, ok := event.Data.(*tcglog.EFIImageLoadEvent)
 			if !ok {
