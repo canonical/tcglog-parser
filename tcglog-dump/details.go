@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 	"strings"
 
 	efi "github.com/canonical/go-efilib"
@@ -168,9 +169,19 @@ func (s *simpleGptEventStringer) String() string {
 	return fmt.Sprint("DiskGUID: ", s.data.Hdr.DiskGUID)
 }
 
+type startupLocalityStringer uint8
+
+func (s startupLocalityStringer) String() string {
+	return "Startup Locality: " + strconv.Itoa(int(s))
+}
+
 func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
 	switch {
-	//case event.EventType == tcglog.EventTypeNoAction && !verbose:
+	case event.EventType == tcglog.EventTypeNoAction:
+		switch data := event.Data.(type) {
+		case *tcglog.StartupLocalityEventData:
+			return startupLocalityStringer(data.StartupLocality)
+		}
 	case event.EventType == tcglog.EventTypeEFIVariableBoot, event.EventType == tcglog.EventTypeEFIVariableBoot2:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
