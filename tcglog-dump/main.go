@@ -104,7 +104,10 @@ func run() error {
 		formatter.printEvent(event)
 
 		if opts.ExtractData != "" {
-			ioutil.WriteFile(fmt.Sprintf("%s-%d", opts.ExtractData, i), event.Data.Bytes(), 0644)
+			data, err := event.Data.Bytes()
+			if err == nil {
+				ioutil.WriteFile(fmt.Sprintf("%s-%d", opts.ExtractData, i), data, 0644)
+			}
 		}
 
 		if opts.ExtractVars != "" {

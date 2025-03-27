@@ -176,23 +176,27 @@ func (s *tcgeventdataEfiSuite) TestEFIVariableDataString2(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIVariable1(c *C) {
-	data := decodeHexString(c, "cbb219d73a3d9645a3bcdad00e67656f03000000000000004c000000000000006400620078002616c4c14c509240aca941f9"+
+	srcData := decodeHexString(c, "cbb219d73a3d9645a3bcdad00e67656f03000000000000004c000000000000006400620078002616c4c14c509240aca941f9"+
 		"369343284c0000000000000030000000a3a8baa01d04a848bc87c36d121b5e3de3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-	event, err := DecodeEventDataEFIVariable(data)
+	event, err := DecodeEventDataEFIVariable(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.VariableName, Equals, efi.ImageSecurityDatabaseGuid)
 	c.Check(event.UnicodeName, Equals, "dbx")
 	c.Check(event.VariableData, DeepEquals, decodeHexString(c, "2616c4c14c509240aca941f9369343284c0000000000000030000000a3a8baa01d04a848bc87c36d121b5e3de3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"))
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIVariable2(c *C) {
-	data := decodeHexString(c, "61dfe48bca93d211aa0d00e098032b8c0a00000000000000010000000000000053006500630075007200650042006f006f00740001")
-	event, err := DecodeEventDataEFIVariable(data)
+	srcData := decodeHexString(c, "61dfe48bca93d211aa0d00e098032b8c0a00000000000000010000000000000053006500630075007200650042006f006f00740001")
+	event, err := DecodeEventDataEFIVariable(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.VariableName, Equals, efi.GlobalVariable)
 	c.Check(event.UnicodeName, Equals, "SecureBoot")
 	c.Check(event.VariableData, DeepEquals, []byte{0x01})
@@ -261,12 +265,14 @@ func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventWrite(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIImageLoad1(c *C) {
-	data := decodeHexString(c, "18a03d560000000080371a000000000000000000000000003800000000000000040434005c004500460049005c007500620075"+
+	srcData := decodeHexString(c, "18a03d560000000080371a000000000000000000000000003800000000000000040434005c004500460049005c007500620075"+
 		"006e00740075005c0067007200750062007800360034002e0065006600690000007fff0400")
-	event, err := DecodeEventDataEFIImageLoad(data)
+	event, err := DecodeEventDataEFIImageLoad(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.LocationInMemory, Equals, efi.PhysicalAddress(0x563da018))
 	c.Check(event.LengthInMemory, Equals, uint64(1718144))
 	c.Check(event.LinkTimeAddress, Equals, uint64(0))
@@ -275,13 +281,15 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIImageLoad1(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIImageLoad2(c *C) {
-	data := decodeHexString(c, "18c0566500000000c0920e000000000000000000000000008a0000000000000002010c00d041030a0000000001010600001d01"+
+	srcData := decodeHexString(c, "18c0566500000000c0920e000000000000000000000000008a0000000000000002010c00d041030a0000000001010600001d01"+
 		"01060000000317100001000000000000000000000004012a0001000000000800000000000000001000000000007b94de66b2fd2545b75230d66bb2b960020204"+
 		"0434005c004500460049005c007500620075006e00740075005c007300680069006d007800360034002e0065006600690000007fff0400")
-	event, err := DecodeEventDataEFIImageLoad(data)
+	event, err := DecodeEventDataEFIImageLoad(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.LocationInMemory, Equals, efi.PhysicalAddress(0x6556c018))
 	c.Check(event.LengthInMemory, Equals, uint64(955072))
 	c.Check(event.LinkTimeAddress, Equals, uint64(0))
@@ -635,13 +643,15 @@ func (s *tcgeventdataEfiSuite) TestComputeEFIGPT2DataDigestSHA256DifferentGUIDs(
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob(c *C) {
-	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
-	e, err := DecodeEventDataEFIPlatformFirmwareBlob(data)
+	srcData := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
+	e, err := DecodeEventDataEFIPlatformFirmwareBlob(srcData)
 	c.Assert(err, IsNil)
 
 	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
-	c.Check(e.Bytes(), DeepEquals, data)
 
+	data, err := e.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(e.BlobBase, Equals, efi.PhysicalAddress(4279701504))
 	c.Check(e.BlobLength, Equals, uint64(6619136))
 }
@@ -658,14 +668,16 @@ func (s *tcgeventdataEfiSuite) TestPlatformFirmwareBlobWrite(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob2(c *C) {
-	data := []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
+	srcData := []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-	e, err := DecodeEventDataEFIPlatformFirmwareBlob2(data)
+	e, err := DecodeEventDataEFIPlatformFirmwareBlob2(srcData)
 	c.Assert(err, IsNil)
 
 	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216}")
-	c.Check(e.Bytes(), DeepEquals, data)
 
+	data, err := e.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(e.BlobDescription, Equals, "POST CODE")
 	c.Check(e.BlobBase, Equals, efi.PhysicalAddress(4290904064))
 	c.Check(e.BlobLength, Equals, uint64(393216))
@@ -685,11 +697,11 @@ func (s *tcgeventdataEfiSuite) TestPlatformFirmwareBlob2Write(c *C) {
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataHandoffTablePointers(c *C) {
-	data := []byte{
+	srcData := []byte{
 		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf2, 0x16, 0xf9, 0x3f, 0x20, 0x62, 0x6f, 0x44,
 		0x8d, 0x98, 0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f, 0x98, 0x6b, 0x57, 0x66, 0x00, 0x00, 0x00, 0x00,
 	}
-	e, err := DecodeEventDataEFIHandoffTablePointers(data)
+	e, err := DecodeEventDataEFIHandoffTablePointers(srcData)
 	c.Assert(err, IsNil)
 
 	c.Check(e.String(), Equals,
@@ -698,8 +710,10 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataHandoffTablePointers(c *C) {
 		UEFI_CONFIGURATION_TABLE{VendorGuid: 3ff916f2-6220-446f-8d98-bf08fe7ccb9f, VendorTable: 0x66576b98}
 	]
 }`)
-	c.Check(e.Bytes(), DeepEquals, data)
 
+	data, err := e.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Assert(len(e.TableEntries), Equals, 1)
 	c.Check(e.TableEntries[0].VendorGuid, Equals, efi.MakeGUID(0x3ff916f2, 0x6220, 0x446f, 0x8d98, [...]byte{0xbf, 0x08, 0xfe, 0x7c, 0xcb, 0x9f}))
 	c.Check(e.TableEntries[0].VendorTable, Equals, uintptr(0x66576b98))

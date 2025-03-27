@@ -26,7 +26,7 @@ type EventData interface {
 	fmt.Stringer
 
 	// Bytes is the raw event data bytes as they appear in the event log.
-	Bytes() []byte
+	Bytes() ([]byte, error)
 
 	// Write will serialize this event data to the supplied io.Writer.
 	Write(w io.Writer) error
@@ -34,8 +34,8 @@ type EventData interface {
 
 type rawEventData []byte
 
-func (b rawEventData) Bytes() []byte {
-	return []byte(b)
+func (b rawEventData) Bytes() ([]byte, error) {
+	return []byte(b), nil
 }
 
 // invalidEventData corresponds to an event data blob that failed to decode correctly.
@@ -84,8 +84,8 @@ func (d OpaqueEventData) String() string {
 	return string(s)
 }
 
-func (d OpaqueEventData) Bytes() []byte {
-	return []byte(d)
+func (d OpaqueEventData) Bytes() ([]byte, error) {
+	return []byte(d), nil
 }
 
 func (d OpaqueEventData) Write(w io.Writer) error {

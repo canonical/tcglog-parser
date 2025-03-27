@@ -46,12 +46,12 @@ func (e *SystemdEFIStubCommandline) String() string {
 	return "kernel commandline: " + e.Str
 }
 
-func (e *SystemdEFIStubCommandline) Bytes() []byte {
+func (e *SystemdEFIStubCommandline) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *SystemdEFIStubCommandline) Write(w io.Writer) error {

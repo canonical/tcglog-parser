@@ -53,7 +53,13 @@ func (f *blockFormatter) printEvent(event *tcglog.Event) {
 		fmt.Fprintf(f.dst, "DETAILS: %s\n", eventDetailsStringer(event, verbose))
 	}
 	if f.hexdump {
-		fmt.Fprintf(f.dst, "EVENT DATA:\n\t%s", strings.Replace(hex.Dump(event.Data.Bytes()), "\n", "\n\t", -1))
+		io.WriteString(f.dst, "EVENT DATA:\n\t")
+		data, err := event.Data.Bytes()
+		if err != nil {
+			fmt.Fprintf(f.dst, "Cannot obtain event data: %v", err)
+		} else {
+			fmt.Fprintf(f.dst, "%s", strings.Replace(hex.Dump(data), "\n", "\n\t", -1))
+		}
 	}
 	if f.varHexdump {
 		varData, ok := event.Data.(*tcglog.EFIVariableData)

@@ -27,8 +27,8 @@ import (
 // GUIDEventData corresponds to event data that is a EFI_GUID.
 type GUIDEventData efi.GUID
 
-func (d GUIDEventData) Bytes() []byte {
-	return d[:]
+func (d GUIDEventData) Bytes() ([]byte, error) {
+	return d[:], nil
 }
 
 func (d GUIDEventData) String() string {
@@ -94,12 +94,12 @@ func (e *SpecIdEvent02) String() string {
 		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
 }
 
-func (e *SpecIdEvent02) Bytes() []byte {
+func (e *SpecIdEvent02) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *SpecIdEvent02) Write(w io.Writer) error {
@@ -196,12 +196,12 @@ func (e *SpecIdEvent03) String() string {
 	return builder.String()
 }
 
-func (e *SpecIdEvent03) Bytes() []byte {
+func (e *SpecIdEvent03) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *SpecIdEvent03) Write(w io.Writer) error {
@@ -252,12 +252,12 @@ func (e *StartupLocalityEventData) String() string {
 	return fmt.Sprintf("EfiStartupLocalityEvent{ StartupLocality: %d }", e.StartupLocality)
 }
 
-func (e *StartupLocalityEventData) Bytes() []byte {
+func (e *StartupLocalityEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *StartupLocalityEventData) Write(w io.Writer) error {
@@ -314,12 +314,12 @@ func (d *HCRTMComponentEventData) String() string {
 	return fmt.Sprintf("TCG_HCRTMComponentEvent{ComponentDescription: %s, MeasurementFormatType: %x}", d.ComponentDescription, d.MeasurementFormatType)
 }
 
-func (e *HCRTMComponentEventData) Bytes() []byte {
+func (e *HCRTMComponentEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (d *HCRTMComponentEventData) Write(w io.Writer) error {
@@ -339,8 +339,7 @@ func (d *HCRTMComponentEventData) Write(w io.Writer) error {
 }
 
 func decodeEventDataEFIHCRTMEvent(data []byte) (StringEventData, error) {
-	// The spec says this should just be the string "HCRTM"
-	if !bytes.Equal(data, HCRTM.Bytes()) {
+	if !bytes.Equal(data, mustSucceed(HCRTM.Bytes())) {
 		return "", errors.New("data contains unexpected contents")
 	}
 	return StringEventData(data), nil
@@ -376,12 +375,12 @@ func (e *SP800_155_PlatformIdEventData) String() string {
 	return fmt.Sprintf("Sp800_155_PlatformId_Event{ VendorId: %d, ReferenceManifestGuid: %s }", e.VendorId, e.ReferenceManifestGuid)
 }
 
-func (e *SP800_155_PlatformIdEventData) Bytes() []byte {
+func (e *SP800_155_PlatformIdEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *SP800_155_PlatformIdEventData) Write(w io.Writer) error {
@@ -495,12 +494,12 @@ func (d *SP800_155_PlatformIdEventData2) String() string {
 	return w.String()
 }
 
-func (e *SP800_155_PlatformIdEventData2) Bytes() []byte {
+func (e *SP800_155_PlatformIdEventData2) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (d *SP800_155_PlatformIdEventData2) Write(w io.Writer) error {
@@ -516,22 +515,22 @@ func (d *SP800_155_PlatformIdEventData2) Write(w io.Writer) error {
 	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformManufacturer).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.PlatformManufacturer).Bytes())); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformModel).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.PlatformModel).Bytes())); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformVersion).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.PlatformVersion).Bytes())); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareManufacturer).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.FirmwareManufacturer).Bytes())); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
 		return err
 	}
-	return writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareVersion).Bytes())
+	return writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.FirmwareVersion).Bytes()))
 }
 
 type LocatorType uint32
@@ -693,12 +692,12 @@ func (d *SP800_155_PlatformIdEventData3) String() string {
 	return w.String()
 }
 
-func (e *SP800_155_PlatformIdEventData3) Bytes() []byte {
+func (e *SP800_155_PlatformIdEventData3) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
@@ -714,22 +713,22 @@ func (d *SP800_155_PlatformIdEventData3) Write(w io.Writer) error {
 	if _, err := w.Write(d.ReferenceManifestGuid[:]); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformManufacturer).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.PlatformManufacturer).Bytes())); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformModel).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.PlatformModel).Bytes())); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.PlatformVersion).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.PlatformVersion).Bytes())); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareManufacturer).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.FirmwareManufacturer).Bytes())); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.LittleEndian, d.FirmwareManufacturerId); err != nil {
 		return err
 	}
-	if err := writeLengthPrefixed[uint8](w, NullTerminatedStringEventData(d.FirmwareVersion).Bytes()); err != nil {
+	if err := writeLengthPrefixed[uint8](w, mustSucceed(NullTerminatedStringEventData(d.FirmwareVersion).Bytes())); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.LittleEndian, d.RIMLocatorType); err != nil {
@@ -794,12 +793,12 @@ func (e *EFIVariableData) String() string {
 		e.VariableName, e.UnicodeName, strings.Replace(hex.Dump(e.VariableData), "\n", "\n\t", -1))
 }
 
-func (e *EFIVariableData) Bytes() []byte {
+func (e *EFIVariableData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *EFIVariableData) Write(w io.Writer) error {
@@ -871,12 +870,12 @@ func (e *EFIImageLoadEvent) String() string {
 		"ImageLinkTimeAddress: 0x%016x, DevicePath: %s }", e.LocationInMemory, e.LengthInMemory, e.LinkTimeAddress, e.DevicePath)
 }
 
-func (e *EFIImageLoadEvent) Bytes() []byte {
+func (e *EFIImageLoadEvent) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *EFIImageLoadEvent) Write(w io.Writer) error {
@@ -949,12 +948,12 @@ func (e *EFIGPTData) String() string {
 	return builder.String()
 }
 
-func (e *EFIGPTData) Bytes() []byte {
+func (e *EFIGPTData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *EFIGPTData) Write(w io.Writer) error {
@@ -1106,12 +1105,12 @@ func (e *EFIHandoffTablePointers) String() string {
 	return builder.String()
 }
 
-func (e *EFIHandoffTablePointers) Bytes() []byte {
+func (e *EFIHandoffTablePointers) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *EFIHandoffTablePointers) Write(w io.Writer) error {
@@ -1198,12 +1197,12 @@ func (e *EFIHandoffTablePointers2) String() string {
 	return builder.String()
 }
 
-func (e *EFIHandoffTablePointers2) Bytes() []byte {
+func (e *EFIHandoffTablePointers2) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *EFIHandoffTablePointers2) Write(w io.Writer) error {
@@ -1249,12 +1248,12 @@ func (b *EFIPlatformFirmwareBlob) String() string {
 	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: %#x, BlobLength:%d}", b.BlobBase, b.BlobLength)
 }
 
-func (e *EFIPlatformFirmwareBlob) Bytes() []byte {
+func (e *EFIPlatformFirmwareBlob) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (b *EFIPlatformFirmwareBlob) Write(w io.Writer) error {
@@ -1305,12 +1304,12 @@ func (b *EFIPlatformFirmwareBlob2) String() string {
 	return fmt.Sprintf("UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:%q, BlobBase: %#x, BlobLength:%d}", b.BlobDescription, b.BlobBase, b.BlobLength)
 }
 
-func (e *EFIPlatformFirmwareBlob2) Bytes() []byte {
+func (e *EFIPlatformFirmwareBlob2) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (b *EFIPlatformFirmwareBlob2) Write(w io.Writer) error {

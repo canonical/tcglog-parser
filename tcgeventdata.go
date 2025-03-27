@@ -57,8 +57,8 @@ func (d StringEventData) Write(w io.Writer) error {
 	return err
 }
 
-func (d StringEventData) Bytes() []byte {
-	return []byte(d)
+func (d StringEventData) Bytes() ([]byte, error) {
+	return []byte(d), nil
 }
 
 // ComputeStringEventDigest computes the digest associated with the supplied string, for
@@ -94,8 +94,8 @@ func (d NullTerminatedStringEventData) Write(w io.Writer) error {
 	return err
 }
 
-func (d NullTerminatedStringEventData) Bytes() []byte {
-	return append([]byte(d), 0x00)
+func (d NullTerminatedStringEventData) Bytes() ([]byte, error) {
+	return append([]byte(d), 0x00), nil
 }
 
 // NullTerminatedUCS2StringEventData corresponds to event data that is a NULL
@@ -132,10 +132,10 @@ func (d NullTerminatedUCS2StringEventData) Write(w io.Writer) error {
 	return err
 }
 
-func (d NullTerminatedUCS2StringEventData) Bytes() []byte {
+func (d NullTerminatedUCS2StringEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	d.Write(w)
-	return w.Bytes()
+	return w.Bytes(), nil
 
 }
 
@@ -287,12 +287,12 @@ func (e *SeparatorEventData) String() string {
 	return fmt.Sprintf("ERROR: 0x%x", e.ErrorInfo)
 }
 
-func (e *SeparatorEventData) Bytes() []byte {
+func (e *SeparatorEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *SeparatorEventData) Write(w io.Writer) error {
@@ -338,7 +338,7 @@ func decodeEventDataPostCode2(data []byte) (EventData, error) {
 }
 
 func decodeEventDataOmitBootDeviceEvents(data []byte) (StringEventData, error) {
-	if !bytes.Equal(data, BootAttemptsOmitted.Bytes()) {
+	if !bytes.Equal(data, mustSucceed(BootAttemptsOmitted.Bytes())) {
 		return "", errors.New("data contains unexpected contents")
 	}
 	return StringEventData(data), nil
@@ -373,12 +373,12 @@ func (e *TaggedEvent) String() string {
 	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %#x}", e.EventID, e.Data)
 }
 
-func (e *TaggedEvent) Bytes() []byte {
+func (e *TaggedEvent) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *TaggedEvent) Write(w io.Writer) error {

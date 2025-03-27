@@ -146,3 +146,10 @@ func writeLengthPrefixed[T constraints.Unsigned, V any](w io.Writer, data []V) e
 	}
 	return binary.Write(w, binary.LittleEndian, data)
 }
+
+func mustSucceed[T any](t T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return t
+}

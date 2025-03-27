@@ -39,12 +39,12 @@ func (e *GrubStringEventData) String() string {
 	return fmt.Sprintf("%s{ %s }", string(e.Type), e.Str)
 }
 
-func (e *GrubStringEventData) Bytes() []byte {
+func (e *GrubStringEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
 		panic(err)
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *GrubStringEventData) Write(w io.Writer) error {

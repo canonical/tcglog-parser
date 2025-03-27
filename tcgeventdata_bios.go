@@ -59,12 +59,12 @@ func (e *SpecIdEvent00) String() string {
 		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
 }
 
-func (e *SpecIdEvent00) Bytes() []byte {
+func (e *SpecIdEvent00) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
 func (e *SpecIdEvent00) Write(w io.Writer) error {

@@ -163,12 +163,18 @@ func (s *tcgeventdataSuite) TestComputeSeparatorEventDigest(c *C) {
 func (s *tcgeventdataSuite) TestDecodeEventDataSeparator(c *C) {
 	event, err := DecodeEventDataSeparator([]byte{0x0, 0x0, 0x0, 0x0}, DigestMap{tpm2.HashAlgorithmSHA256: decodeHexString(c, "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119")})
 	c.Assert(err, IsNil)
-	c.Check(event.Bytes(), DeepEquals, []byte{0x0, 0x0, 0x0, 0x0})
+
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, []byte{0x0, 0x0, 0x0, 0x0})
 	c.Check(event.Value, Equals, SeparatorEventNormalValue)
 
 	event, err = DecodeEventDataSeparator([]byte{0x5a, 0x5a}, DigestMap{tpm2.HashAlgorithmSHA256: decodeHexString(c, "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450")})
 	c.Assert(err, IsNil)
-	c.Check(event.Bytes(), DeepEquals, []byte{0x5a, 0x5a})
+
+	data, err = event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, []byte{0x5a, 0x5a})
 	c.Check(event.Value, Equals, SeparatorEventErrorValue)
 
 	_, err = DecodeEventDataSeparator([]byte{0x0, 0x0, 0x0}, DigestMap{tpm2.HashAlgorithmSHA256: decodeHexString(c, "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119")})
@@ -179,14 +185,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataSeparator(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent00(c *C) {
-	data := decodeHexString(c, "53706563204944204576656e74303000000000000201010000")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "53706563204944204576656e74303000000000000201010000")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*SpecIdEvent00)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.PlatformClass, Equals, uint32(0))
 	c.Check(event.SpecVersionMinor, Equals, uint8(2))
 	c.Check(event.SpecVersionMajor, Equals, uint8(1))
@@ -195,14 +203,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent00(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent00WithVendorInfo(c *C) {
-	data := decodeHexString(c, "53706563204944204576656e74303000000000000201010003666f6f")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "53706563204944204576656e74303000000000000201010003666f6f")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*SpecIdEvent00)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.PlatformClass, Equals, uint32(0))
 	c.Check(event.SpecVersionMinor, Equals, uint8(2))
 	c.Check(event.SpecVersionMajor, Equals, uint8(1))
@@ -211,14 +221,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent00WithVendorIn
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent02(c *C) {
-	data := decodeHexString(c, "53706563204944204576656e74303200000000000201020200")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "53706563204944204576656e74303200000000000201020200")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*SpecIdEvent02)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.PlatformClass, Equals, uint32(0))
 	c.Check(event.SpecVersionMinor, Equals, uint8(2))
 	c.Check(event.SpecVersionMajor, Equals, uint8(1))
@@ -228,14 +240,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent02(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent02WithVendorInfo(c *C) {
-	data := decodeHexString(c, "53706563204944204576656e74303200000000000201020203626172")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "53706563204944204576656e74303200000000000201020203626172")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*SpecIdEvent02)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.PlatformClass, Equals, uint32(0))
 	c.Check(event.SpecVersionMinor, Equals, uint8(2))
 	c.Check(event.SpecVersionMajor, Equals, uint8(1))
@@ -245,14 +259,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent02WithVendorIn
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent03(c *C) {
-	data := decodeHexString(c, "53706563204944204576656e74303300000000000002000202000000040014000b00200000")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "53706563204944204576656e74303300000000000002000202000000040014000b00200000")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*SpecIdEvent03)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.PlatformClass, Equals, uint32(0))
 	c.Check(event.SpecVersionMinor, Equals, uint8(0))
 	c.Check(event.SpecVersionMajor, Equals, uint8(2))
@@ -265,14 +281,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent03(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent03WithVendorInfo(c *C) {
-	data := decodeHexString(c, "53706563204944204576656e74303300000000000002000202000000040014000b00200004a5a5a5a5")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "53706563204944204576656e74303300000000000002000202000000040014000b00200004a5a5a5a5")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*SpecIdEvent03)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.PlatformClass, Equals, uint32(0))
 	c.Check(event.SpecVersionMinor, Equals, uint8(0))
 	c.Check(event.SpecVersionMajor, Equals, uint8(2))
@@ -285,14 +303,16 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionSpecIdEvent03WithVendorIn
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataNoActionHCRTMCompMeas(c *C) {
-	data := decodeHexString(c, "482d4352544d20436f6d704d6561730006482d4352544d002200000b21268e6804daa48d4a6a36960bda877f39a567510482cbc7fc0d41e3e6b06b2b")
-	e, err := DecodeEventDataNoAction(data)
+	srcData := decodeHexString(c, "482d4352544d20436f6d704d6561730006482d4352544d002200000b21268e6804daa48d4a6a36960bda877f39a567510482cbc7fc0d41e3e6b06b2b")
+	e, err := DecodeEventDataNoAction(srcData)
 	c.Assert(err, IsNil)
 
 	event, ok := e.(*HCRTMComponentEventData)
 	c.Assert(ok, Equals, true)
 
-	c.Check(event.Bytes(), DeepEquals, data)
+	data, err := event.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(event.ComponentDescription, Equals, "H-CRTM")
 	c.Check(event.MeasurementFormatType, Equals, HCRTMMeasurementFormatDigest)
 	c.Check(event.ComponentMeasurement, DeepEquals, decodeHexString(c, "000b21268e6804daa48d4a6a36960bda877f39a567510482cbc7fc0d41e3e6b06b2b"))
@@ -305,11 +325,13 @@ func (s *tcgeventdataSuite) TestDecodeEventDataNoActionHCRTMCompMeas(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataActionGood(c *C) {
-	data := []byte(EFICallingEFIApplicationEvent)
-	e, err := DecodeEventDataAction(data)
+	srcData := []byte(EFICallingEFIApplicationEvent)
+	e, err := DecodeEventDataAction(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(e.Bytes(), DeepEquals, data)
+	data, err := e.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(e.String(), Equals, string(EFICallingEFIApplicationEvent))
 }
 
@@ -320,11 +342,13 @@ func (s *tcgeventdataSuite) TestDecodeEventDataActionBad(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashGood(c *C) {
-	data := []byte("Dell Configuration Information 1")
-	e, err := DecodeEventDataCompactHash(data)
+	srcData := []byte("Dell Configuration Information 1")
+	e, err := DecodeEventDataCompactHash(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(e.Bytes(), DeepEquals, data)
+	data, err := e.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(e.String(), Equals, string("Dell Configuration Information 1"))
 }
 
@@ -335,54 +359,62 @@ func (s *tcgeventdataSuite) TestDecodeEventDataCompactHashBad(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataPostCodeString(c *C) {
-	data := []byte("POST CODE")
-	e, err := DecodeEventDataPostCode(data)
+	srcData := []byte("POST CODE")
+	e, err := DecodeEventDataPostCode(srcData)
 	c.Assert(err, IsNil)
 
 	ev, ok := e.(StringEventData)
 	c.Assert(ok, Equals, true)
 
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(ev.String(), Equals, "POST CODE")
-	c.Check(ev.Bytes(), DeepEquals, data)
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataPostCodeWithBlob(c *C) {
-	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
-	e, err := DecodeEventDataPostCode(data)
+	srcData := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
+	e, err := DecodeEventDataPostCode(srcData)
 	c.Assert(err, IsNil)
 
 	ev, ok := e.(*EFIPlatformFirmwareBlob)
 	c.Assert(ok, Equals, true)
 
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
-	c.Check(ev.Bytes(), DeepEquals, data)
 
 	c.Check(uint64(ev.BlobBase), Equals, uint64(4279701504))
 	c.Check(ev.BlobLength, Equals, uint64(6619136))
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataPostCode2String(c *C) {
-	data := []byte("SMM CODE")
-	e, err := DecodeEventDataPostCode2(data)
+	srcData := []byte("SMM CODE")
+	e, err := DecodeEventDataPostCode2(srcData)
 	c.Assert(err, IsNil)
 
 	ev, ok := e.(StringEventData)
 	c.Assert(ok, Equals, true)
 
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(ev.String(), Equals, "SMM CODE")
-	c.Check(ev.Bytes(), DeepEquals, data)
 }
 
 func (s *tcgeventdataSuite) TestDecodeEventDataPostCode2WithBlob(c *C) {
-	data := []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
-	e, err := DecodeEventDataPostCode2(data)
+	srcData := []byte{0x09, 0x50, 0x4f, 0x53, 0x54, 0x20, 0x43, 0x4f, 0x44, 0x45, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
+	e, err := DecodeEventDataPostCode2(srcData)
 	c.Assert(err, IsNil)
 
 	ev, ok := e.(*EFIPlatformFirmwareBlob2)
 	c.Assert(ok, Equals, true)
 
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216}")
-	c.Check(ev.Bytes(), DeepEquals, data)
 
 	c.Check(ev.BlobDescription, Equals, "POST CODE")
 	c.Check(uint64(ev.BlobBase), Equals, uint64(4290904064))
@@ -420,7 +452,6 @@ func (s *tcgeventdataSuite) TestTaggedEventWrite2(c *C) {
 	}
 	w := new(bytes.Buffer)
 	c.Check(ev.Write(w), IsNil)
-	c.Logf("%x", w.Bytes())
 	c.Check(w.Bytes(), DeepEquals, decodeHexString(c, "8116000003000000626172"))
 }
 
@@ -430,20 +461,26 @@ func (s *tcgeventdataSuite) TestComputeTaggedEventDigest(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeSCRTMContentsHCRTM(c *C) {
-	data := []byte("H-CRTM measured S-CRTM contents\x00")
-	ev, err := DecodeEventDataSCRTMContents(data)
+	srcData := []byte("H-CRTM measured S-CRTM contents\x00")
+	ev, err := DecodeEventDataSCRTMContents(srcData)
 	c.Assert(err, IsNil)
-	c.Check(ev.Bytes(), DeepEquals, data)
+
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	str, ok := ev.(NullTerminatedStringEventData)
 	c.Check(ok, Equals, true)
 	c.Check(str, Equals, NullTerminatedStringEventData("H-CRTM measured S-CRTM contents"))
 }
 
 func (s *tcgeventdataSuite) TestDecodeSCRTMContentsPlatformBlob(c *C) {
-	data := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
-	ev, err := DecodeEventDataSCRTMContents(data)
+	srcData := []byte{0x00, 0x10, 0x17, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00}
+	ev, err := DecodeEventDataSCRTMContents(srcData)
 	c.Assert(err, IsNil)
-	c.Check(ev.Bytes(), DeepEquals, data)
+
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	blob, ok := ev.(*EFIPlatformFirmwareBlob)
 	c.Check(ok, Equals, true)
 	c.Check(blob.BlobBase, Equals, efi.PhysicalAddress(4279701504))
@@ -451,10 +488,13 @@ func (s *tcgeventdataSuite) TestDecodeSCRTMContentsPlatformBlob(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeSCRTMContentsPlatformBlob2(c *C) {
-	data := []byte{0x0f, 0x53, 0x2d, 0x43, 0x52, 0x54, 0x4d, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x73, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
-	ev, err := DecodeEventDataSCRTMContents(data)
+	srcData := []byte{0x0f, 0x53, 0x2d, 0x43, 0x52, 0x54, 0x4d, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x73, 0x00, 0x00, 0xc2, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
+	ev, err := DecodeEventDataSCRTMContents(srcData)
 	c.Assert(err, IsNil)
-	c.Check(ev.Bytes(), DeepEquals, data)
+
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	blob, ok := ev.(*EFIPlatformFirmwareBlob2)
 	c.Check(ok, Equals, true)
 	c.Check(blob.BlobDescription, Equals, "S-CRTM contents")
@@ -463,10 +503,13 @@ func (s *tcgeventdataSuite) TestDecodeSCRTMContentsPlatformBlob2(c *C) {
 }
 
 func (s *tcgeventdataSuite) TestDecodeSCRTMVersionUCS2(c *C) {
-	data := []byte{0x31, 0x00, 0x2e, 0x00, 0x30, 0x00, 0x33, 0x00, 0x00, 0x00}
-	ev, err := DecodeEventDataSCRTMVersion(data)
+	srcData := []byte{0x31, 0x00, 0x2e, 0x00, 0x30, 0x00, 0x33, 0x00, 0x00, 0x00}
+	ev, err := DecodeEventDataSCRTMVersion(srcData)
 	c.Assert(err, IsNil)
-	c.Check(ev.Bytes(), DeepEquals, data)
+
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, srcData)
 	str, ok := ev.(NullTerminatedUCS2StringEventData)
 	c.Check(ok, Equals, true)
 	c.Check(str, Equals, NullTerminatedUCS2StringEventData("1.03"))
@@ -476,7 +519,10 @@ func (s *tcgeventdataSuite) TestDecodeSCRTMVersionGUID(c *C) {
 	expectedGuid := efi.MakeGUID(0xec7aa64a, 0xbd0b, 0x4e7e, 0x91dd, [...]byte{0xf5, 0x74, 0x74, 0xfe, 0x03, 0x2d})
 	ev, err := DecodeEventDataSCRTMVersion(expectedGuid[:])
 	c.Assert(err, IsNil)
-	c.Check(ev.Bytes(), DeepEquals, []byte(expectedGuid[:]))
+
+	data, err := ev.Bytes()
+	c.Check(err, IsNil)
+	c.Check(data, DeepEquals, expectedGuid[:])
 	guid, ok := ev.(GUIDEventData)
 	c.Check(ok, Equals, true)
 	c.Check(guid, Equals, GUIDEventData(expectedGuid))
