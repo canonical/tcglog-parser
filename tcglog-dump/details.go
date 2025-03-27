@@ -186,7 +186,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		}
 
 		return &bootOptionVariableStringer{verbose, varData.UnicodeName, varData.VariableData}
-	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig:
+	case event.EventType == tcglog.EventTypeEFIVariableDriverConfig && event.PCRIndex == 7:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
 			return event.Data
@@ -198,7 +198,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 			}
 		}
 		return &dbVariableStringer{varDescriptor{Name: varData.UnicodeName, GUID: varData.VariableName}, varData.VariableData, verbose}
-	case event.EventType == tcglog.EventTypeEFIVariableAuthority:
+	case event.EventType == tcglog.EventTypeEFIVariableAuthority && event.PCRIndex == 7:
 		varData, ok := event.Data.(*tcglog.EFIVariableData)
 		if !ok {
 			return event.Data
