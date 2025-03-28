@@ -54,11 +54,17 @@ func decodeSpecIdEvent00(data []byte, r io.Reader) (out *SpecIdEvent00, err erro
 	return d, nil
 }
 
+// String implements [fmt.Stringer].
 func (e *SpecIdEvent00) String() string {
-	return fmt.Sprintf("PCClientSpecIdEvent{ platformClass=%d, specVersionMinor=%d, specVersionMajor=%d, specErrata=%d }",
-		e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
+	return fmt.Sprintf(`PCClientSpecIdEvent {
+	platformClass: %d,
+	specVersionMinor: %d,
+	specVersionMajor: %d,
+	specErrata: %d,
+}`, e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata)
 }
 
+// Bytes implements [EventData.Bytes].
 func (e *SpecIdEvent00) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
@@ -67,6 +73,7 @@ func (e *SpecIdEvent00) Bytes() ([]byte, error) {
 	return w.Bytes(), nil
 }
 
+// Write implements [EventData.Write].
 func (e *SpecIdEvent00) Write(w io.Writer) error {
 	var signature [16]byte
 	copy(signature[:], []byte("Spec ID Event00"))

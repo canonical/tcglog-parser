@@ -31,7 +31,13 @@ func (s *tcgeventdataEfiSuite) TestSpecIdEvent02String(c *C) {
 		SpecErrata:       2,
 		UintnSize:        2,
 		VendorInfo:       []byte("bar")}
-	c.Check(event.String(), Equals, "EfiSpecIdEvent{ platformClass=0, specVersionMinor=2, specVersionMajor=1, specErrata=2, uintnSize=2 }")
+	c.Check(event.String(), Equals, `EfiSpecIdEvent {
+	platformClass: 0,
+	specVersionMinor: 2,
+	specVersionMajor: 1,
+	specErrata: 2,
+	uintnSize: 2,
+}`)
 }
 
 func (s *tcgeventdataEfiSuite) TestSpecIdEvent02Write(c *C) {
@@ -72,7 +78,17 @@ func (s *tcgeventdataEfiSuite) TestSpecIdEvent03String(c *C) {
 			{AlgorithmId: tpm2.HashAlgorithmSHA1, DigestSize: 20},
 			{AlgorithmId: tpm2.HashAlgorithmSHA256, DigestSize: 32}},
 		VendorInfo: []byte("bar")}
-	c.Check(event.String(), Equals, "EfiSpecIdEvent{ platformClass=0, specVersionMinor=0, specVersionMajor=2, specErrata=0, uintnSize=2, digestSizes=[{ algorithmId=0x0004, digestSize=20 }, { algorithmId=0x000b, digestSize=32 }] }")
+	c.Check(event.String(), Equals, `EfiSpecIdEvent {
+	platformClass: 0,
+	specVersionMinor: 0,
+	specVersionMajor: 2,
+	specErrata: 0,
+	uintnSize: 2,
+	digestSizes: [
+		{ algorithmId: 0x0004, digestSize: 20 },
+		{ algorithmId: 0x000b, digestSize: 32 },
+	],
+}`)
 }
 
 func (s *tcgeventdataEfiSuite) TestSpecIdEvent03Write(c *C) {
@@ -156,13 +172,17 @@ func (s *tcgeventdataEfiSuite) TestEFIVariableDataString1(c *C) {
 		VariableName: efi.ImageSecurityDatabaseGuid,
 		UnicodeName:  "db",
 		VariableData: decodeHexString(c, "2616c4c14c509240aca941f9369343284c0000000000000030000000a3a8baa01d04a848bc87c36d121b5e3de3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")}
-	c.Check(event.String(), Equals, "UEFI_VARIABLE_DATA{ VariableName: d719b2cb-3d3a-4596-a3bc-dad00e67656f, UnicodeName: \"db\", VariableData:\n"+
-		"\t00000000  26 16 c4 c1 4c 50 92 40  ac a9 41 f9 36 93 43 28  |&...LP.@..A.6.C(|\n"+
-		"\t00000010  4c 00 00 00 00 00 00 00  30 00 00 00 a3 a8 ba a0  |L.......0.......|\n"+
-		"\t00000020  1d 04 a8 48 bc 87 c3 6d  12 1b 5e 3d e3 b0 c4 42  |...H...m..^=...B|\n"+
-		"\t00000030  98 fc 1c 14 9a fb f4 c8  99 6f b9 24 27 ae 41 e4  |.........o.$'.A.|\n"+
-		"\t00000040  64 9b 93 4c a4 95 99 1b  78 52 b8 55              |d..L....xR.U|\n"+
-		"\t}")
+	c.Check(event.String(), Equals, `UEFI_VARIABLE_DATA {
+	VariableName: d719b2cb-3d3a-4596-a3bc-dad00e67656f,
+	UnicodeName: "db",
+	VariableData:
+		00000000  26 16 c4 c1 4c 50 92 40  ac a9 41 f9 36 93 43 28  |&...LP.@..A.6.C(|
+		00000010  4c 00 00 00 00 00 00 00  30 00 00 00 a3 a8 ba a0  |L.......0.......|
+		00000020  1d 04 a8 48 bc 87 c3 6d  12 1b 5e 3d e3 b0 c4 42  |...H...m..^=...B|
+		00000030  98 fc 1c 14 9a fb f4 c8  99 6f b9 24 27 ae 41 e4  |.........o.$'.A.|
+		00000040  64 9b 93 4c a4 95 99 1b  78 52 b8 55              |d..L....xR.U|
+		,
+}`)
 }
 
 func (s *tcgeventdataEfiSuite) TestEFIVariableDataString2(c *C) {
@@ -170,9 +190,13 @@ func (s *tcgeventdataEfiSuite) TestEFIVariableDataString2(c *C) {
 		VariableName: efi.GlobalVariable,
 		UnicodeName:  "SecureBoot",
 		VariableData: []byte{0x01}}
-	c.Check(event.String(), Equals, "UEFI_VARIABLE_DATA{ VariableName: 8be4df61-93ca-11d2-aa0d-00e098032b8c, UnicodeName: \"SecureBoot\", VariableData:\n"+
-		"\t00000000  01                                                |.|\n"+
-		"\t}")
+	c.Check(event.String(), Equals, `UEFI_VARIABLE_DATA {
+	VariableName: 8be4df61-93ca-11d2-aa0d-00e098032b8c,
+	UnicodeName: "SecureBoot",
+	VariableData:
+		00000000  01                                                |.|
+		,
+}`)
 }
 
 func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIVariable1(c *C) {
@@ -218,7 +242,7 @@ func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventString(c *C) {
 				Device:   0x0},
 			&efi.NVMENamespaceDevicePathNode{
 				NamespaceID:   0x1,
-				NamespaceUUID: 0x0},
+				NamespaceUUID: efi.EUI64{}},
 			&efi.HardDriveDevicePathNode{
 				PartitionNumber: 1,
 				PartitionStart:  0x800,
@@ -226,9 +250,12 @@ func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventString(c *C) {
 				Signature:       efi.GUIDHardDriveSignature(efi.MakeGUID(0x66de947b, 0xfdb2, 0x4525, 0xb752, [...]uint8{0x30, 0xd6, 0x6b, 0xb2, 0xb9, 0x60})),
 				MBRType:         efi.GPT},
 			efi.FilePathDevicePathNode("\\EFI\\ubuntu\\shimx64.efi")}}
-	c.Check(event.String(), Equals, "UEFI_IMAGE_LOAD_EVENT{ ImageLocationInMemory: 0x000000006556c018, ImageLengthInMemory: 955072, "+
-		"ImageLinkTimeAddress: 0x0000000000000000, "+
-		"DevicePath: \\PciRoot(0x0)\\Pci(0x1d,0x0)\\Pci(0x0,0x0)\\NVMe(0x1,00-00-00-00-00-00-00-00)\\HD(1,GPT,66de947b-fdb2-4525-b752-30d66bb2b960)\\\\EFI\\ubuntu\\shimx64.efi }")
+	c.Check(event.String(), Equals, `UEFI_IMAGE_LOAD_EVENT {
+	ImageLocationInMemory: 0x000000006556c018,
+	ImageLengthInMemory: 955072,
+	ImageLinkTimeAddress: 0x0000000000000000,
+	DevicePath: \PciRoot(0x0)\Pci(0x1d,0x0)\Pci(0x0,0x0)\NVMe(0x1,00-00-00-00-00-00-00-00)\HD(1,GPT,66de947b-fdb2-4525-b752-30d66bb2b960)\\EFI\ubuntu\shimx64.efi,
+}`)
 }
 
 func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventWrite(c *C) {
@@ -247,7 +274,7 @@ func (s *tcgeventdataEfiSuite) TestEFIImageLoadEventWrite(c *C) {
 				Device:   0x0},
 			&efi.NVMENamespaceDevicePathNode{
 				NamespaceID:   0x1,
-				NamespaceUUID: 0x0},
+				NamespaceUUID: efi.EUI64{}},
 			&efi.HardDriveDevicePathNode{
 				PartitionNumber: 1,
 				PartitionStart:  0x800,
@@ -305,7 +332,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataEFIImageLoad2(c *C) {
 			Device:   0x0},
 		&efi.NVMENamespaceDevicePathNode{
 			NamespaceID:   0x1,
-			NamespaceUUID: 0x0},
+			NamespaceUUID: efi.EUI64{}},
 		&efi.HardDriveDevicePathNode{
 			PartitionNumber: 1,
 			PartitionStart:  0x800,
@@ -404,14 +431,45 @@ func (s *tcgeventdataEfiSuite) TestEFIGPTDataString(c *C) {
 				Attributes:          0,
 				PartitionName:       "",
 			}}}
-	c.Check(event.String(), Equals, "UEFI_GPT_DATA{\n"+
-		"\tHdr: EFI_PARTITION_TABLE_HEADER{ MyLBA: 0x1, AlternateLBA: 0xee7752af, FirstUsableLBA: 0x22, LastUsableLBA: 0xee77528e, DiskGUID: a4ae73c2-0e2f-4513-bd3c-456da7f7f0fd, PartitionEntryLBA: 0x2, NumberOfPartitionEntries: 128, SizeOfPartitionEntry: 0x80, PartitionEntryArrayCRC32: 0x0b4528f6 },\n"+
-		"\tPartitions: [\n"+
-		"\t\tEFI_PARTITION_ENTRY{ PartitionTypeGUID: c12a7328-f81f-11d2-ba4b-00a0c93ec93b, UniquePartitionGUID: 66de947b-fdb2-4525-b752-30d66bb2b960, StartingLBA: 0x800, EndingLBA: 0x1007ff, Attributes: 0x0000000000000000, PartitionName: \"EFI System Partition\" }\n"+
-		"\t\tEFI_PARTITION_ENTRY{ PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4, UniquePartitionGUID: 631b17dc-edb7-4d1d-a761-6dce3efce415, StartingLBA: 0x100800, EndingLBA: 0x26e7ff, Attributes: 0x0000000000000000, PartitionName: \"\" }\n"+
-		"\t\tEFI_PARTITION_ENTRY{ PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4, UniquePartitionGUID: c64af521-14f1-4ef2-adb5-20b59ca2335a, StartingLBA: 0x26e800, EndingLBA: 0xee774fff, Attributes: 0x0000000000000000, PartitionName: \"\" }\n"+
-		"\t]\n"+
-		"}")
+	c.Check(event.String(), Equals, `UEFI_GPT_DATA {
+	Hdr: EFI_PARTITION_TABLE_HEADER {
+		MyLBA: 0x1,
+		AlternateLBA: 0xee7752af,
+		FirstUsableLBA: 0x22,
+		LastUsableLBA: 0xee77528e,
+		DiskGUID: a4ae73c2-0e2f-4513-bd3c-456da7f7f0fd,
+		PartitionEntryLBA: 0x2,
+		NumberOfPartitionEntries: 128,
+		SizeOfPartitionEntry: 0x80,
+		PartitionEntryArrayCRC32: 0x0b4528f6,
+	},
+	Partitions: [
+		EFI_PARTITION_ENTRY {
+			PartitionTypeGUID: c12a7328-f81f-11d2-ba4b-00a0c93ec93b,
+			UniquePartitionGUID: 66de947b-fdb2-4525-b752-30d66bb2b960,
+			StartingLBA: 0x800,
+			EndingLBA: 0x1007ff,
+			Attributes: 0x0000000000000000,
+			PartitionName: "EFI System Partition",
+		},
+		EFI_PARTITION_ENTRY {
+			PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4,
+			UniquePartitionGUID: 631b17dc-edb7-4d1d-a761-6dce3efce415,
+			StartingLBA: 0x100800,
+			EndingLBA: 0x26e7ff,
+			Attributes: 0x0000000000000000,
+			PartitionName: "",
+		},
+		EFI_PARTITION_ENTRY {
+			PartitionTypeGUID: 0fc63daf-8483-4772-8e79-3d69d8477de4,
+			UniquePartitionGUID: c64af521-14f1-4ef2-adb5-20b59ca2335a,
+			StartingLBA: 0x26e800,
+			EndingLBA: 0xee774fff,
+			Attributes: 0x0000000000000000,
+			PartitionName: "",
+		},
+	],
+}`)
 }
 
 func (s *tcgeventdataEfiSuite) TestEFIGPTDataWrite(c *C) {
@@ -647,7 +705,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob(c *C) {
 	e, err := DecodeEventDataEFIPlatformFirmwareBlob(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
+	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB { BlobBase: 0xff171000, BlobLength:6619136 }")
 
 	data, err := e.Bytes()
 	c.Check(err, IsNil)
@@ -673,7 +731,7 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataPlatformFirmwareBlob2(c *C) {
 	e, err := DecodeEventDataEFIPlatformFirmwareBlob2(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216}")
+	c.Check(e.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2 { BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216 }")
 
 	data, err := e.Bytes()
 	c.Check(err, IsNil)
@@ -704,11 +762,10 @@ func (s *tcgeventdataEfiSuite) TestDecodeEventDataHandoffTablePointers(c *C) {
 	e, err := DecodeEventDataEFIHandoffTablePointers(srcData)
 	c.Assert(err, IsNil)
 
-	c.Check(e.String(), Equals,
-		`UEFI_HANDOFF_TABLE_POINTERS{
+	c.Check(e.String(), Equals, `UEFI_HANDOFF_TABLE_POINTERS {
 	TableEntries: [
-		UEFI_CONFIGURATION_TABLE{VendorGuid: 3ff916f2-6220-446f-8d98-bf08fe7ccb9f, VendorTable: 0x66576b98}
-	]
+		UEFI_CONFIGURATION_TABLE { VendorGuid: 3ff916f2-6220-446f-8d98-bf08fe7ccb9f, VendorTable: 0x66576b98 },
+	],
 }`)
 
 	data, err := e.Bytes()

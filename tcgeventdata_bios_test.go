@@ -23,7 +23,12 @@ func (s *tcgeventdataBiosSuite) TestSpecIdEvent00String(c *C) {
 		SpecVersionMajor: 1,
 		SpecErrata:       1,
 		VendorInfo:       []byte("foo")}
-	c.Check(event.String(), Equals, "PCClientSpecIdEvent{ platformClass=0, specVersionMinor=2, specVersionMajor=1, specErrata=1 }")
+	c.Check(event.String(), Equals, `PCClientSpecIdEvent {
+	platformClass: 0,
+	specVersionMinor: 2,
+	specVersionMajor: 1,
+	specErrata: 1,
+}`)
 }
 
 func (s *tcgeventdataBiosSuite) TestSpecIdEvent00WriteWithVendorInfo(c *C) {

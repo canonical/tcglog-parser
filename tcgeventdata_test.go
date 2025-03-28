@@ -383,7 +383,7 @@ func (s *tcgeventdataSuite) TestDecodeEventDataPostCodeWithBlob(c *C) {
 	data, err := ev.Bytes()
 	c.Check(err, IsNil)
 	c.Check(data, DeepEquals, srcData)
-	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB{BlobBase: 0xff171000, BlobLength:6619136}")
+	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB { BlobBase: 0xff171000, BlobLength:6619136 }")
 
 	c.Check(uint64(ev.BlobBase), Equals, uint64(4279701504))
 	c.Check(ev.BlobLength, Equals, uint64(6619136))
@@ -414,7 +414,7 @@ func (s *tcgeventdataSuite) TestDecodeEventDataPostCode2WithBlob(c *C) {
 	data, err := ev.Bytes()
 	c.Check(err, IsNil)
 	c.Check(data, DeepEquals, srcData)
-	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2{BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216}")
+	c.Check(ev.String(), Equals, "UEFI_PLATFORM_FIRMWARE_BLOB2 { BlobDescription:\"POST CODE\", BlobBase: 0xffc20000, BlobLength:393216 }")
 
 	c.Check(ev.BlobDescription, Equals, "POST CODE")
 	c.Check(uint64(ev.BlobBase), Equals, uint64(4290904064))
@@ -426,13 +426,23 @@ func (s *tcgeventdataSuite) TestTaggedEventString(c *C) {
 		EventID: 105,
 		Data:    []byte("foo"),
 	}
-	c.Check(ev.String(), Equals, "TCG_PCClientTaggedEvent{taggedEventID: 105, taggedEventData: 0x666f6f}")
+	c.Check(ev.String(), Equals, `TCG_PCClientTaggedEvent {
+	taggedEventID: 105,
+	taggedEventData:
+		00000000  66 6f 6f                                          |foo|
+		,
+}`)
 
 	ev = &TaggedEvent{
 		EventID: 5761,
 		Data:    []byte("bar"),
 	}
-	c.Check(ev.String(), Equals, "TCG_PCClientTaggedEvent{taggedEventID: 5761, taggedEventData: 0x626172}")
+	c.Check(ev.String(), Equals, `TCG_PCClientTaggedEvent {
+	taggedEventID: 5761,
+	taggedEventData:
+		00000000  62 61 72                                          |bar|
+		,
+}`)
 }
 
 func (s *tcgeventdataSuite) TestTaggedEventWrite1(c *C) {

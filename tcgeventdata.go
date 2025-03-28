@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -48,15 +49,18 @@ var separatorErrorDigests = map[tpm2.HashAlgorithmId]tpm2.Digest{
 // It may or may not be informative.
 type StringEventData string
 
+// String implements [fmt.Stringer].
 func (d StringEventData) String() string {
 	return string(d)
 }
 
+// Write implements [EventData.Write].
 func (d StringEventData) Write(w io.Writer) error {
 	_, err := io.WriteString(w, string(d))
 	return err
 }
 
+// Bytes implements [EventData.Bytes].
 func (d StringEventData) Bytes() ([]byte, error) {
 	return []byte(d), nil
 }
@@ -82,10 +86,12 @@ func decodeNullTerminatedStringEventData(data []byte) (NullTerminatedStringEvent
 	return NullTerminatedStringEventData(data[:len(data)-1]), nil
 }
 
+// String implements [fmt.Stringer].
 func (d NullTerminatedStringEventData) String() string {
 	return string(d)
 }
 
+// Write implements [EventData.Write].
 func (d NullTerminatedStringEventData) Write(w io.Writer) error {
 	if _, err := io.WriteString(w, string(d)); err != nil {
 		return err
@@ -94,6 +100,7 @@ func (d NullTerminatedStringEventData) Write(w io.Writer) error {
 	return err
 }
 
+// Bytes implements [EventData.Bytes].
 func (d NullTerminatedStringEventData) Bytes() ([]byte, error) {
 	return append([]byte(d), 0x00), nil
 }
@@ -119,10 +126,12 @@ func decodeNullTerminatedUCS2StringEventData(data []byte) (NullTerminatedUCS2Str
 	return NullTerminatedUCS2StringEventData(str), nil
 }
 
+// String implements [fmt.Stringer].
 func (d NullTerminatedUCS2StringEventData) String() string {
 	return string(d)
 }
 
+// Write implements [EventData.Write].
 func (d NullTerminatedUCS2StringEventData) Write(w io.Writer) error {
 	ucs2 := efi.ConvertUTF8ToUCS2(string(d))
 	if err := binary.Write(w, binary.LittleEndian, ucs2); err != nil {
@@ -132,6 +141,7 @@ func (d NullTerminatedUCS2StringEventData) Write(w io.Writer) error {
 	return err
 }
 
+// Bytes implements [EventData.Bytes].
 func (d NullTerminatedUCS2StringEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	d.Write(w)
@@ -280,6 +290,7 @@ func (e *SeparatorEventData) IsError() bool {
 	return e.Value == SeparatorEventErrorValue
 }
 
+// String implements [fmt.Stringer].
 func (e *SeparatorEventData) String() string {
 	if !e.IsError() {
 		return ""
@@ -287,6 +298,7 @@ func (e *SeparatorEventData) String() string {
 	return fmt.Sprintf("ERROR: 0x%x", e.ErrorInfo)
 }
 
+// Bytes implements [EventData.Bytes].
 func (e *SeparatorEventData) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
@@ -295,6 +307,7 @@ func (e *SeparatorEventData) Bytes() ([]byte, error) {
 	return w.Bytes(), nil
 }
 
+// Write implements [EventData.Write].
 func (e *SeparatorEventData) Write(w io.Writer) error {
 	switch e.Value {
 	case SeparatorEventNormalValue, SeparatorEventAltNormalValue:
@@ -369,10 +382,16 @@ func decodeEventDataTaggedEvent(data []byte) (*TaggedEvent, error) {
 	return d, nil
 }
 
+// String implements [fmt.Stringer].
 func (e *TaggedEvent) String() string {
-	return fmt.Sprintf("TCG_PCClientTaggedEvent{taggedEventID: %d, taggedEventData: %#x}", e.EventID, e.Data)
+	return fmt.Sprintf(`TCG_PCClientTaggedEvent {
+	taggedEventID: %d,
+	taggedEventData:
+		%s,
+}`, e.EventID, strings.Replace(hex.Dump(e.Data), "\n", "\n\t\t", -1))
 }
 
+// Bytes implements [EventData.Bytes].
 func (e *TaggedEvent) Bytes() ([]byte, error) {
 	w := new(bytes.Buffer)
 	if err := e.Write(w); err != nil {
@@ -381,6 +400,7 @@ func (e *TaggedEvent) Bytes() ([]byte, error) {
 	return w.Bytes(), nil
 }
 
+// Write implements [EventData.Write].
 func (e *TaggedEvent) Write(w io.Writer) error {
 	if err := binary.Write(w, binary.LittleEndian, e.EventID); err != nil {
 		return fmt.Errorf("cannot write taggedEventID: %w", err)

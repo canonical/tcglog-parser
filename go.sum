@@ -1,7 +1,7 @@
 github.com/bsiegert/ranges v0.0.0-20111221115336-19303dc7aa63 h1:FxdkNGQyRwwk94rJ+IMNrTjv864XzT93/cvk7UpMM38=
 github.com/bsiegert/ranges v0.0.0-20111221115336-19303dc7aa63/go.mod h1:8z71/aZjDHLs4ihK/5nD5wZVQxm/W4eRDnxQZcJmVD4=
-github.com/canonical/go-efilib v1.2.0 h1:+fvJdkj3oVyURFtfk8gSft6pdKyVzzdzNn9GC1kMJw8=
-github.com/canonical/go-efilib v1.2.0/go.mod h1:n0Ttsy1JuHAvqaFbZBs6PAzoiiJdfkHsAmDOEbexYEQ=
+github.com/canonical/go-efilib v1.4.2-0.20250328000843-46942cd100b0 h1:jrYeKUlNxDAh244OiAgH5/zGUVjrK6ptYuqy8xAqENQ=
+github.com/canonical/go-efilib v1.4.2-0.20250328000843-46942cd100b0/go.mod h1:n0Ttsy1JuHAvqaFbZBs6PAzoiiJdfkHsAmDOEbexYEQ=
 github.com/canonical/go-sp800.108-kdf v0.0.0-20210315104021-ead800bbf9a0 h1:ZE2XMRFHcwlib3uU9is37+pKkkMloVoEPWmgQ6GK1yo=
 github.com/canonical/go-sp800.108-kdf v0.0.0-20210315104021-ead800bbf9a0/go.mod h1:Zrs3YjJr+w51u0R/dyLh/oWt/EcBVdLPCVFYC4daW5s=
 github.com/canonical/go-tpm2 v1.7.6 h1:9k9OAEEp9xKp4h2WJwfTUNivblJi4L5Wjx7Q/LkSTSQ=

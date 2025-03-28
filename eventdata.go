@@ -65,6 +65,9 @@ func (e *invalidEventData) Unwrap() error {
 // It may or may not be informative.
 type OpaqueEventData []byte
 
+// String implements [fmt.Stringer]. Although the format of this event data is
+// unknown, this implementation will print all printable UTF-8 characters until
+// the first non-printable character is encountered.
 func (d OpaqueEventData) String() string {
 	// This blob is opaque, but try to print something if it's filled
 	// with printable characters.
