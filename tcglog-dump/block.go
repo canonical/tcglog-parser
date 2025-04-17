@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/canonical/go-tpm2"
 
@@ -19,9 +18,8 @@ import (
 type blockFormatter struct {
 	dst io.Writer
 
-	verbosity  int
-	hexdump    bool
-	varHexdump bool
+	verbosity int
+	hexdump   bool
 }
 
 func (*blockFormatter) printHeader() {}
@@ -50,31 +48,24 @@ func (f *blockFormatter) printEvent(event *tcglog.Event) {
 		verbose = true
 	}
 	if f.verbosity > 0 {
-		fmt.Fprintf(f.dst, "DETAILS: %s\n", eventDetailsStringer(event, verbose))
+		fmt.Fprintf(f.dst, "DETAILS: %s\n", indent(eventDetailsStringer(event, verbose), 1))
 	}
 	if f.hexdump {
-		io.WriteString(f.dst, "EVENT DATA:\n\t")
+		io.WriteString(f.dst, "EVENT DATA BYTES:\n\t")
 		data, err := event.Data.Bytes()
 		if err != nil {
 			fmt.Fprintf(f.dst, "Cannot obtain event data: %v", err)
 		} else {
-			fmt.Fprintf(f.dst, "%s", strings.Replace(hex.Dump(data), "\n", "\n\t", -1))
-		}
-	}
-	if f.varHexdump {
-		varData, ok := event.Data.(*tcglog.EFIVariableData)
-		if ok {
-			fmt.Fprintf(f.dst, "EFI VARIABLE PAYLOAD:\n\t%s", strings.Replace(hex.Dump(varData.VariableData), "\n", "\n\t", -1))
+			io.WriteString(f.dst, indent(stringer(hex.Dump(data)), 1).String())
 		}
 	}
 }
 
 func (*blockFormatter) flush() {}
 
-func newBlockFormatter(f *os.File, verbosity int, hexdump, varHexdump bool) formatter {
+func newBlockFormatter(f *os.File, verbosity int, hexdump bool) formatter {
 	return &blockFormatter{
-		dst:        f,
-		verbosity:  verbosity,
-		hexdump:    hexdump,
-		varHexdump: varHexdump}
+		dst:       f,
+		verbosity: verbosity,
+		hexdump:   hexdump}
 }

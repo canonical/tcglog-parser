@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -152,4 +153,27 @@ func mustSucceed[T any](t T, err error) T {
 		panic(err)
 	}
 	return t
+}
+
+type stringer string
+
+func (s stringer) String() string {
+	return string(s)
+}
+
+type indentStringer struct {
+	src    fmt.Stringer
+	indent int
+}
+
+func (s *indentStringer) String() string {
+	indent := make([]byte, s.indent)
+	for i := range indent {
+		indent[i] = '\t'
+	}
+	return strings.Replace(s.src.String(), "\n", "\n"+string(indent), -1)
+}
+
+func indent(src fmt.Stringer, indent int) fmt.Stringer {
+	return &indentStringer{src: src, indent: indent}
 }

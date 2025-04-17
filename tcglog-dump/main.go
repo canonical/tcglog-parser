@@ -22,7 +22,6 @@ type options struct {
 	Alg                internal_flags.HashAlgorithmId `long:"alg" description:"Hash algorithm to display" default:"auto" choice:"auto" choice:"sha1" choice:"sha256" choice:"sha384" choice:"sha512"`
 	Verbose            []bool                         `short:"v" long:"verbose" description:"Display summary of event data"`
 	Hexdump            bool                           `long:"hexdump" description:"Display hexdump of event data associated with each event"`
-	VarHexdump         bool                           `long:"varhexdump" description:"Display hexdump of variable data for events associated with the measurement of EFI variables"`
 	ExtractData        string                         `long:"extract-data" description:"Extract event data associated with each event to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"data"`
 	ExtractVars        string                         `long:"extract-vars" description:"Extract variable data for events associated with the measurement of EFI variables to individual files named with the supplied prefix (format: <prefix>-<num>)" optional:"true" optional-value:"var"`
 	WithGrub           bool                           `long:"with-grub" description:"Decode event data measured by GRUB to PCRs 8 and 9"`
@@ -84,14 +83,14 @@ func run() error {
 	}
 
 	var formatter formatter
-	if len(opts.Verbose) < 2 && !opts.Hexdump && !opts.VarHexdump {
+	if len(opts.Verbose) < 2 && !opts.Hexdump {
 		var err error
 		formatter, err = newTableFormatter(os.Stdout, alg, len(opts.Verbose) > 0)
 		if err != nil {
 			return err
 		}
 	} else {
-		formatter = newBlockFormatter(os.Stdout, len(opts.Verbose), opts.Hexdump, opts.VarHexdump)
+		formatter = newBlockFormatter(os.Stdout, len(opts.Verbose), opts.Hexdump)
 	}
 
 	formatter.printHeader()

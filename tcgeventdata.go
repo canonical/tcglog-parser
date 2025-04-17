@@ -49,6 +49,13 @@ var separatorErrorDigests = map[tpm2.HashAlgorithmId]tpm2.Digest{
 // It may or may not be informative.
 type StringEventData string
 
+func decodeStringEventData(data []byte) (StringEventData, error) {
+	if !isPrintableASCII(data, false) {
+		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
+	}
+	return StringEventData(data), nil
+}
+
 // String implements [fmt.Stringer].
 func (d StringEventData) String() string {
 	return string(d)
@@ -234,10 +241,7 @@ func decodeEventDataNoAction(data []byte) (EventData, error) {
 // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClientImplementation_1-21_1_00.pdf (section 11.3.3 "EV_ACTION event types")
 // https://trustedcomputinggroup.org/wp-content/uploads/PC-ClientSpecific_Platform_Profile_for_TPM_2p0_Systems_v51.pdf (section 9.4.3 "EV_ACTION Event Types")
 func decodeEventDataAction(data []byte) (StringEventData, error) {
-	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
-	}
-	return StringEventData(data), nil
+	return decodeStringEventData(data)
 }
 
 // SeparatorEventData is the event data associated with a EV_SEPARATOR event.
@@ -330,10 +334,7 @@ func ComputeSeparatorEventDigest(alg crypto.Hash, value uint32) []byte {
 }
 
 func decodeEventDataCompactHash(data []byte) (StringEventData, error) {
-	if !isPrintableASCII(data, false) {
-		return "", errors.New("data does not contain printable ASCII that is not NULL terminated")
-	}
-	return StringEventData(data), nil
+	return decodeStringEventData(data)
 }
 
 func decodeEventDataPostCode(data []byte) (EventData, error) {

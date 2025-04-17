@@ -14,14 +14,15 @@ import (
 	"github.com/canonical/go-tpm2"
 )
 
-// EventData represents all event data types that appear in a log. Some implementations of this are exported so that event data
-// contents can be inspected programatically.
+// EventData represents all event data types that appear in a log. Some implementations of
+// this are exported so that event data contents can be inspected programatically.
 //
-// If an error is encountered when decoding the data associated with an event, the event data will implement the error interface
-// which can be used for obtaining information about the decoding error.
+// If an error is encountered when decoding the data associated with an event, the event
+// data will implement the error interface which can be used for obtaining information
+// about the decoding error.
 //
-// Some event data is informative (it provides information about the measurement), whilst others are not
-// normative because the measurement is a tagged hash of the event data.
+// Some event data is informative (it provides information about the measurement), whilst
+// others are not informative because the measurement is a tagged hash of the event data.
 type EventData interface {
 	fmt.Stringer
 

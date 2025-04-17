@@ -208,7 +208,7 @@ func (e *SpecIdEvent03) String() string {
 	uintnSize: %d,
 	digestSizes: [`, e.PlatformClass, e.SpecVersionMinor, e.SpecVersionMajor, e.SpecErrata, e.UintnSize)
 	for _, algSize := range e.DigestSizes {
-		fmt.Fprintf(&b, "\n\t\t%s,", algSize)
+		fmt.Fprintf(&b, "\n\t\t%s,", indent(algSize, 2))
 	}
 	b.WriteString("\n\t],\n}")
 	return b.String()
@@ -833,7 +833,7 @@ func (e *EFIVariableData) String() string {
 	UnicodeName: %q,
 	VariableData:
 		%s,
-}`, e.VariableName, e.UnicodeName, strings.Replace(hex.Dump(e.VariableData), "\n", "\n\t\t", -1))
+}`, e.VariableName, e.UnicodeName, indent(stringer(hex.Dump(e.VariableData)), 2))
 }
 
 // Bytes implements [EventData.Bytes].
@@ -996,9 +996,9 @@ func (e *EFIGPTData) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `UEFI_GPT_DATA {
 	Hdr: %s,
-	Partitions: [`, strings.Replace(e.Hdr.String(), "\n", "\n\t", -1))
+	Partitions: [`, indent(&e.Hdr, 1))
 	for _, part := range e.Partitions {
-		fmt.Fprintf(&b, "\n\t\t%s,", strings.Replace(part.String(), "\n", "\n\t\t", -1))
+		fmt.Fprintf(&b, "\n\t\t%s,", indent(part, 2))
 	}
 	b.WriteString("\n\t],\n}")
 	return b.String()
@@ -1159,7 +1159,7 @@ func (e *EFIHandoffTablePointers) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "UEFI_HANDOFF_TABLE_POINTERS {\n\tTableEntries: [")
 	for _, entry := range e.TableEntries {
-		fmt.Fprintf(&b, "\n\t\t%s,", entry)
+		fmt.Fprintf(&b, "\n\t\t%s,", indent(entry, 2))
 	}
 	b.WriteString("\n\t],\n}")
 	return b.String()
@@ -1254,7 +1254,7 @@ func (e *EFIHandoffTablePointers2) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "UEFI_HANDOFF_TABLE_POINTERS2 {\n\tTableDescription: %q,\n\tTableEntries: [", e.TableDescription)
 	for _, entry := range e.TableEntries {
-		fmt.Fprintf(&b, "\n\t\t%s,", entry)
+		fmt.Fprintf(&b, "\n\t\t%s,", indent(entry, 2))
 	}
 	b.WriteString("\n\t},\n}")
 	return b.String()
