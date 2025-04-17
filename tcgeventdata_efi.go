@@ -705,7 +705,7 @@ func (d *SP800_155_PlatformIdEventData3) String() string {
 			if err != nil {
 				fmt.Fprintf(&b, "%s: devicepath:%v,\n", name, err)
 			} else {
-				fmt.Fprintf(&b, "%s: devicepath:%s,\n", name, path.ToString(efi.DevicePathAllowVendorShortcuts))
+				fmt.Fprintf(&b, "%s: devicepath:%s,\n", name, path.ToString(efi.DevicePathDisplayOnly|efi.DevicePathAllowVendorShortcuts|efi.DevicePathDisplayFWGUIDNames))
 			}
 		case LocatorTypeVariable:
 			r := bytes.NewReader(data)

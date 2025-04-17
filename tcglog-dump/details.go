@@ -308,6 +308,14 @@ func (s simpleSpecIdEvent03Stringer) String() string {
 	return fmt.Sprintf("EFI, Platform Class: %d, Spec: %d.%d (Errata: %d), Digests: %s", s.data.PlatformClass, s.data.SpecVersionMajor, s.data.SpecVersionMinor, s.data.SpecErrata, digests)
 }
 
+type devicePathStringer struct {
+	path efi.DevicePath
+}
+
+func (s *devicePathStringer) String() string {
+	return s.path.ToString(efi.DevicePathDisplayOnly | efi.DevicePathAllowVendorShortcuts | efi.DevicePathDisplayFWGUIDNames)
+}
+
 func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer {
 	switch {
 	case event.EventType == tcglog.EventTypeNoAction && !verbose:
@@ -430,7 +438,7 @@ func customEventDetailsStringer(event *tcglog.Event, verbose bool) fmt.Stringer 
 		if !ok {
 			return nil
 		}
-		return data.DevicePath
+		return &devicePathStringer{data.DevicePath}
 	}
 
 	return nil
