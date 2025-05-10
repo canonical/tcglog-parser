@@ -19,24 +19,6 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-func makeDefaultFormatter(s fmt.State, f rune) string {
-	var builder bytes.Buffer
-	builder.WriteString("%%")
-	for _, flag := range [...]int{'+', '-', '#', ' ', '0'} {
-		if s.Flag(flag) {
-			fmt.Fprintf(&builder, "%c", flag)
-		}
-	}
-	if width, ok := s.Width(); ok {
-		fmt.Fprintf(&builder, "%d", width)
-	}
-	if prec, ok := s.Precision(); ok {
-		fmt.Fprintf(&builder, ".%d", prec)
-	}
-	fmt.Fprintf(&builder, "%c", f)
-	return builder.String()
-}
-
 func ptrSize() int {
 	sz := unsafe.Sizeof(uintptr(0))
 	switch sz {

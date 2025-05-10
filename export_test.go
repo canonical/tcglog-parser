@@ -22,4 +22,5 @@ var (
 	DecodeEventDataEFIPlatformFirmwareBlob  = decodeEventDataEFIPlatformFirmwareBlob
 	DecodeEventDataEFIPlatformFirmwareBlob2 = decodeEventDataEFIPlatformFirmwareBlob2
 	DecodeEventDataEFIHandoffTablePointers  = decodeEventDataEFIHandoffTablePointers
+	FormatString                            = formatString
 )

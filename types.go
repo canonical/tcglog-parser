@@ -93,10 +93,10 @@ func (e EventType) String() string {
 
 func (e EventType) Format(s fmt.State, f rune) {
 	switch f {
-	case 's', 'v':
-		fmt.Fprintf(s, "%s", e.String())
+	case 's', 'v', 'q':
+		fmt.Fprintf(s, formatString(s, f), e.String())
 	default:
-		fmt.Fprintf(s, makeDefaultFormatter(s, f), uint32(e))
+		fmt.Fprintf(s, formatString(s, f), uint32(e))
 	}
 }
 
