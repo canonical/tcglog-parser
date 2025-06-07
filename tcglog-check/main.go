@@ -191,7 +191,11 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId) []byte {
 
 	switch e.EventType {
 	case tcglog.EventTypeEventTag, tcglog.EventTypeSCRTMVersion, tcglog.EventTypePlatformConfigFlags, tcglog.EventTypeTableOfDevices, tcglog.EventTypeNonhostInfo, tcglog.EventTypeOmitBootDeviceEvents:
-		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
+		data, err := e.Data.Bytes()
+		if err != nil {
+			return nil
+		}
+		return tcglog.ComputeEventDigest(alg.GetHash(), data)
 	case tcglog.EventTypeSeparator:
 		return tcglog.ComputeSeparatorEventDigest(alg.GetHash(), e.Data.(*tcglog.SeparatorEventData).Value)
 	case tcglog.EventTypeAction, tcglog.EventTypeEFIAction:
@@ -203,7 +207,11 @@ func (e *checkedEvent) expectedDigest(alg tpm2.HashAlgorithmId) []byte {
 		data := e.Data.(*tcglog.EFIVariableData)
 		return tcglog.ComputeEventDigest(alg.GetHash(), data.VariableData)
 	case tcglog.EventTypeEFIGPTEvent:
-		return tcglog.ComputeEventDigest(alg.GetHash(), e.Data.Bytes())
+		data, err := e.Data.Bytes()
+		if err != nil {
+			return nil
+		}
+		return tcglog.ComputeEventDigest(alg.GetHash(), data)
 	case tcglog.EventTypeIPL:
 		switch d := e.Data.(type) {
 		case *tcglog.GrubStringEventData:
