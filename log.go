@@ -49,7 +49,7 @@ type Log struct {
 	Events     []*Event        // The list of events in the log
 }
 
-func newLog(event0 *Event) (*Log, []EFISpecIdEventAlgorithmSize) {
+func NewLog(event0 *Event) (*Log, []EFISpecIdEventAlgorithmSize) {
 	var spec Spec
 	var digestSizes []EFISpecIdEventAlgorithmSize
 
@@ -97,7 +97,7 @@ func NewLogForTesting(events []*Event) *Log {
 		return new(Log)
 	}
 
-	log, _ := newLog(events[0])
+	log, _ := NewLog(events[0])
 	log.Events = append(log.Events, events[1:]...)
 	return log
 }
